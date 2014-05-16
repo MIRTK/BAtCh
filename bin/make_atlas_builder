@@ -1,0 +1,279 @@
+#! /bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+. "$appdir/lib/utils.sh" || { echo "Failed to import utils module!" 1>&2; exit 1; }
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+This script generates the DAGMan application for the generation of a
+consistent brain atlas and growth model for submission to the batch
+queuing system HTCondor for distributed parallel execution.
+
+Options:
+  -s -sublst <sub.lst>     Text file listing the IDs of the images
+                           to use for the atlas construction. If not
+                           specified, the IDs are read from the -agelst.
+                           (default: $pardir/(|0_|0___|0.0_)sub.lst)
+
+  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
+                           first column contains the image ID and the
+                           second column the associated age.
+                           (default: $pardir/(|0_|0___|0.0_)age.csv)
+
+  -c -config <config.sh>   Configuration file.
+                           (default: $appdir/etc/config.sh)
+
+  -h -help                 Print help and exit.
+  -v -verbose              Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# configuration
+# ==============================================================================
+
+config="$appdir/etc/config.sh"
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+  esac
+  let o++
+done
+. "$config"  || error "Failed to load configuration from file: $config"
+cd "$topdir" || error "Failed to change to top-level directory!"
+
+# ==============================================================================
+# initialization
+# ==============================================================================
+
+verbose=0
+sublst=
+agelst=
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -c|-config)      shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose)     let verbose++; ;;
+    -*)              error "Unknown option: $1"; ;;
+    *)               if   [ -z "$agelst" ]; then agelst="$1"
+                     elif [ -z "$sublst" ]; then sublst="$1"
+                     else error "Too many arguments: $1"
+                     fi; ;;
+  esac
+  shift
+done
+
+if [ -z "$sublst" ]; then
+  for name in 0___sub 0.0_sub 0_sub sub; do
+    info "Looking for $topdir/$pardir/$name.lst..."
+    if [ -f "$topdir/$pardir/$name.lst" ]; then
+      [ -z "$sublst" ] || error "Multiple subject lists found in $topdir/$pardir!"
+      sublst="$topdir/$pardir/$name.lst"
+      info "Looking for $topdir/$pardir/$name.lst... found"
+    else
+      info "Looking for $topdir/$pardir/$name.lst... not found"
+    fi
+  done
+fi
+if [ -z "$agelst" ]; then
+  for name in 0___age 0.0_age 0_age age; do
+    info "Looking for $topdir/$pardir/$name.csv..."
+    if [ -f "$topdir/$pardir/$name.csv" ]; then
+      [ -z "$agelst" ] || error "Multiple age lists found in $topdir/$pardir!"
+      agelst="$topdir/$pardir/$name.csv"
+      info "Looking for $topdir/$pardir/$name.csv... found"
+    else
+      info "Looking for $topdir/$pardir/$name.csv... not found"
+    fi
+  done
+fi
+
+[ -n "$agelst" ] || error "Missing CSV file with subject IDs and corresponding ages!"
+[ -n "$sublst" ] || sublst="$agelst"
+read_sublst subids "$sublst"
+
+makedir "$bindir"
+makedir "$libdir"
+makedir "$pardir"
+
+# ==============================================================================
+section='# 1. linear normalization'
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1.1 initialize transformations (7 DoFs)
+make_ireg_node \
+    -name     "1.1_initialize_dofs" \
+    -model    "Similarity" \
+    -subjects "${subids[@]}" \
+    -dofdir   "$dofdir/1.1_initial" \
+    -logdir   "$logdir/1.1_initialize_dofs"
+
+# ------------------------------------------------------------------------------
+# 1.2 affine registration (9 DoFs)
+make_ireg_node \
+    -name     "1.2_affine_registration" \
+    -model    "Affine" -par "Allow shearing = No" \
+    -subjects "${subids[@]}" \
+    -bgvalue  "$bgvalue" \
+    -dofins   "$dofdir/1.1_initial" \
+    -dofdir   "$dofdir/1.2_affine" \
+    -logdir   "$logdir/1.2_affine_registration"
+
+# ------------------------------------------------------------------------------
+# 1.3 average dofs
+make_dofaverage_node \
+    -name     "1.3_average_dofs" \
+    -subjects "${subids[@]}" \
+    -sublst   "$sublst" \
+    -dofins   "$dofdir/1.2_affine" \
+    -dofdir   "$dofdir/1.3_average" \
+    -logdir   "$logdir/1.3_average_dofs"
+
+# ------------------------------------------------------------------------------
+# 1.4 affine refinement (9 DoFs)
+make_ireg_node \
+    -name     "1.4_affine_refinement" \
+    -model    "Affine" -par "Allow shearing = No" \
+    -subjects "${subids[@]}" \
+    -bgvalue  "$bgvalue" \
+    -hdrdofs  "$dofdir/1.3_average" \
+    -dofdir   "$dofdir/1.4_refined" \
+    -logdir   "$logdir/1.4_affine_refinement"
+
+# ------------------------------------------------------------------------------
+# 1.5 average dofs
+make_dofaverage_node \
+    -name     "1.5_average_dofs" \
+    -subjects "${subids[@]}" \
+    -sublst   "$sublst" \
+    -dofins   "$dofdir/1.4_refined" \
+    -dofdir   "$dofdir/1.5_average" \
+    -logdir   "$logdir/1.5_average_dofs"
+
+# ------------------------------------------------------------------------------
+# 1.6 compose average dofs
+make_dofcombine_node \
+    -name     "1.6_finalize_dofs" \
+    -subjects "${subids[@]}" \
+    -dofdir1  "$dofdir/1.3_average" \
+    -dofdir2  "$dofdir/1.5_average" \
+    -dofdir3  "$dofdir/1___affine" \
+    -logdir   "$logdir/1.6_finalize_dofs"
+
+# ------------------------------------------------------------------------------
+# subworkflow
+dagfile="$bindir/1_normalization.dag"
+cat --<<EOF > "$dagfile"
+$section
+JOB        1_init     $topdir/$pardir/1.1_initialize_dofs.job
+JOB        1_affreg1  $topdir/$pardir/1.2_affine_registration.job
+JOB        1_avgdof1  $topdir/$pardir/1.3_average_dofs.job
+JOB        1_affreg2  $topdir/$pardir/1.4_affine_refinement.job
+JOB        1_avgdof2  $topdir/$pardir/1.5_average_dofs.job
+JOB        1_final    $topdir/$pardir/1.6_finalize_dofs.job
+
+SCRIPT PRE 1_init     $topdir/$libdir/1.1_initialize_dofs.pre
+SCRIPT PRE 1_affreg1  $topdir/$libdir/1.2_affine_registration.pre
+SCRIPT PRE 1_avgdof1  $topdir/$libdir/1.3_average_dofs.pre
+SCRIPT PRE 1_affreg2  $topdir/$libdir/1.4_affine_refinement.pre
+SCRIPT PRE 1_avgdof2  $topdir/$libdir/1.5_average_dofs.pre
+SCRIPT PRE 1_final    $topdir/$libdir/1.6_finalize_dofs.pre
+
+PARENT 1_init    CHILD 1_affreg1
+PARENT 1_affreg1 CHILD 1_avgdof1
+PARENT 1_avgdof1 CHILD 1_affreg2
+PARENT 1_affreg2 CHILD 1_avgdof2
+PARENT 1_avgdof2 CHILD 1_final
+EOF
+[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+
+# ==============================================================================
+section='# 2. spatio-temporal deformation'
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+dagfile="$bindir/2_deformation.dag"
+cat --<<EOF > "$dagfile"
+$section
+EOF
+[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+
+# ==============================================================================
+section='# 3. anatomical template creation'
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# subworkflow
+dagfile="$bindir/3_anatomy.dag"
+cat --<<EOF > "$dagfile"
+$section
+EOF
+[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+
+# ==============================================================================
+section='# 4. tissue probability maps'
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# subworkflow
+dagfile="$bindir/4_tissues.dag"
+cat --<<EOF > "$dagfile"
+$section
+EOF
+[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+
+# ==============================================================================
+section='# 5. structure probability maps'
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# subworkflow
+dagfile="$bindir/5_structures.dag"
+cat --<<EOF > "$dagfile"
+$section
+EOF
+[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+
+# ==============================================================================
+# DAGMan application
+# ==============================================================================
+
+dagfile="$bindir/0_make_atlas.dag"
+
+cat --<<EOF                          >  "$dagfile"
+# HTCondor DAGMan application for the consistent construction of a
+# spatio-temporal brain atlas and growth model from cross-sectional
+# brain MR images and automatic tissue and structure segmentations
+
+EOF
+cat "$bindir/1_normalization.dag"    >> "$dagfile"
+echo                                 >> "$dagfile"
+cat "$bindir/2_deformation.dag"      >> "$dagfile"
+echo                                 >> "$dagfile"
+cat "$bindir/3_anatomy.dag"          >> "$dagfile"
+echo                                 >> "$dagfile"
+cat "$bindir/4_tissues.dag"          >> "$dagfile"
+echo                                 >> "$dagfile"
+cat "$bindir/5_structures.dag"       >> "$dagfile"
+cat --<<EOF                          >> "$dagfile"
+
+# inter-workflow dependencies
+PARENT 1_final CHILD 2_init
+PARENT 2_final CHILD 3_init
+PARENT 3_final CHILD 4_init
+PARENT 4_final CHILD 5_init
+EOF
