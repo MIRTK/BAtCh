@@ -66,6 +66,7 @@ make_pre_script()
 cd "$topdir" || exit 1
 . "$appdir/lib/path.sh" || exit 1
 EOF
+  chmod +x "$1" || exit 1
 }
 
 # ------------------------------------------------------------------------------
