@@ -180,12 +180,12 @@ make_dofcombine_node \
 dagfile="$bindir/1_normalization.dag"
 cat --<<EOF > "$dagfile"
 $section
-JOB        1_init     $topdir/$pardir/1.1_initialize_dofs.job
-JOB        1_affreg1  $topdir/$pardir/1.2_affine_registration.job
-JOB        1_avgdof1  $topdir/$pardir/1.3_average_dofs.job
-JOB        1_affreg2  $topdir/$pardir/1.4_affine_refinement.job
-JOB        1_avgdof2  $topdir/$pardir/1.5_average_dofs.job
-JOB        1_final    $topdir/$pardir/1.6_finalize_dofs.job
+JOB        1_init     $topdir/$libdir/1.1_initialize_dofs.job
+JOB        1_affreg1  $topdir/$libdir/1.2_affine_registration.job
+JOB        1_avgdof1  $topdir/$libdir/1.3_average_dofs.job
+JOB        1_affreg2  $topdir/$libdir/1.4_affine_refinement.job
+JOB        1_avgdof2  $topdir/$libdir/1.5_average_dofs.job
+JOB        1_final    $topdir/$libdir/1.6_finalize_dofs.job
 
 SCRIPT PRE 1_init     $topdir/$libdir/1.1_initialize_dofs.pre
 SCRIPT PRE 1_affreg1  $topdir/$libdir/1.2_affine_registration.pre
