@@ -221,8 +221,9 @@ make_dofaverage_node()
     [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir' || exit 1"
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     job="$job\n\n# subject: $id"
-    job="$job\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'\""
+    job="$job\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
     job="$job -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
+    job="$job\""
     [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
     job="$job\nqueue"
   done
