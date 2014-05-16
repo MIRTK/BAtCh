@@ -148,7 +148,7 @@ make_ireg_node()
     for id2 in "${ids[@]}"; do
       [[ $id1 != $id2 ]] || continue
       job="$job\n\n# target: $id1, source: $id2"
-      job="$job\narguments ="
+      job="$job\narguments = \""
       if [ -n "$hdrdofs" ]; then
         job="$job -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
         job="$job -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
@@ -159,8 +159,9 @@ make_ireg_node()
       [ -z "$dofins" ] || job="$job -dofin '$dofins/$id1/$id2.dof.gz'"
       [ -z "$dofdir" ] || job="$job -dofout '$dofdir/$id1/$id2.dof.gz'"
       [ -z "$par"    ] || job="$job -parin '$pardir/$node.par'"
+      [ -z "$logdir" ] || job="$job -parout '$logdir/$id1/$id2.par'"
+      job="$job\""
       if [ -n "$logdir" ]; then
-        job="$job -parout '$logdir/$id1/$id2.par'"
         job="$job\noutput    = $logdir/$id1/$id2.log"
         job="$job\nerror     = $logdir/$id1/$id2.log"
       fi
@@ -220,7 +221,7 @@ make_dofaverage_node()
     [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir' || exit 1"
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     job="$job\n\n# subject: $id"
-    job="$job\narguments = '$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
+    job="$job\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'\""
     job="$job -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
     [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
     job="$job\nqueue"
@@ -266,7 +267,7 @@ make_dofcombine_node()
   for id in "${ids[@]}"; do
     pre="$pre\nmkdir -p '$dofdir3' || exit 1"
     job="$job\n\n# subject: $id"
-    job="$job\narguments = '$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options"
+    job="$job\narguments = \"'$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options\""
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
     job="$job\nqueue"
