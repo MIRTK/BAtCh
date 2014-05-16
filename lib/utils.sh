@@ -80,8 +80,8 @@ make_htcondor_node()
   fi
   # write JOB description
   if [ -n "$job" ]; then
-    make_job_description -executable "$2" -- "$pardir/$1.job"
-    append "$pardir/$1.job" "$job\n"
+    make_job_description -executable "$2" -- "$libdir/$1.job"
+    append "$libdir/$1.job" "$job\n"
   fi
 }
 
