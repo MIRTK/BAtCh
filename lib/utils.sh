@@ -47,7 +47,7 @@ make_job_description()
   cat --<<EOF > "$1"
 universe     = $universe
 executable   = $IRTK_DIR/bin/$executable
-environment  = LD_LIBRARY_PATH="$LIBRARY_PATH"
+environment  = LD_LIBRARY_PATH=$LIBRARY_PATH
 notify_user  = $notify_user
 notification = $notification
 requirements = $requirements
