@@ -64,7 +64,6 @@ make_pre_script()
   cat --<<EOF > "$1"
 #! /bin/bash
 cd "$topdir" || exit 1
-. "$appdir/lib/path.sh" || exit 1
 EOF
   chmod +x "$1" || exit 1
 }
@@ -144,8 +143,8 @@ make_ireg_node()
   make_htcondor_node "$node" ireg
   for id1 in "${ids[@]}"; do
     let n++
-    [ -z "$dofdir" ] || pre="$pre\nmakedir '$dofdir/$id1'"
-    [ -z "$logdir" ] || pre="$pre\nmakedir '$logdir/$id1'"
+    [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
+    [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir/$id1' || exit 1"
     for id2 in "${ids[@]}"; do
       [[ $id1 != $id2 ]] || continue
       job="$job\n\n# target: $id1, source: $id2"
@@ -218,8 +217,8 @@ make_dofaverage_node()
   local pre=''
   local job=''
   for id in "${ids[@]}"; do
-    [ -z "$dofdir" ] || pre="$pre\nmakedir '$dofdir'"
-    [ -z "$logdir" ] || pre="$pre\nmakedir '$logdir'"
+    [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir' || exit 1"
+    [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     job="$job\n\n# subject: $id"
     job="$job\narguments = '$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
     job="$job -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
@@ -265,10 +264,10 @@ make_dofcombine_node()
   local pre=''
   local job=''
   for id in "${ids[@]}"; do
-    pre="$pre\nmakedir '$dofdir3'"
-    [ -z "$logdir" ] || pre="$pre\nmakedir '$logdir'"
+    pre="$pre\nmkdir -p '$dofdir3' || exit 1"
     job="$job\n\n# subject: $id"
     job="$job\narguments = '$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options"
+    [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
     job="$job\nqueue"
   done
