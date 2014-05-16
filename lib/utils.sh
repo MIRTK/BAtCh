@@ -70,20 +70,24 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
+# append DAGMan node scripts
+append_htcondor_node()
+{
+  [ $# -eq 1  ] || error "Invalid number of arguments!"
+  [ -z "$pre" ] || append "$libdir/$1.pre" "$pre\n"
+  [ -z "$job" ] || append "$libdir/$1.job" "$job\n"
+  pre=''
+  job=''
+}
+
+# ------------------------------------------------------------------------------
 # write DAGMan node scripts
 make_htcondor_node()
 {
   [ $# -eq 2 ] || error "Invalid number of arguments!"
-  # write PRE script
-  if [ -n "$pre" ]; then
-    make_pre_script "$libdir/$1.pre"
-    append "$libdir/$1.pre" "$pre\n"
-  fi
-  # write JOB description
-  if [ -n "$job" ]; then
-    make_job_description -executable "$2" -- "$libdir/$1.job"
-    append "$libdir/$1.job" "$job\n"
-  fi
+  make_pre_script                          "$libdir/$1.pre"
+  make_job_description -executable "$2" -- "$libdir/$1.job"
+  append_htcondor_node "$1"
 }
 
 # ------------------------------------------------------------------------------
@@ -136,7 +140,10 @@ make_ireg_node()
   info "Adding ireg node $node..."
   local pre=''
   local job=''
+  local n=0
+  make_htcondor_node "$node" ireg
   for id1 in "${ids[@]}"; do
+    let n++
     [ -z "$dofdir" ] || pre="$pre\nmakedir '$dofdir/$id1'"
     [ -z "$logdir" ] || pre="$pre\nmakedir '$logdir/$id1'"
     for id2 in "${ids[@]}"; do
@@ -160,8 +167,9 @@ make_ireg_node()
       fi
       job="$job\nqueue"
     done
+    append_htcondor_node "$node"
+    info "  `printf '%3d of %d: target=%s' $n ${#ids[@]} $id1`"
   done
-  make_htcondor_node "$node" ireg
   info "Adding ireg node $node... done"
 }
 
