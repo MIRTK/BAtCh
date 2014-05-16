@@ -46,8 +46,8 @@ make_job_description()
   makedir "$(dirname "$1")"
   cat --<<EOF > "$1"
 universe     = $universe
-executable   = $executable
-environment  = PATH="$RUNTIME_PATH" LD_LIBRARY_PATH="$LIBRARY_PATH"
+executable   = $IRTK_DIR/bin/$executable
+environment  = LD_LIBRARY_PATH="$LIBRARY_PATH"
 notify_user  = $notify_user
 notification = $notification
 requirements = $requirements

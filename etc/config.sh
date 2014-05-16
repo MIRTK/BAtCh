@@ -1,5 +1,5 @@
 # IRTK installation
-RUNTIME_PATH='/vol/biomedic/users/as12312/local/linux-3.6/irtk-nnatlas/bin'
+IRTK_DIR='/vol/biomedic/users/as12312/local/linux-3.6/irtk-nnatlas'
 LIBRARY_PATH='/vol/biomedic/users/as12312/local/lib'
 
 # input settings
