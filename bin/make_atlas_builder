@@ -30,7 +30,7 @@ Options:
                            (default: $pardir/(|0_|0___|0.0_)age.csv)
 
   -c -config <config.sh>   Configuration file.
-                           (default: $appdir/etc/config.sh)
+                           (default: (<cwd>|$appdir)/etc/config.sh)
 
   -h -help                 Print help and exit.
   -v -verbose              Enable verbose output messages.
@@ -41,7 +41,8 @@ HELP
 # configuration
 # ==============================================================================
 
-config="$appdir/etc/config.sh"
+config="$PWD/etc/config.sh"
+[ -f "$config" ] || config="$appdir/etc/config.sh"
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
