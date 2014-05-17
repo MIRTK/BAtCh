@@ -1,6 +1,7 @@
 #! /bin/bash
 
 appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+appname="$(basename "$BASH_SOURCE")"
 . "$appdir/lib/utils.sh" || { echo "Failed to import utils module!" 1>&2; exit 1; }
 
 # ==============================================================================
@@ -82,161 +83,87 @@ read_sublst subids "$sublst"
 
 cd "$topdir" || error "Failed to change to top-level directory!"
 
-makedir "$moddir"
-makedir "$dagdir"
-
 # ==============================================================================
-section='# 1. linear normalization'
+# workflow
 # ==============================================================================
 
-# ------------------------------------------------------------------------------
-# 1.1 initialize transformations (7 DoFs)
-make_ireg_node \
-    -name     "1.1_initialize_dofs" \
-    -model    "Similarity" \
-    -subjects "${subids[@]}" \
-    -dofdir   "$dofdir/1.1_initial" \
-    -logdir   "$logdir/1.1_initialize_dofs"
+begin_dag 'make_atlas'
 
-# ------------------------------------------------------------------------------
-# 1.2 affine registration (9 DoFs)
-make_ireg_node \
-    -name     "1.2_affine_registration" \
-    -model    "Affine" -par "Allow shearing = No" \
-    -subjects "${subids[@]}" \
-    -bgvalue  "$bgvalue" \
-    -dofins   "$dofdir/1.1_initial" \
-    -dofdir   "$dofdir/1.2_affine" \
-    -logdir   "$logdir/1.2_affine_registration"
+  # ----------------------------------------------------------------------------
+  # global normalization (translation, rotation, and scale)
+  begin_dag 'alignment'
 
-# ------------------------------------------------------------------------------
-# 1.3 average dofs
-make_dofaverage_node \
-    -name     "1.3_average_dofs" \
-    -subjects "${subids[@]}" \
-    -dofins   "$dofdir/1.2_affine" \
-    -dofdir   "$dofdir/1.3_average" \
-    -logdir   "$logdir/1.3_average_dofs"
+    # initialize transformations
+    ireg_node 'initdofs' \
+        -model    "Similarity" \
+        -subjects "${subids[@]}" \
+        -dofdir   "$dofdir/1.1_initial"
 
-# ------------------------------------------------------------------------------
-# 1.4 affine refinement (9 DoFs)
-make_ireg_node \
-    -name     "1.4_affine_refinement" \
-    -model    "Affine" -par "Allow shearing = No" \
-    -subjects "${subids[@]}" \
-    -bgvalue  "$bgvalue" \
-    -hdrdofs  "$dofdir/1.3_average" \
-    -dofdir   "$dofdir/1.4_refined" \
-    -logdir   "$logdir/1.4_affine_refinement"
+    # affine registration
+    ireg_node 'affinereg' -parent 'initdofs' \
+        -model    "Affine" -par "Allow shearing = No" \
+        -subjects "${subids[@]}" \
+        -bgvalue  "$bgvalue" \
+        -dofins   "$dofdir/1.1_initial" \
+        -dofdir   "$dofdir/1.2_affine" \
 
-# ------------------------------------------------------------------------------
-# 1.5 average dofs
-make_dofaverage_node \
-    -name     "1.5_average_dofs" \
-    -subjects "${subids[@]}" \
-    -dofins   "$dofdir/1.4_refined" \
-    -dofdir   "$dofdir/1.5_average" \
-    -logdir   "$logdir/1.5_average_dofs"
+    # average dofs
+    dofaverage_node 'avgdofs1' -parent 'affinereg' \
+        -subjects "${subids[@]}" \
+        -dofins   "$dofdir/1.2_affine" \
+        -dofdir   "$dofdir/1.3_average" \
 
-# ------------------------------------------------------------------------------
-# 1.6 compose average dofs
-make_dofcombine_node \
-    -name     "1.6_finalize_dofs" \
-    -subjects "${subids[@]}" \
-    -dofdir1  "$dofdir/1.3_average" \
-    -dofdir2  "$dofdir/1.5_average" \
-    -dofdir3  "$dofdir/1___affine" \
-    -logdir   "$logdir/1.6_finalize_dofs"
+    # affine refinement
+    ireg_node 'refine' -parent 'avgdofs1' \
+        -model    "Affine" -par "Allow shearing = No" \
+        -subjects "${subids[@]}" \
+        -bgvalue  "$bgvalue" \
+        -hdrdofs  "$dofdir/1.3_average" \
+        -dofdir   "$dofdir/1.4_refined" \
 
-# ------------------------------------------------------------------------------
-# DAG file
-dagfile="$dagdir/1_normalization.dag"
-cat --<<EOF > "$dagfile"
-$section
-JOB        1_init     $topdir/$moddir/1.1_initialize_dofs.sub
-JOB        1_affreg1  $topdir/$moddir/1.2_affine_registration.sub
-JOB        1_avgdof1  $topdir/$moddir/1.3_average_dofs.sub
-JOB        1_affreg2  $topdir/$moddir/1.4_affine_refinement.sub
-JOB        1_avgdof2  $topdir/$moddir/1.5_average_dofs.sub
-JOB        1_final    $topdir/$moddir/1.6_finalize_dofs.sub
+    # average dofs
+    dofaverage_node 'avgdofs2' -parent 'refine' \
+        -subjects "${subids[@]}" \
+        -dofins   "$dofdir/1.4_refined" \
+        -dofdir   "$dofdir/1.5_average" \
 
-SCRIPT PRE 1_init     $topdir/$moddir/1.1_initialize_dofs.pre
-SCRIPT PRE 1_affreg1  $topdir/$moddir/1.2_affine_registration.pre
-SCRIPT PRE 1_avgdof1  $topdir/$moddir/1.3_average_dofs.pre
-SCRIPT PRE 1_affreg2  $topdir/$moddir/1.4_affine_refinement.pre
-SCRIPT PRE 1_avgdof2  $topdir/$moddir/1.5_average_dofs.pre
-SCRIPT PRE 1_final    $topdir/$moddir/1.6_finalize_dofs.pre
+    # compose average dofs
+    dofcombine_node 'finalize' -parent 'avgdofs2' \
+        -subjects "${subids[@]}" \
+        -dofdir1  "$dofdir/1.3_average" \
+        -dofdir2  "$dofdir/1.5_average" \
+        -dofdir3  "$dofdir/1___affine" \
 
-PARENT 1_init    CHILD 1_affreg1
-PARENT 1_affreg1 CHILD 1_avgdof1
-PARENT 1_avgdof1 CHILD 1_affreg2
-PARENT 1_affreg2 CHILD 1_avgdof2
-PARENT 1_avgdof2 CHILD 1_final
-EOF
-[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+  end_dag
 
-# ==============================================================================
-section='# 2. spatio-temporal deformation'
-# ==============================================================================
+  # ----------------------------------------------------------------------------
+  # compute cross-sectional FFDs for each time point
+  begin_dag 'avgffds' -parent 'alignment'
+    # TODO
+  end_dag
 
-# ------------------------------------------------------------------------------
-# DAG file
-dagfile="$dagdir/2_deformation.dag"
-cat --<<EOF > "$dagfile"
-$section
-EOF
-[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+  # ----------------------------------------------------------------------------
+  # make anatomical atlas images
+  begin_dag 'anatomy' -parent 'avgffds'
+    # TODO
+  end_dag
 
-# ==============================================================================
-section='# 3. anatomical template creation'
-# ==============================================================================
+  # ----------------------------------------------------------------------------
+  # make tissue probability maps
+  begin_dag 'tissues' -parent 'avgffds'
+    # TODO
+  end_dag
 
-# ------------------------------------------------------------------------------
-# DAG file
-dagfile="$dagdir/3_anatomy.dag"
-cat --<<EOF > "$dagfile"
-$section
-EOF
-[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
+  # ----------------------------------------------------------------------------
+  # make structural probability maps
+  begin_dag 'structures' -parent 'avgffds'
+    # TODO
+  end_dag
 
-# ==============================================================================
-section='# 4. tissue probability maps'
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# DAG file
-dagfile="$dagdir/4_tissues.dag"
-cat --<<EOF > "$dagfile"
-$section
-EOF
-[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
-
-# ==============================================================================
-section='# 5. structure probability maps'
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# DAG file
-dagfile="$dagdir/5_structures.dag"
-cat --<<EOF > "$dagfile"
-$section
-EOF
-[ -f "$dagfile" ] || error "Failed to write workflow to file $dagfile"
-
-# ==============================================================================
-# DAGMan application
-# ==============================================================================
-
-dagfile="$dagdir/main.dag"
-cat --<<EOF >  "$dagfile"
-SUBDAG EXTERNAL 1_normalization  $topdir/$dagdir/1_normalization.dag
-SUBDAG EXTERNAL 2_deformation    $topdir/$dagdir/2_deformation.dag
-SUBDAG EXTERNAL 3_anatomy        $topdir/$dagdir/3_anatomy.dag
-SUBDAG EXTERNAL 4_tissues        $topdir/$dagdir/4_tissues.dag
-SUBDAG EXTERNAL 5_structures     $topdir/$dagdir/5_structures.dag
-
-PARENT 1_normalization CHILD 2_deformation
-PARENT 2_deformation   CHILD 3_anatomy
-PARENT 3_anatomy       CHILD 4_tissues
-PARENT 4_tissues       CHILD 5_structures
-EOF
+  # ----------------------------------------------------------------------------
+  # construct longitudinal growth model
+  begin_dag 'growth' -parent 'avgffds'
+    # TODO
+  end_dag
+ 
+end_dag
