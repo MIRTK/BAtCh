@@ -155,19 +155,19 @@ make_dofcombine_node \
 dagfile="$dagdir/1_normalization.dag"
 cat --<<EOF > "$dagfile"
 $section
-JOB        1_init     $topdir/$moddir/1.1_initialize_dofs.job
-JOB        1_affreg1  $topdir/$moddir/1.2_affine_registration.job
-JOB        1_avgdof1  $topdir/$moddir/1.3_average_dofs.job
-JOB        1_affreg2  $topdir/$moddir/1.4_affine_refinement.job
-JOB        1_avgdof2  $topdir/$moddir/1.5_average_dofs.job
-JOB        1_final    $topdir/$moddir/1.6_finalize_dofs.job
+JOB        1_init     $topdir/$moddir/1.1_initialize_dofs.condor.sub
+JOB        1_affreg1  $topdir/$moddir/1.2_affine_registration.condor.sub
+JOB        1_avgdof1  $topdir/$moddir/1.3_average_dofs.condor.sub
+JOB        1_affreg2  $topdir/$moddir/1.4_affine_refinement.condor.sub
+JOB        1_avgdof2  $topdir/$moddir/1.5_average_dofs.condor.sub
+JOB        1_final    $topdir/$moddir/1.6_finalize_dofs.condor.sub
 
-SCRIPT PRE 1_init     $topdir/$moddir/1.1_initialize_dofs.pre
-SCRIPT PRE 1_affreg1  $topdir/$moddir/1.2_affine_registration.pre
-SCRIPT PRE 1_avgdof1  $topdir/$moddir/1.3_average_dofs.pre
-SCRIPT PRE 1_affreg2  $topdir/$moddir/1.4_affine_refinement.pre
-SCRIPT PRE 1_avgdof2  $topdir/$moddir/1.5_average_dofs.pre
-SCRIPT PRE 1_final    $topdir/$moddir/1.6_finalize_dofs.pre
+SCRIPT PRE 1_init     $topdir/$moddir/1.1_initialize_dofs.pre.sh
+SCRIPT PRE 1_affreg1  $topdir/$moddir/1.2_affine_registration.pre.sh
+SCRIPT PRE 1_avgdof1  $topdir/$moddir/1.3_average_dofs.pre.sh
+SCRIPT PRE 1_affreg2  $topdir/$moddir/1.4_affine_refinement.pre.sh
+SCRIPT PRE 1_avgdof2  $topdir/$moddir/1.5_average_dofs.pre.sh
+SCRIPT PRE 1_final    $topdir/$moddir/1.6_finalize_dofs.pre.sh
 
 PARENT 1_init    CHILD 1_affreg1
 PARENT 1_affreg1 CHILD 1_avgdof1
