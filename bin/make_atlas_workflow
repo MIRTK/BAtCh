@@ -229,12 +229,8 @@ EOF
 # DAGMan application
 # ==============================================================================
 
-dagfile="$dagdir/0_make_atlas.dag"
+dagfile="$dagdir/0_workflow.dag"
 cat --<<EOF >  "$dagfile"
-# HTCondor DAGMan application for the consistent construction of a
-# spatio-temporal brain atlas and growth model from cross-sectional
-# brain MR images and automatic tissue and structure segmentations
-
 SUBDAG EXTERNAL proc1 $topdir/$dagdir/1_normalization.dag
 SUBDAG EXTERNAL proc2 $topdir/$dagdir/2_deformation.dag
 SUBDAG EXTERNAL proc3 $topdir/$dagdir/3_anatomy.dag
