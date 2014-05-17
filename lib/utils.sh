@@ -63,10 +63,10 @@ make_submit_script()
   makedir "$(dirname "$1")"
   cat --<<EOF > "$1"
 universe     = $universe
-environment  = LD_LIBRARY_PATH=$libdir:$LIBRARY_PATH
+environment  = LD_LIBRARY_PATH=$topdir/$libdir:$LIBRARY_PATH
 initialdir   = $topdir
-executable   = $bindir/$executable
-log          = $log
+executable   = $topdir/$bindir/$executable
+log          = $topdir/$log
 notify_user  = $notify_user
 notification = $notification
 requirements = $requirements
