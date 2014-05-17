@@ -25,6 +25,23 @@ read_sublst()
 }
 
 # ------------------------------------------------------------------------------
+# copy executable and its dependencies
+pack_executable()
+{
+  if [ ! -f "$bindir/$1" ]; then
+    local path="$(which   "$IRTK_DIR/$1" 2> /dev/null)"
+    [ -n "$path" ] || path="$(which "$1" 2> /dev/null)"
+    makedir "$bindir"
+    cp -f "$path" "$bindir/" > /dev/null 2>&1
+    if [ $? -eq 0 ]; then
+      info  "  Copied executable $path"
+    else
+      error "  Failed to copy executable $path"
+    fi
+  fi
+}
+
+# ------------------------------------------------------------------------------
 # write common configuration of HTCondor job description, i.e., universe,
 # executable, environment, and requirements to new file
 make_submit_script()
@@ -42,17 +59,17 @@ make_submit_script()
   done
   [ $# -eq 1         ] || error "Invalid number of arguments: $@"
   [ -n "$executable" ] || error "Missing -executable argument!"
-
+  pack_executable "$executable"
   makedir "$(dirname "$1")"
   cat --<<EOF > "$1"
 universe     = $universe
+environment  = LD_LIBRARY_PATH=$libdir:$LIBRARY_PATH
+initialdir   = $topdir
 executable   = $bindir/$executable
-environment  = LD_LIBRARY_PATH=$LIBRARY_PATH
+log          = $log
 notify_user  = $notify_user
 notification = $notification
 requirements = $requirements
-initialdir   = $topdir
-log          = $log
 EOF
 }
 
