@@ -27,7 +27,7 @@ read_sublst()
 # ------------------------------------------------------------------------------
 # write common configuration of HTCondor job description, i.e., universe,
 # executable, environment, and requirements to new file
-make_job_description()
+make_submit_script()
 {
   local universe=vanilla
   local executable=
@@ -46,7 +46,7 @@ make_job_description()
   makedir "$(dirname "$1")"
   cat --<<EOF > "$1"
 universe     = $universe
-executable   = $IRTK_DIR/bin/$executable
+executable   = $bindir/$executable
 environment  = LD_LIBRARY_PATH=$LIBRARY_PATH
 notify_user  = $notify_user
 notification = $notification
@@ -73,10 +73,10 @@ EOF
 append_htcondor_node()
 {
   [ $# -eq 1  ] || error "Invalid number of arguments!"
-  [ -z "$pre" ] || append "$libdir/$1.pre" "$pre\n"
-  [ -z "$job" ] || append "$libdir/$1.job" "$job\n"
+  [ -z "$pre" ] || append "$moddir/$1.pre.sh"     "$pre\n"
+  [ -z "$sub" ] || append "$moddir/$1.condor.sub" "$sub\n"
   pre=''
-  job=''
+  sub=''
 }
 
 # ------------------------------------------------------------------------------
@@ -84,8 +84,8 @@ append_htcondor_node()
 make_htcondor_node()
 {
   [ $# -eq 2 ] || error "Invalid number of arguments!"
-  make_pre_script                          "$libdir/$1.pre"
-  make_job_description -executable "$2" -- "$libdir/$1.job"
+  make_pre_script                        "$moddir/$1.pre.sh"
+  make_submit_script -executable "$2" -- "$moddir/$1.condor.sub"
   append_htcondor_node "$1"
 }
 
@@ -138,7 +138,7 @@ make_ireg_node()
 
   info "Adding ireg node $node..."
   local pre=''
-  local job=''
+  local sub=''
   local n=0
   make_htcondor_node "$node" ireg
   for id1 in "${ids[@]}"; do
@@ -147,25 +147,25 @@ make_ireg_node()
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir/$id1' || exit 1"
     for id2 in "${ids[@]}"; do
       [[ $id1 != $id2 ]] || continue
-      job="$job\n\n# target: $id1, source: $id2"
-      job="$job\narguments = \""
+      sub="$sub\n\n# target: $id1, source: $id2"
+      sub="$sub\narguments = \""
       if [ -n "$hdrdofs" ]; then
-        job="$job -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
-        job="$job -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
+        sub="$sub -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
+        sub="$sub -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
       else
-        job="$job -image '$imgdir/$id1.nii.gz' -image '$imgdir/$id2.nii.gz'"
+        sub="$sub -image '$imgdir/$id1.nii.gz' -image '$imgdir/$id2.nii.gz'"
       fi
-      job="$job -v"
-      [ -z "$dofins" ] || job="$job -dofin '$dofins/$id1/$id2.dof.gz'"
-      [ -z "$dofdir" ] || job="$job -dofout '$dofdir/$id1/$id2.dof.gz'"
-      [ -z "$par"    ] || job="$job -parin '$pardir/$node.par'"
-      [ -z "$logdir" ] || job="$job -parout '$logdir/$id1/$id2.par'"
-      job="$job\""
+      sub="$sub -v"
+      [ -z "$dofins" ] || sub="$sub -dofin '$dofins/$id1/$id2.dof.gz'"
+      [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/$id1/$id2.dof.gz'"
+      [ -z "$par"    ] || sub="$sub -parin '$pardir/$node.par'"
+      [ -z "$logdir" ] || sub="$sub -parout '$logdir/$id1/$id2.par'"
+      sub="$sub\""
       if [ -n "$logdir" ]; then
-        job="$job\noutput    = $logdir/$id1/$id2.log"
-        job="$job\nerror     = $logdir/$id1/$id2.log"
+        sub="$sub\noutput    = $logdir/$id1/$id2.log"
+        sub="$sub\nerror     = $logdir/$id1/$id2.log"
       fi
-      job="$job\nqueue"
+      sub="$sub\nqueue"
     done
     append_htcondor_node "$node"
     info "  `printf '%3d of %d: target=%s' $n ${#ids[@]} $id1`"
@@ -216,16 +216,16 @@ make_dofaverage_node()
 
   info "Adding dofaverage node $node..."
   local pre=''
-  local job=''
+  local sub=''
   for id in "${ids[@]}"; do
     [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir' || exit 1"
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
-    job="$job\n\n# subject: $id"
-    job="$job\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
-    job="$job -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
-    job="$job\""
-    [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
-    job="$job\nqueue"
+    sub="$sub\n\n# subject: $id"
+    sub="$sub\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
+    sub="$sub -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
+    sub="$sub\""
+    [ -z "$logdir" ] || sub="$sub\noutput    = $logdir/$id.log"
+    sub="$sub\nqueue"
   done
   make_htcondor_node "$node" dofaverage
   info "Adding dofaverage node $node... done"
@@ -264,14 +264,14 @@ make_dofcombine_node()
 
   info "Adding dofcombine node $node..."
   local pre=''
-  local job=''
+  local sub=''
   for id in "${ids[@]}"; do
     pre="$pre\nmkdir -p '$dofdir3' || exit 1"
-    job="$job\n\n# subject: $id"
-    job="$job\narguments = \"'$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options\""
+    sub="$sub\n\n# subject: $id"
+    sub="$sub\narguments = \"'$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options\""
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
-    [ -z "$logdir" ] || job="$job\noutput    = $logdir/$id.log"
-    job="$job\nqueue"
+    [ -z "$logdir" ] || sub="$sub\noutput    = $logdir/$id.log"
+    sub="$sub\nqueue"
   done
   make_htcondor_node "$node" dofcombine
   info "Adding dofcombine node $node... done"
