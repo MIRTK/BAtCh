@@ -229,7 +229,7 @@ EOF
 # DAGMan application
 # ==============================================================================
 
-dagfile="$dagdir/0_run.dag"
+dagfile="$dagdir/main.dag"
 cat --<<EOF >  "$dagfile"
 SUBDAG EXTERNAL proc1 $topdir/$dagdir/1_normalization.dag
 SUBDAG EXTERNAL proc2 $topdir/$dagdir/2_deformation.dag
