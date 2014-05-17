@@ -90,8 +90,8 @@ EOF
 append_htcondor_node()
 {
   [ $# -eq 1  ] || error "Invalid number of arguments!"
-  [ -z "$pre" ] || append "$moddir/$1.pre.sh"     "$pre\n"
-  [ -z "$sub" ] || append "$moddir/$1.condor.sub" "$sub\n"
+  [ -z "$pre" ] || append "$moddir/$1.pre" "$pre\n"
+  [ -z "$sub" ] || append "$moddir/$1.sub" "$sub\n"
   pre=''
   sub=''
 }
@@ -101,8 +101,8 @@ append_htcondor_node()
 make_htcondor_node()
 {
   [ $# -eq 2 ] || error "Invalid number of arguments!"
-  make_pre_script                        "$moddir/$1.pre.sh"
-  make_submit_script -executable "$2" -- "$moddir/$1.condor.sub"
+  make_pre_script                        "$moddir/$1.pre"
+  make_submit_script -executable "$2" -- "$moddir/$1.sub"
   append_htcondor_node "$1"
 }
 

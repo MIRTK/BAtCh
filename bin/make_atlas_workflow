@@ -155,19 +155,19 @@ make_dofcombine_node \
 dagfile="$dagdir/1_normalization.dag"
 cat --<<EOF > "$dagfile"
 $section
-JOB        1_init     $topdir/$moddir/1.1_initialize_dofs.condor.sub
-JOB        1_affreg1  $topdir/$moddir/1.2_affine_registration.condor.sub
-JOB        1_avgdof1  $topdir/$moddir/1.3_average_dofs.condor.sub
-JOB        1_affreg2  $topdir/$moddir/1.4_affine_refinement.condor.sub
-JOB        1_avgdof2  $topdir/$moddir/1.5_average_dofs.condor.sub
-JOB        1_final    $topdir/$moddir/1.6_finalize_dofs.condor.sub
+JOB        1_init     $topdir/$moddir/1.1_initialize_dofs.sub
+JOB        1_affreg1  $topdir/$moddir/1.2_affine_registration.sub
+JOB        1_avgdof1  $topdir/$moddir/1.3_average_dofs.sub
+JOB        1_affreg2  $topdir/$moddir/1.4_affine_refinement.sub
+JOB        1_avgdof2  $topdir/$moddir/1.5_average_dofs.sub
+JOB        1_final    $topdir/$moddir/1.6_finalize_dofs.sub
 
-SCRIPT PRE 1_init     $topdir/$moddir/1.1_initialize_dofs.pre.sh
-SCRIPT PRE 1_affreg1  $topdir/$moddir/1.2_affine_registration.pre.sh
-SCRIPT PRE 1_avgdof1  $topdir/$moddir/1.3_average_dofs.pre.sh
-SCRIPT PRE 1_affreg2  $topdir/$moddir/1.4_affine_refinement.pre.sh
-SCRIPT PRE 1_avgdof2  $topdir/$moddir/1.5_average_dofs.pre.sh
-SCRIPT PRE 1_final    $topdir/$moddir/1.6_finalize_dofs.pre.sh
+SCRIPT PRE 1_init     $topdir/$moddir/1.1_initialize_dofs.pre
+SCRIPT PRE 1_affreg1  $topdir/$moddir/1.2_affine_registration.pre
+SCRIPT PRE 1_avgdof1  $topdir/$moddir/1.3_average_dofs.pre
+SCRIPT PRE 1_affreg2  $topdir/$moddir/1.4_affine_refinement.pre
+SCRIPT PRE 1_avgdof2  $topdir/$moddir/1.5_average_dofs.pre
+SCRIPT PRE 1_final    $topdir/$moddir/1.6_finalize_dofs.pre
 
 PARENT 1_init    CHILD 1_affreg1
 PARENT 1_affreg1 CHILD 1_avgdof1
@@ -231,14 +231,14 @@ EOF
 
 dagfile="$dagdir/main.dag"
 cat --<<EOF >  "$dagfile"
-SUBDAG EXTERNAL proc1 $topdir/$dagdir/1_normalization.dag
-SUBDAG EXTERNAL proc2 $topdir/$dagdir/2_deformation.dag
-SUBDAG EXTERNAL proc3 $topdir/$dagdir/3_anatomy.dag
-SUBDAG EXTERNAL proc4 $topdir/$dagdir/4_tissues.dag
-SUBDAG EXTERNAL proc5 $topdir/$dagdir/5_structures.dag
+SUBDAG EXTERNAL 1_normalization  $topdir/$dagdir/1_normalization.dag
+SUBDAG EXTERNAL 2_deformation    $topdir/$dagdir/2_deformation.dag
+SUBDAG EXTERNAL 3_anatomy        $topdir/$dagdir/3_anatomy.dag
+SUBDAG EXTERNAL 4_tissues        $topdir/$dagdir/4_tissues.dag
+SUBDAG EXTERNAL 5_structures     $topdir/$dagdir/5_structures.dag
 
-PARENT proc1 CHILD proc2
-PARENT proc2 CHILD proc3
-PARENT proc3 CHILD proc4
-PARENT proc4 CHILD proc5
+PARENT 1_normalization CHILD 2_deformation
+PARENT 2_deformation   CHILD 3_anatomy
+PARENT 3_anatomy       CHILD 4_tissues
+PARENT 4_tissues       CHILD 5_structures
 EOF
