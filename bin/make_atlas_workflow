@@ -114,7 +114,6 @@ make_ireg_node \
 make_dofaverage_node \
     -name     "1.3_average_dofs" \
     -subjects "${subids[@]}" \
-    -sublst   "$sublst" \
     -dofins   "$dofdir/1.2_affine" \
     -dofdir   "$dofdir/1.3_average" \
     -logdir   "$logdir/1.3_average_dofs"
@@ -135,7 +134,6 @@ make_ireg_node \
 make_dofaverage_node \
     -name     "1.5_average_dofs" \
     -subjects "${subids[@]}" \
-    -sublst   "$sublst" \
     -dofins   "$dofdir/1.4_refined" \
     -dofdir   "$dofdir/1.5_average" \
     -logdir   "$logdir/1.5_average_dofs"
