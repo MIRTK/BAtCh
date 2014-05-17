@@ -29,8 +29,8 @@ read_sublst()
 pack_executable()
 {
   if [ ! -f "$bindir/$1" ]; then
-    local path="$(which   "$IRTK_DIR/$1" 2> /dev/null)"
-    [ -n "$path" ] || path="$(which "$1" 2> /dev/null)"
+    local path="$(which "$IRTK_DIR/bin/$1" 2> /dev/null)"
+    [ -n "$path" ] || path="$(which   "$1" 2> /dev/null)"
     makedir "$bindir"
     cp -f "$path" "$bindir/" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
