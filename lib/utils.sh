@@ -196,7 +196,7 @@ make_dofaverage_node()
 {
   local node=
   local ids=()
-  local idlst=
+  local doflst=
   local dofins=
   local dofdir=
   local logdir=
@@ -206,7 +206,7 @@ make_dofaverage_node()
     case "$1" in
       -name)     optarg  node   $1 "$2"; shift; ;;
       -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
-      -sublst)   optarg  sublst $1 "$2"; shift; ;;
+      -doflst)   optarg  doflst $1 "$2"; shift; ;;
       -dofins)   optarg  dofins $1 "$2"; shift; ;;
       -dofdir)   optarg  dofdir $1 "$2"; shift; ;;
       -logdir)   optarg  logdir $1 "$2"; shift; ;;
@@ -216,19 +216,16 @@ make_dofaverage_node()
     esac
     shift
   done
-  [ -n "$node"       ] || error "Missing -name argument!"
-  [ -n "$dofins"     ] || error "Missing -dofins argument!"
+  [ -n "$node"   ] || error "Missing -name argument!"
+  [ -n "$dofins" ] || error "Missing -dofins argument!"
 
-  if [ -n "$idlst" ]; then
-    [ ${#ids[@]} -eq 0 ] || error "Options -subjects and -sublst are mutual exclusive!"
-    read_sublst ids "$idlst"
-  else
-    idlst="$pardir/$node.lst"
+  if [ -z "$doflst" ]; then
     local dofnames=
     for id in "${ids[@]}"; do
-      dofnames="$dofnames$id\n"
+      dofnames="$dofnames$id\t1\n"
     done
-    write "$idlst" "$dofnames"
+    doflst="$pardir/$node.par"
+    write "$doflst" "$dofnames"
   fi
 
   info "Adding dofaverage node $node..."
@@ -239,7 +236,7 @@ make_dofaverage_node()
     [ -z "$logdir" ] || pre="$pre\nmkdir -p '$logdir' || exit 1"
     sub="$sub\n\n# subject: $id"
     sub="$sub\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
-    sub="$sub -dofdir '$dofins' -dofnames '$idlst' -prefix '$id/' -suffix .dof.gz"
+    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$id/' -suffix .dof.gz"
     sub="$sub\""
     [ -z "$logdir" ] || sub="$sub\noutput    = $logdir/$id.log"
     sub="$sub\nqueue"
