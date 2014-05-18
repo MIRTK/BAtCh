@@ -83,6 +83,14 @@ read_sublst subids "$sublst"
 
 cd "$topdir" || error "Failed to change to top-level directory!"
 
+# atlas time points for which kernel was create either manually,
+# with another tool (e.g. MATLAB), or using the "kernel" shell script
+timepoints=()
+for doflst in $(ls "$kernel/weights_t="*".csv"); do
+  t=${f/*=}; t=${f/.csv}
+  timepoints=(${t[@]} $t)
+done
+
 # ==============================================================================
 # workflow
 # ==============================================================================
@@ -149,11 +157,11 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
         -dofdir   "$dofdir/2.1_ffd"
 
     # average dofs
-    for age in ${ages[@]}; do
+    for t in ${timepoints[@]}; do
       dofaverage_node 'avgffds' -parent 'computeffds' \
-          -doflst "$kernel/weights_t=$age.lst" \
+          -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2___avgffd/t=$age"
+          -dofdir "$dofdir/2___avgffd/t=$t"
     done
 
   end_dag
