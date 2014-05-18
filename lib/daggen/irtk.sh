@@ -10,6 +10,15 @@ _moddir="$(dirname "$BASH_SOURCE")"
 . "$_moddir/dag.sh" || { echo "Failed to import daggen/dag module!" 1>&2; exit 1; }
 
 # ------------------------------------------------------------------------------
+# read subject IDs from text file (first column)
+read_sublst()
+{
+  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
+  [ ${#ids[@]} -gt 0 ] || error "Failed to read subject IDs from file $2"
+  local "$1" && upvar $1 ${ids[@]}
+}
+
+# ------------------------------------------------------------------------------
 # add node for pairwise image registration
 ireg_node()
 {
@@ -116,7 +125,7 @@ dofaverage_node()
       -norigid)  options="$options -norigid";  ;;
       -dofs)     options="$options -dofs"; ;;
       -*)        error "dofaverage_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "Too many arguments"
+      *)         [ -z "$node" ] || error "dofaverage_node: too many arguments"
                  node=$1; ;;
     esac
     shift
@@ -125,12 +134,15 @@ dofaverage_node()
   [ -n "$dofins" ] || error "dofaverage_node: missing -dofins argument"
 
   if [ -z "$doflst" ]; then
+    [ ${#ids[@]} -gt 0 ] || error "dofaverage_node: missing -subjects or -doflst argument"
     local dofnames=
     for id in "${ids[@]}"; do
       dofnames="$dofnames$id\t1\n"
     done
     doflst="$_dagdir/$node.par"
     write "$doflst" "$dofnames"
+  elif [ ${#ids[@]} -eq 0 ]; then
+    read_sublst ids "$doflst"
   fi
 
   info "Adding dofaverage node $node..."

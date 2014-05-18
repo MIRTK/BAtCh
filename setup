@@ -39,24 +39,6 @@ HELP
 }
 
 # ==============================================================================
-# I/O
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# read subject IDs from text file
-read_sublst()
-{
-  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
-  local num=${#ids[@]}
-  if [ $num -gt 0 ]; then
-    info "Read IDs of $num subjects"
-  else
-    error "Failed to read subject IDs from file $2"
-  fi
-  local "$1" && upvar $1 ${ids[@]}
-}
-
-# ==============================================================================
 # configuration
 # ==============================================================================
 
@@ -157,7 +139,23 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point
   begin_dag 'avgffds' -parent 'alignment'
-    # TODO
+
+    # deformable registration
+    ireg_node 'computeffds' \
+        -model    "BSplineSVFFD" -par "Multi-level transformation = None" \
+        -subjects "${subids[@]}" \
+        -bgvalue  "$bgvalue" \
+        -hdrdofs  "$dofdir/1___affine" \
+        -dofdir   "$dofdir/2.1_ffd"
+
+    # average dofs
+    for age in ${ages[@]}; do
+      dofaverage_node 'avgffds' -parent 'computeffds' \
+          -doflst "$pardir/kernel_t=$age.lst" \
+          -dofins "$dofdir/2.1_ffd" \
+          -dofdir "$dofdir/2___avgffd/t=$age"
+    done
+
   end_dag
 
   # ----------------------------------------------------------------------------
