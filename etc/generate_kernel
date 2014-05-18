@@ -1,0 +1,303 @@
+#! /bin/bash
+
+appdir="$(cd $(dirname "$BASH_SOURCE") && pwd)"
+appname="$(basename "$BASH_SOURCE")"
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+This script generates the text files which list for each subject the kernel
+regression weight to use for the averaging of the cross-sectional transformations
+and the averaging of the respective anatomical or label images.
+
+Options:
+  -s -sublst <sub.lst>     Text file listing the IDs of the images
+                           to use for the atlas construction. If not
+                           specified, the IDs are read from the -agelst.
+                           (default: $appdir/sub.lst)
+
+  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
+                           first column contains the image ID and the
+                           second column the associated age.
+                           (default: $appdir/age.csv)
+
+  -c -config <config.sh>   Configuration file.
+                           (default: $appdir/etc/config.sh)
+
+  -mean <mu>...            Mean values of Gaussians used for kernel regression, i.e.,
+                           list of ages for which to construct an atlas. (default: none)
+  -range <min> <max>       Minimum and maximum atlas age. The sampling of this age range
+                           must be specified using either the -num or -dt option. The given
+                           ages are the mean values of the Gaussians in the kernel regression
+                           and the corresponding standard deviation is given by -sigma. (default: none)
+  -num <n>                 Number of temporal atlases to construct within the specified -range.
+                           Use instead of -dt option. (default: 0)
+  -dt <dt>                 Temporal spacing of atlases to construct within the specified -range.
+                           Use instead of -num option. (default: 0)
+  -sigma <std>             Default standard deviation of Gaussian used for kernel regression,
+                           i.e., the sigma values corresponding to the -means. (default: $sigma)
+  -gaussian <mu> <std>     Mean and standard deviation of Gaussian used for creating
+                           an atlas at the specified age. This option can be given
+                           multiple times and can be used for variable-width kernels.
+  -epsilon <w>             Kernel weight threshold. (default: $epsilon)
+
+  -h -help                 Print help and exit.
+  -v -verbose              Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# used lib/daggen/core.sh functions
+# ==============================================================================
+
+[ -n "$verbose" ] || verbose=0 # global verbosity level
+
+# ------------------------------------------------------------------------------
+# print message
+info()  { [ $verbose -lt 1 ] || echo -e "$1"; }
+warn()  { echo -e "$1" 1>&2; }
+error() { warn "$1"; exit 1; }
+
+# ------------------------------------------------------------------------------
+# usage: foo () { local "$1" && upvar $1 "Hello, World!" }
+upvar()
+{
+  if unset -v "$1"; then       # unset & validate varname
+    if (( $# == 2 )); then
+      eval $1=\"\$2\"          # return single value
+    else
+      eval $1=\(\"\${@:2}\"\)  # return array
+    fi
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# get command-line option argument
+optarg()
+{
+  [ -n "$3" ] || { echo "Option $2 requires an argument!" 1>&2; exit 1; }
+  local "$1" && upvar $1 "$3"
+}
+
+# ------------------------------------------------------------------------------
+# get command-line option arguments
+optargs()
+{
+  local var="$1"
+  local opt="$2"
+  local arg=()
+  shift 2
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -*) break; ;;
+      *)  arg=("${arg[@]}" "$1"); ;;
+    esac
+    shift
+  done
+  [ ${#arg[@]} -gt 0 ] || { echo "Option $opt requires an argument!" 1>&2; exit 1; }
+  local "$var" && upvar $var "${arg[@]}"
+}
+
+# ==============================================================================
+# used lib/daggen/irtk.sh functions
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# read subject IDs from text file (first column)
+read_sublst()
+{
+  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
+  [ ${#ids[@]} -gt 0 ] || error "Failed to read subject IDs from file $2"
+  local "$1" && upvar $1 ${ids[@]}
+}
+
+# ==============================================================================
+# regression kernel
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# remove trailing zeros from floating point value
+remove_trailing_zeros()
+{
+  echo -n $1 | sed 's/\(\.[0-9]*[1-9]\)0*$/\1/;s/\.0*$//'
+}
+
+# ------------------------------------------------------------------------------
+# w = gaussian <t> <mean> <sigma>
+gaussian()
+{
+  /usr/bin/bc -l <<< "(1 / ($3 * sqrt(2))) * e(-0.5 * (($2 - $1)/$3)^2)"
+}
+
+# ------------------------------------------------------------------------------
+# calculate truncated gaussian kernel weights and write subject list files of
+# age-groups containing only those subjects which contribute to a particular
+# atlas time point
+generate_kernel()
+{
+  local mu std lst k i
+  local ids=()
+  local age=()
+  local mean=()
+  local sigma=1
+  local min=-1
+  local max=-1
+  local num=0
+  local dt=0
+  local epsilon=0.001
+  local kernel_mean=()
+  local kernel_sigma=()
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -subjects) optargs ids  "$@"; shift ${#ids[@]}; ;;
+      -ages)     optargs age  "$@"; shift ${#age[@]}; ;;
+      -mean)     optargs mean "$@"; shift ${#mean[@]}; ;;
+      -range)    optarg min $1 $2; optarg max $1 $3; shift 2; ;;
+      -num)      optarg num     $1 "$2"; shift; ;;
+      -dt)       optarg dt      $1 "$2"; shift; ;;
+      -sigma)    optarg sigma   $1 "$2"; shift; ;;
+      -epsilon)  optarg epsilon $1 "$2"; shift; ;;
+      -gaussian)
+        optarg mu  $1 $2
+        optarg std $1 $3
+        shift 2
+        i=${#kernel_mean[@]}
+        kernel_mean[$i]=$(remove_trailing_zeros $mu)
+        kernel_sigma[$i]=$(remove_trailing_zeros $std)
+        ;;
+      -*) error "generate_kernel: invalid option: $1"; ;;
+      *)  error "generate_kernel: invalid argument: $1"; ;;
+    esac
+    shift
+  done
+  [ ${#ids[@]} -gt 0 ] || error "generate_kernel: -subjects and -ages required"
+  if [ ${#ids[@]} -ne ${#age[@]} ]; then
+    error "generate_kernel: -subjects and -ages lists have differing number of elements"
+  fi
+
+  # fill lists of kernel means and standard deviations
+  sigma=$(remove_trailing_zeros $sigma)
+  i=${#kernel_mean[@]}
+  for mu in ${mean[@]}; do
+    kernel_mean[$i]=$(remove_trailing_zeros $mu)
+    kernel_sigma[$i]=$sigma
+    let i++
+  done
+  if [ $num -gt 0 ] && [[ $dt != 0 ]]; then
+    error "generate_kernel: options -num and -dt are mutually exclusive"
+  elif [ $num -gt 0 ] || [[ $dt != 0 ]]; then
+    if [[ $min == -1 ]] || [[ $max == -1 ]]; then
+      error "generate_kernel: -range option required when using -num or -dt"
+    fi
+    if [ $(/usr/bin/bc -l <<< "$min > $max") == 1 ]; then
+      local tmp=$min
+      min=$max
+      max=$tmp
+    fi
+    mu=$(remove_trailing_zeros $min)
+    if [[ $min == $max ]]; then
+      kernel_mean[$i]=$mu
+      kernel_sigma[$i]=$sigma
+      let i++
+    else
+      [ $num -eq 0 ] || dt=$(/usr/bin/bc -l <<< "($max - $min) / ($num - 1)")
+      while [ $(/usr/bin/bc -l <<< "$mu <= $max") == 1 ]; do
+        kernel_mean[$i]=$mu
+        kernel_sigma[$i]=$sigma
+        let i++
+        mu=$(/usr/bin/bc -l <<< "$mu + $dt")
+        mu=$(remove_trailing_zeros $mu)
+      done
+    fi
+  elif [[ $min != -1 ]] || [[ $max != -1 ]]; then
+    error "generate_kernel: either -num or -dt option required when using a -range"
+  fi
+
+  # compute kernel weight for each subject
+  info "Generating ${#kernel_mean[@]} kernel list(s)..."
+  k=0
+  for mu in ${kernel_mean[@]}; do
+    std=${kernel_sigma[$k]}
+    lst="kernel_t=$mu.lst"
+    if [ ! -f "$lst" ]; then
+      i=0
+      for id in ${ids[@]}; do
+        w=$(gaussian ${age[$i]} $mu $std)
+        if [ $(/usr/bin/bc <<< "$w > $epsilon") -eq 1 ]; then
+          printf "%-20s %f\n" $id $w >> "$lst"
+          [ $? -eq 0 ] || error "generate_kernel: failed to write weight to file $lst!"
+        fi
+        let i++
+      done
+    fi
+    let k++
+  done
+  info "Generating kernel list(s)... done"
+}
+
+# ==============================================================================
+# main
+# ==============================================================================
+
+verbose=0
+epsilon=0.001
+sigma=2
+kernel=()
+sublst=
+agelst="$appdir/age.csv"
+config="$appdir/config.sh"
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+  esac
+  let o++
+done
+. "$config"  || error "Failed to load configuration from file: $config"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -c|-config)      shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose)     let verbose++; ;;
+    *)               kernel=("${kernel[@]}" "$1"); ;;
+  esac
+  shift
+done
+
+if [ -z "$agelst" ]; then
+  error "Missing CSV file with subject IDs and corresponding ages!"
+fi
+if [ -z "$sublst" ]; then
+  sublst="$appdir/sub.lst"
+  [ -f "$sublst" ] || sublst="$agelst"
+fi
+read_sublst subids "$sublst"
+
+subage=()
+i=0
+for id in ${subids[@]}; do
+  age=($(egrep "$id[[:space:]][,;]?[[:space:]]?[0-9]+(\.[0-9]+)*" "$agelst" | tail -n1))
+  age=${age[1]}
+  [ -n "${age}" ] || error "Failed to read age of subject $id from file $agelst"
+  subage[$i]=$age
+  let i++
+done
+
+generate_kernel -subjects "${subids[@]}" \
+                -ages     "${subage[@]}" \
+                -epsilon  $epsilon       \
+                -sigma    $sigma         \
+                "${kernel[@]}"

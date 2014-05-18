@@ -8,9 +8,14 @@ imgdir='../images'       # anatomical brain images
 lbldir='../labels'       # input tissue and structure segmentations
 bgvalue=0                # background value of skull-stripped images
 
+# kernel regression
+epsilon=0.001            # kernel weight threshold
+sigma=2                  # (default) standard deviation of Gaussian
+
 # output settings
 bindir='bin'             # job executable files
 libdir='lib'             # dependencies of job executables
+pardir='etc'             # directory containing further configuration files
 dagdir='dag'             # DAG files for HTCondor DAGMan job
 logdir='log'             # log files written by HTCondor jobs
 dofdir='../dofs'         # transformations computed during atlas construction
