@@ -228,17 +228,15 @@ generate_kernel()
   for mu in ${kernel_mean[@]}; do
     std=${kernel_sigma[$k]}
     lst="kernel_t=$mu.lst"
-    if [ ! -f "$lst" ]; then
-      i=0
-      for id in ${ids[@]}; do
-        w=$(gaussian ${age[$i]} $mu $std)
-        if [ $(/usr/bin/bc <<< "$w > $epsilon") -eq 1 ]; then
-          printf "%-20s %f\n" $id $w >> "$lst"
-          [ $? -eq 0 ] || error "generate_kernel: failed to write weight to file $lst!"
-        fi
-        let i++
-      done
-    fi
+    i=0
+    for id in ${ids[@]}; do
+      w=$(gaussian ${age[$i]} $mu $std)
+      if [ $(/usr/bin/bc <<< "$w > $epsilon") -eq 1 ]; then
+        printf "%-20s %f\n" $id $w >> "$lst"
+        [ $? -eq 0 ] || error "generate_kernel: failed to write weight to file $lst!"
+      fi
+      let i++
+    done
     let k++
   done
   info "Generating kernel list(s)... done"
