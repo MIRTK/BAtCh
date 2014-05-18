@@ -1,0 +1,61 @@
+#!/bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+appname="$(basename "$BASH_SOURCE")"
+. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") <outlst> <kernel>...
+
+This script identifies all unique pairs of images that have to be registered
+with each other during the atlas construction, given a number of temporal kernels,
+either in one direction (symmetric registration) or both (asymmetric registration).
+Each kernel file may only contain the IDs of those images that contribute to the
+respective atlas time point with their respective kernel weights. Entries with
+zero weight are not excluded by this script.
+HELP
+}
+
+# ==============================================================================
+# main
+# ==============================================================================
+
+[ $# -ge 1 ] || { print_help; exit 1; }
+
+outlst="$1"; shift
+
+rm -f "$outlst" || error "Failed to remove existing output file!"
+outlsts=()
+for kernel in "$@"; do
+  tmplst="pairs${kernel/weights}"
+  #(
+    read_sublst ids "$kernel"
+    echo "Number of subjects in $kernel = ${#ids[@]}"
+    rm -f "$tmplst" || error "Failed to remove existing output file!"
+    i=0
+    for id1 in ${ids[@]}; do
+      let i++
+      out=
+      j=0
+      for id2 in ${ids[@]}; do
+        let j++
+        [ $i -lt $j ] || continue
+        row=$(echo -ne "$id1\n$id2" | sort | tr '\n' ' ')
+        out="$out$row\n"
+      done
+      echo -ne "$out" >> "$tmplst"
+    done
+  #) &
+  outlsts=("${outlsts[@]}" "$tmplst")
+done
+wait
+sort -u "${outlsts[@]}" > "$outlst"
+echo -e "\nNumber of unique (unordered) image pairs: $(wc -l < "$outlst")"

@@ -151,7 +151,7 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
     # average dofs
     for age in ${ages[@]}; do
       dofaverage_node 'avgffds' -parent 'computeffds' \
-          -doflst "$pardir/kernel_t=$age.lst" \
+          -doflst "$kernel/weights_t=$age.lst" \
           -dofins "$dofdir/2.1_ffd" \
           -dofdir "$dofdir/2___avgffd/t=$age"
     done
