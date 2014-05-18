@@ -1,22 +1,22 @@
 # IRTK installation
-IRTK_DIR='/vol/biomedic/users/as12312/local/linux-3.6/irtk-nnatlas'
-LIBRARY_PATH='/vol/biomedic/users/as12312/local/lib'
+PATH="/vol/biomedic/users/as12312/local/linux-3.6/irtk-nnatlas:$PATH"
+LD_LIBRARY_PATH='/vol/biomedic/users/as12312/local/lib'
 
 # input settings
-topdir="$PWD"          # top-level/working directory
-imgdir='images'        # anatomical brain images
-lbldir='labels'        # input tissue and structure segmentations
-bgvalue=0              # background value of skull-stripped images
+topdir="$appdir"         # top-level/working directory
+imgdir='../images'       # anatomical brain images
+lbldir='../labels'       # input tissue and structure segmentations
+bgvalue=0                # background value of skull-stripped images
 
 # output settings
-bindir='workflow/bin' # job executable files
-libdir='workflow/lib' # dependencies of job executables
-dagdir='workflow/dag' # DAG files for HTCondor DAGMan job
-logdir='workflow/log' # log files written by HTCondor jobs
-dofdir='dofs'         # transformations computed during atlas construction
+bindir='bin'             # job executable files
+libdir='lib'             # dependencies of job executables
+dagdir='dag'             # DAG files for HTCondor DAGMan job
+logdir='log'             # log files written by HTCondor jobs
+dofdir='../dofs'         # transformations computed during atlas construction
 
 # HTCondor settings
 notify_user='as12312@imperial.ac.uk'
 notification='Error'
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && (OpSysMajorVer == 12 || OpSysMajorVer == 13)'
-log="workflow/condor.log"
+log='condor.log'

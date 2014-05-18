@@ -1,8 +1,8 @@
 #! /bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+appdir="$(cd $(dirname "$BASH_SOURCE") && pwd)"
 appname="$(basename "$BASH_SOURCE")"
-. "$appdir/lib/utils.sh" || { echo "Failed to import utils module!" 1>&2; exit 1; }
+. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
 
 # ==============================================================================
 # help
@@ -36,6 +36,24 @@ Options:
   -h -help                 Print help and exit.
   -v -verbose              Enable verbose output messages.
 HELP
+}
+
+# ==============================================================================
+# I/O
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# read subject IDs from text file
+read_sublst()
+{
+  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
+  local num=${#ids[@]}
+  if [ $num -gt 0 ]; then
+    info "Read IDs of $num subjects"
+  else
+    error "Failed to read subject IDs from file $2"
+  fi
+  local "$1" && upvar $1 ${ids[@]}
 }
 
 # ==============================================================================
@@ -87,7 +105,7 @@ cd "$topdir" || error "Failed to change to top-level directory!"
 # workflow
 # ==============================================================================
 
-begin_dag 'make_atlas'
+begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
