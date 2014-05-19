@@ -58,33 +58,63 @@ ireg_node()
   [ -n "$model"      ] || error "ireg_node: missing -model argument"
   [ ${#ids[@]} -ge 2 ] || error "ireg_node: not enough -subjects specified"
 
-  local par="Transformation model             = $model"
-  par="$par\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
-  par="$par\nSimilarity measure               = $similarity"
-  par="$par\nPadding value                    = $padding"
-  par="$par\nMaximum streak of rejected steps = 3"
-  par="$par\nStrict step length range         = No"
-  par="$par\n$params"
-  parin="$_dagdir/$node.par"
-  write "$parin" "$par\n"
+  # number of pairwise registrations
+  local N
+  let N="${#ids[@]} * (${#ids[@]} - 1)"
+  [[ $ic == false ]] || let N="$N / 2"
 
+  # command used to invert inverse-consistent transformation
   local invcmd='ffdinvert'
   if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
     invcmd='dofinvert'
   fi
   [[ $ic == false ]] || pack_executable $invcmd
 
+  # add SUBDAG node
   info "Adding node $node..."
   begin_dag $node || {
-    local t s pre sub post
+
+    # registration parameters
+    local par="Transformation model             = $model"
+    par="$par\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
+    par="$par\nSimilarity measure               = $similarity"
+    par="$par\nPadding value                    = $padding"
+    par="$par\nMaximum streak of rejected steps = 3"
+    par="$par\nStrict step length range         = No"
+    par="$par\n$params"
+    parin="$_dagdir/$node.par"
+    write "$parin" "$par\n"
+
+    # create generic submission script
+    local sub="arguments    = \""
+    if [ -n "$hdrdofs" ]; then
+      sub="$sub -image '$imgdir/\$(target).nii.gz' -dof '$hdrdofs/\$(target).dof.gz'"
+      sub="$sub -image '$imgdir/\$(source).nii.gz' -dof '$hdrdofs/\$(source).dof.gz'"
+    else
+      sub="$sub -image '$imgdir/\$(target).nii.gz' -image '$imgdir/\$(source).nii.gz'"
+    fi
+    sub="$sub -v"
+    [ -z "$dofins" ] || sub="$sub -dofin  '$dofins/\$(target)/\$(source).dof.gz'"
+    [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source).dof.gz'"
+    sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
+    sub="$sub\""
+    sub="$sub\noutput       = $_dagdir/\$(target)/ireg_\$(target),\$(source).out"
+    sub="$sub\nerror        = $_dagdir/\$(target)/ireg_\$(target),\$(source).out"
+    sub="$sub\nqueue"
+    make_sub_script "$node.sub" "$sub" -executable ireg
+
+    # add job nodes
+    local n t s prefile pre post
+    n=0
     t=0
     for id1 in "${ids[@]}"; do
       let t++
-      pre=''
-      sub=''
-      post=''
-      pre="$pre\nmkdir -p '$_dagdir/ireg_$id1.log' || exit 1"
+      # PRE script to create directories
+      prefile="mkdir_$id1.pre"
+      pre="\nmkdir -p '$_dagdir/$id1' || exit 1"
       [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
+      make_script "$prefile" "$pre"
+      # register image id1 to all other images
       s=0
       for id2 in "${ids[@]}"; do
         let s++
@@ -93,32 +123,22 @@ ireg_node()
         else
           [ $t -ne $s ] || continue
         fi
-        sub="$sub\n\n# target: $id1, source: $id2"
-        sub="$sub\narguments = \""
-        if [ -n "$hdrdofs" ]; then
-          sub="$sub -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
-          sub="$sub -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
-        else
-          sub="$sub -image '$imgdir/$id1.nii.gz' -image '$imgdir/$id2.nii.gz'"
-        fi
-        sub="$sub -v"
-        [ -z "$dofins" ] || sub="$sub -dofin  '$dofins/$id1/$id2.dof.gz'"
-        [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/$id1/$id2.dof.gz'"
-        sub="$sub -parin '$parin' -parout '$_dagdir/ireg_$id1.log/ireg_$id1,$id2.par'"
-        sub="$sub\""
-        sub="$sub\noutput    = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
-        sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
-        sub="$sub\nqueue"
+        let n++
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-          post="$post\n\n# target: $id1, source: $id2"
-          post="$post\nmkdir -p '$dofdir/$id2' || exit 1"
+          # POST command to invert inverse consistent transformation
+          post="mkdir -p '$dofdir/$id2' || exit 1"
           post="$post\nbin/$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
+          # node to register id1 and id2 (symmetric)
+          add_node "ireg_$id1,$id2" -var "target=$id1" -var "source=$id2" \
+                                    -prefile "$prefile" -subfile "$node.sub" \
+                                    -post "$post"
+        else
+          # node to register id1 and id2 (asymmetric)
+          add_node "ireg_$id1,$id2" -var "target=$id1" -var "source=$id2" \
+                                    -prefile "$prefile" -subfile "$node.sub"
         fi
+        info "  Added job `printf '%3d of %d' $n $N`"
       done
-      if [ -n "$sub" ]; then
-        add_node ireg_$id1 ireg
-        info "  Added subnode `printf '%3d of %d' $t ${#ids[@]}`"
-      fi
     done
   }; end_dag
   add_edge $node ${parent[@]}
@@ -181,7 +201,7 @@ dofaverage_node()
     sub="$sub\nerror     = $_dagdir/$node.log/dofaverage_$id.out"
     sub="$sub\nqueue"
   done
-  add_node $node dofaverage
+  add_node $node -executable dofaverage -pre "$pre" -sub "$sub"
   add_edge $node ${parent[@]}
   info "Adding node $node... done"
 }
@@ -230,7 +250,7 @@ dofcombine_node()
     sub="$sub\nerror     = $_dagdir/$node.log/dofcombine_$id.out"
     sub="$sub\nqueue"
   done
-  add_node $node dofcombine
+  add_node $node -executable dofcombine -pre "$pre" -sub "$sub"
   add_edge $node ${parent[@]}
   info "Adding node $node... done"
 }
