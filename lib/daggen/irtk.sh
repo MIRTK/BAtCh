@@ -109,19 +109,16 @@ ireg_node()
         sub="$sub\noutput    = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
         sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
         sub="$sub\nqueue"
-      done
-      if [ $t -gt 1 ] && [ -n "$dofdir" ] && [[ $ic == true ]]; then
-        s=0
-        for id2 in "${ids[@]}"; do
-          let s++
-          [ $t -gt $s ] || continue
-          post="$post\n\n# target: $id2, source: $id1"
+        if [[ $ic == true ]] && [ -n "$dofdir" ]; then
+          post="$post\n\n# target: $id1, source: $id2"
           post="$post\nmkdir -p '$dofdir/$id2' || exit 1"
           post="$post\n$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
-        done
+        fi
+      done
+      if [ -n "$sub" ]; then
+        add_node ireg_$id1 ireg
+        info "  Added subnode `printf '%3d of %d' $t ${#ids[@]}`"
       fi
-      add_node ireg_$id1 ireg
-      info "  Added subnode `printf '%3d of %d' $t ${#ids[@]}`"
     done
   }; end_dag
   add_edge $node ${parent[@]}
