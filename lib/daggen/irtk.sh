@@ -117,7 +117,7 @@ ireg_node()
           [ $t -gt $s ] || continue
           post="$post\n\n# target: $id2, source: $id1"
           post="$post\nmkdir -p '$dofdir/$id2' || exit 1"
-          post="$post\n$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
+          post="$post\nbin/$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
         done
       fi
       add_node ireg_$id1 ireg
