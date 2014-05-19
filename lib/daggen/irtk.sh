@@ -26,13 +26,14 @@ ireg_node()
   local parent=()
   local ids=
   local model=
-  local energy='SIM[Similarity](I1, I2 o T)'
+  local fidelity='SIM[Similarity](I1, I2 o T)'
   local similarity='NMI'
   local hdrdofs=
   local dofins=
   local dofdir=
-  local params=''
+  local params=
   local padding=-32767
+  local ic='false'
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -45,8 +46,8 @@ ireg_node()
       -par)                optarg  param      $1 "$2"; shift; params="$params\n$param"; ;;
       -similarity)         optarg  similarity $1 "$2"; shift; ;;
       -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
-      -inverse-consistent) energy='0.5 SIM[Forward similarity](I1, I2 o T) + 0.5 SIM[Backward similarity](I1 o T^-1, I2)'; ;;
-      -symmetric)          energy='SIM[Similarity](I1 o T^-0.5, I2 o T^0.5)'; ;;
+      -inverse-consistent) ic='true'; fidelity='0.5 SIM[Forward similarity](I1, I2 o T) + 0.5 SIM[Backward similarity](I1 o T^-1, I2)'; ;;
+      -symmetric)          ic='true'; fidelity='SIM[Similarity](I1 o T^-0.5, I2 o T^0.5)'; ;;
       -*)                  error "ireg_node: invalid option: $1"; ;;
       *)                   [ -z "$node" ] || error "ireg_node: too many arguments"
                            node=$1; ;;
@@ -58,7 +59,7 @@ ireg_node()
   [ ${#ids[@]} -ge 2 ] || error "ireg_node: not enough -subjects specified"
 
   local par="Transformation model             = $model"
-  par="$par\nEnergy function                  = $energy"
+  par="$par\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
   par="$par\nSimilarity measure               = $similarity"
   par="$par\nPadding value                    = $padding"
   par="$par\nMaximum streak of rejected steps = 3"
@@ -67,17 +68,22 @@ ireg_node()
   parin="$_dagdir/$node.par"
   write "$parin" "$par\n"
 
-  info "Adding ireg node $node..."
-  local pre=
-  local sub=
-  local n=0
+  info "Adding node $node..."
   begin_dag $node || {
+    local t s pre sub
+    t=0
     for id1 in "${ids[@]}"; do
-      let n++
+      let t++
       pre="$pre\nmkdir -p '$_dagdir/ireg_$id1.log' || exit 1"
       [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
+      s=0
       for id2 in "${ids[@]}"; do
-        [[ $id1 != $id2 ]] || continue
+        let s++
+        if [[ $ic == true ]]; then
+          [ $t -lt $s ] || continue
+        else
+          [ $t -ne $s ] || continue
+        fi
         sub="$sub\n\n# target: $id1, source: $id2"
         sub="$sub\narguments = \""
         if [ -n "$hdrdofs" ]; then
@@ -92,15 +98,32 @@ ireg_node()
         sub="$sub -parin '$parin' -parout '$_dagdir/ireg_$id1.log/ireg_$id1,$id2.par'"
         sub="$sub\""
         sub="$sub\noutput    = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
-        sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.err"
+        sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
         sub="$sub\nqueue"
       done
       add_node ireg_$id1 ireg
-      info "  Added subnode `printf '%3d of %d' $n ${#ids[@]}`"
+      if [[ $ic == true ]]; then
+        s=0
+        for id2 in "${ids[@]}"; do
+          let s++
+          [ $t -ge $s ] || continue
+          sub="$sub\n\n# target: $id2, source: $id1"
+          sub="$sub\narguments = \"'$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz'\""
+          sub="$sub\noutput    = $_dagdir/ireg_$id1.log/invert_$id1,$id2.out"
+          sub="$sub\nerror     = $_dagdir/ireg_$id1.log/invert_$id1,$id2.out"
+          sub="$sub\nqueue"
+        done
+        if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
+          add_node invert_$id1 dofinvert
+        else
+          add_node invert_$id1 ffdinvert
+        fi
+      fi
+      info "  Added subnode(s) `printf '%3d of %d' $t ${#ids[@]}`"
     done
   }; end_dag
   add_edge $node ${parent[@]}
-  info "Adding ireg node $node... done"
+  info "Adding node $node... done"
 }
 
 # ------------------------------------------------------------------------------
@@ -145,7 +168,7 @@ dofaverage_node()
     read_sublst ids "$doflst"
   fi
 
-  info "Adding dofaverage node $node..."
+  info "Adding node $node..."
   local pre=''
   local sub=''
   pre="$pre\nmkdir -p '$_dagdir/$node.log' || exit 1"
@@ -156,12 +179,12 @@ dofaverage_node()
     sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$id/' -suffix .dof.gz"
     sub="$sub\""
     sub="$sub\noutput    = $_dagdir/$node.log/dofaverage_$id.out"
-    sub="$sub\nerror     = $_dagdir/$node.log/dofaverage_$id.err"
+    sub="$sub\nerror     = $_dagdir/$node.log/dofaverage_$id.out"
     sub="$sub\nqueue"
   done
   add_node $node dofaverage
   add_edge $node ${parent[@]}
-  info "Adding dofaverage node $node... done"
+  info "Adding node $node... done"
 }
 
 # ------------------------------------------------------------------------------
@@ -196,7 +219,7 @@ dofcombine_node()
   [ -n "$dofdir2" ] || error "dofcombine_node: missing -dofdir2 argument"
   [ -n "$dofdir3" ] || error "dofcombine_node: missing -dofdir3 argument"
 
-  info "Adding dofcombine node $node..."
+  info "Adding node $node..."
   local pre=''
   local sub=''
   pre="$pre\nmkdir -p '$_dagdir/$node.log' || exit 1"
@@ -205,10 +228,10 @@ dofcombine_node()
     sub="$sub\n\n# subject: $id"
     sub="$sub\narguments = \"'$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options\""
     sub="$sub\noutput    = $_dagdir/$node.log/dofcombine_$id.out"
-    sub="$sub\nerror     = $_dagdir/$node.log/dofcombine_$id.err"
+    sub="$sub\nerror     = $_dagdir/$node.log/dofcombine_$id.out"
     sub="$sub\nqueue"
   done
   add_node $node dofcombine
   add_edge $node ${parent[@]}
-  info "Adding dofcombine node $node... done"
+  info "Adding node $node... done"
 }
