@@ -71,34 +71,34 @@ ireg_node()
   local pre=
   local sub=
   local n=0
-  begin_dag $node
-  for id1 in "${ids[@]}"; do
-    let n++
-    pre="$pre\nmkdir -p '$_dagdir/ireg_$id1.log' || exit 1"
-    [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
-    for id2 in "${ids[@]}"; do
-      [[ $id1 != $id2 ]] || continue
-      sub="$sub\n\n# target: $id1, source: $id2"
-      sub="$sub\narguments = \""
-      if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
-        sub="$sub -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
-      else
-        sub="$sub -image '$imgdir/$id1.nii.gz' -image '$imgdir/$id2.nii.gz'"
-      fi
-      sub="$sub -v"
-      [ -z "$dofins" ] || sub="$sub -dofin  '$dofins/$id1/$id2.dof.gz'"
-      [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/$id1/$id2.dof.gz'"
-      sub="$sub -parin '$parin' -parout '$_dagdir/ireg_$id1.log/ireg_$id1,$id2.par'"
-      sub="$sub\""
-      sub="$sub\noutput    = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
-      sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.err"
-      sub="$sub\nqueue"
+  begin_dag $node || {
+    for id1 in "${ids[@]}"; do
+      let n++
+      pre="$pre\nmkdir -p '$_dagdir/ireg_$id1.log' || exit 1"
+      [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
+      for id2 in "${ids[@]}"; do
+        [[ $id1 != $id2 ]] || continue
+        sub="$sub\n\n# target: $id1, source: $id2"
+        sub="$sub\narguments = \""
+        if [ -n "$hdrdofs" ]; then
+          sub="$sub -image '$imgdir/$id1.nii.gz' -dof '$hdrdofs/$id1.dof.gz'"
+          sub="$sub -image '$imgdir/$id2.nii.gz' -dof '$hdrdofs/$id2.dof.gz'"
+        else
+          sub="$sub -image '$imgdir/$id1.nii.gz' -image '$imgdir/$id2.nii.gz'"
+        fi
+        sub="$sub -v"
+        [ -z "$dofins" ] || sub="$sub -dofin  '$dofins/$id1/$id2.dof.gz'"
+        [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/$id1/$id2.dof.gz'"
+        sub="$sub -parin '$parin' -parout '$_dagdir/ireg_$id1.log/ireg_$id1,$id2.par'"
+        sub="$sub\""
+        sub="$sub\noutput    = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
+        sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.err"
+        sub="$sub\nqueue"
+      done
+      add_node ireg_$id1 ireg
+      info "  Added subnode `printf '%3d of %d' $n ${#ids[@]}`"
     done
-    add_node ireg_$id1 ireg
-    info "  Added subnode `printf '%3d of %d' $n ${#ids[@]}`"
-  done
-  end_dag
+  }; end_dag
   add_edge $node ${parent[@]}
   info "Adding ireg node $node... done"
 }

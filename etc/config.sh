@@ -19,6 +19,7 @@ libdir='lib'                     # dependencies of job executables
 dagdir='dag'                     # DAG files for HTCondor DAGMan job
 logdir='log'                     # log files written by HTCondor jobs
 dofdir='../dofs'                 # transformations computed during atlas construction
+update='false'                   # enable (true) or disable update of existing DAG files
 
 # HTCondor settings
 notify_user='as12312@imperial.ac.uk'
