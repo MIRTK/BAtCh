@@ -1,3 +1,4 @@
 /dag/
 /bin/
 .*.swo
+*.dag

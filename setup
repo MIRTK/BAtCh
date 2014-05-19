@@ -150,11 +150,17 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
     # deformable registration
     ireg_node 'computeffds' \
-        -model    "BSplineSVFFD" -par "Multi-level transformation = None" \
-        -subjects "${subids[@]}" \
-        -bgvalue  "$bgvalue" \
-        -hdrdofs  "$dofdir/1___affine" \
-        -dofdir   "$dofdir/2.1_ffd"
+        -model     "BSplineSVFFD" \
+        -par       "Multi-level transformation       = None" \
+        -par       "Control point spacing            = 2.5"  \
+        -par       "No. of resolution levels         = 4"    \
+        -par       "Bending energy weight            = 1e-3" \
+        -par       "Jacobian penalty weight          = 1e-2" \
+        -subjects  "${subids[@]}" \
+        -bgvalue   "$bgvalue" \
+        -hdrdofs   "$dofdir/1___affine" \
+        -dofdir    "$dofdir/2.1_ffd" \
+        -symmetric
 
     # average dofs
     for t in ${timepoints[@]}; do
