@@ -113,13 +113,13 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
         -subjects "${subids[@]}" \
         -bgvalue  "$bgvalue" \
         -dofins   "$dofdir/1.1_initial" \
-        -dofdir   "$dofdir/1.2_affine" \
+        -dofdir   "$dofdir/1.2_affine"
 
     # average dofs
     dofaverage_node 'avgdofs1' -parent 'affinereg' \
         -subjects "${subids[@]}" \
         -dofins   "$dofdir/1.2_affine" \
-        -dofdir   "$dofdir/1.3_average" \
+        -dofdir   "$dofdir/1.3_average"
 
     # affine refinement
     ireg_node 'refine' -parent 'avgdofs1' \
@@ -127,20 +127,20 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
         -subjects "${subids[@]}" \
         -bgvalue  "$bgvalue" \
         -hdrdofs  "$dofdir/1.3_average" \
-        -dofdir   "$dofdir/1.4_refined" \
+        -dofdir   "$dofdir/1.4_refined"
 
     # average dofs
     dofaverage_node 'avgdofs2' -parent 'refine' \
         -subjects "${subids[@]}" \
         -dofins   "$dofdir/1.4_refined" \
-        -dofdir   "$dofdir/1.5_average" \
+        -dofdir   "$dofdir/1.5_average"
 
     # compose average dofs
     dofcombine_node 'finalize' -parent 'avgdofs2' \
         -subjects "${subids[@]}" \
         -dofdir1  "$dofdir/1.3_average" \
         -dofdir2  "$dofdir/1.5_average" \
-        -dofdir3  "$dofdir/1___affine" \
+        -dofdir3  "$dofdir/1___affine"
 
   end_dag
 
@@ -158,7 +158,7 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
     # average dofs
     for t in ${timepoints[@]}; do
-      dofaverage_node 'avgffds' -parent 'computeffds' \
+      dofaverage_node "avgffds_$t" -parent 'computeffds' \
           -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
           -dofdir "$dofdir/2___avgffd/t=$t"
