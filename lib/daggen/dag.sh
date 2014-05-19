@@ -70,10 +70,10 @@ EOF
 }
 
 # ------------------------------------------------------------------------------
-# write PRE script of HTCondor DAGMan node
-make_pre_script()
+# write PRE/POST script of HTCondor DAGMan node
+make_script()
 {
-  [ $# -eq 1 ] || error "make_pre_script: invalid number of arguments"
+  [ $# -eq 1 ] || error "make_script: invalid number of arguments"
   makedir "$(dirname "$1")"
   cat --<<EOF > "$1"
 #! /bin/bash
@@ -176,9 +176,16 @@ end_dag()
 add_node()
 {
   [ $# -eq 2 ] || error "add_node: invalid number of arguments"
-  make_pre_script "$_dagdir/$1.pre"
   make_sub_script "$_dagdir/$1.sub" -executable "$2"
-  append "$_dagfile" "\nJOB $1 $topdir/$_dagdir/$1.sub\nSCRIPT PRE $1 $topdir/$_dagdir/$1.pre\n"
+  append "$_dagfile" "\nJOB $1 $topdir/$_dagdir/$1.sub\n"
+  if [ -n "$pre" ]; then
+    make_script "$_dagdir/$1.pre"
+    append "$_dagfile" "SCRIPT PRE $1 $topdir/$_dagdir/$1.pre\n"
+  fi
+  if [ -n "$post" ]; then
+    make_script "$_dagdir/$1.post"
+    append "$_dagfile" "SCRIPT POST $1 $topdir/$_dagdir/$1.post\n"
+  fi
   append_node $1
 }
 
@@ -186,9 +193,11 @@ add_node()
 # append DAGMan node scripts
 append_node()
 {
-  [ $# -eq 1  ] || error "append_node: invalid number of arguments"
-  [ -z "$pre" ] || append "$_dagdir/$1.pre" "$pre\n"
-  [ -z "$sub" ] || append "$_dagdir/$1.sub" "$sub\n"
+  [ $# -eq 1   ] || error "append_node: invalid number of arguments"
+  [ -z "$pre"  ] || append "$_dagdir/$1.pre"  "$pre\n"
+  [ -z "$sub"  ] || append "$_dagdir/$1.sub"  "$sub\n"
+  [ -z "$post" ] || append "$_dagdir/$1.post" "$post\n"
   pre=''
   sub=''
+  post=''
 }
