@@ -112,7 +112,7 @@ ireg_node()
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
           post="$post\n\n# target: $id1, source: $id2"
           post="$post\nmkdir -p '$dofdir/$id2' || exit 1"
-          post="$post\n$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
+          post="$post\nbin/$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
         fi
       done
       if [ -n "$sub" ]; then
