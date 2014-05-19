@@ -68,12 +68,21 @@ ireg_node()
   parin="$_dagdir/$node.par"
   write "$parin" "$par\n"
 
+  local invcmd='ffdinvert'
+  if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
+    invcmd='dofinvert'
+  fi
+  [[ $ic == false ]] || pack_executable $invcmd
+
   info "Adding node $node..."
   begin_dag $node || {
-    local t s pre sub
+    local t s pre sub post
     t=0
     for id1 in "${ids[@]}"; do
       let t++
+      pre=''
+      sub=''
+      post=''
       pre="$pre\nmkdir -p '$_dagdir/ireg_$id1.log' || exit 1"
       [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
       s=0
@@ -101,25 +110,18 @@ ireg_node()
         sub="$sub\nerror     = $_dagdir/ireg_$id1.log/ireg_$id1,$id2.out"
         sub="$sub\nqueue"
       done
-      add_node ireg_$id1 ireg
-      if [[ $ic == true ]]; then
+      if [ $t -gt 1 ] && [ -n "$dofdir" ] && [[ $ic == true ]]; then
         s=0
         for id2 in "${ids[@]}"; do
           let s++
-          [ $t -ge $s ] || continue
-          sub="$sub\n\n# target: $id2, source: $id1"
-          sub="$sub\narguments = \"'$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz'\""
-          sub="$sub\noutput    = $_dagdir/ireg_$id1.log/invert_$id1,$id2.out"
-          sub="$sub\nerror     = $_dagdir/ireg_$id1.log/invert_$id1,$id2.out"
-          sub="$sub\nqueue"
+          [ $t -gt $s ] || continue
+          post="$post\n\n# target: $id2, source: $id1"
+          post="$post\nmkdir -p '$dofdir/$id2' || exit 1"
+          post="$post\n$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
         done
-        if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
-          add_node invert_$id1 dofinvert
-        else
-          add_node invert_$id1 ffdinvert
-        fi
       fi
-      info "  Added subnode(s) `printf '%3d of %d' $t ${#ids[@]}`"
+      add_node ireg_$id1 ireg
+      info "  Added subnode `printf '%3d of %d' $t ${#ids[@]}`"
     done
   }; end_dag
   add_edge $node ${parent[@]}
