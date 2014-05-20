@@ -60,13 +60,16 @@ make_sub_script()
   done
   [ -n "$file"       ] || error "make_sub_script: missing filename argument"
   [ -n "$executable" ] || error "make_sub_script: missing -executable argument"
-  pack_executable "$executable"
+  if [[ ${executable:0:1} != / ]]; then
+    pack_executable "$executable"
+    executable="$topdir/$bindir/$executable"
+  fi
   makedir "$(dirname "$topdir/$_dagdir")"
   cat --<<EOF > "$topdir/$_dagdir/$file"
 universe     = $universe
 environment  = LD_LIBRARY_PATH=$topdir/$libdir:$LD_LIBRARY_PATH
 initialdir   = $topdir
-executable   = $topdir/$bindir/$executable
+executable   = $executable
 log          = $topdir/$log
 notify_user  = $notify_user
 notification = $notification
