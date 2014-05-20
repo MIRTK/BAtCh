@@ -148,15 +148,15 @@ ireg_node()
         fi
         let n++
         # node to register id1 and id2
-        add_node "reg_$id1,$id2" -subfile "registration.sub"   \
-                                 -var     "target=$id1"        \
-                                 -var     "source=$id2"
+        add_node "reg_$id1,$id2" -subfile "registration.sub"    \
+                                 -var     "target=\"$id1\""     \
+                                 -var     "source=\"$id2\""
         add_edge "reg_$id1,$id2" 'mkdirs'
         # node to invert inverse-consistent transformation
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-          add_node "invert_$id1,$id2" -subfile "invert.sub"    \
-                                      -var     "target=$id1"   \
-                                      -var     "source=$id2"
+          add_node "invert_$id1,$id2" -subfile "invert.sub"      \
+                                      -var     "target=\"$id1\"" \
+                                      -var     "source=\"$id2\""
           add_edge "invert_$id1,$id2" "reg_$id1,$id2"
         fi
         info "  Added job `printf '%3d of %d' $n $N`"
