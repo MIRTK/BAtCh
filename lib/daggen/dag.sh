@@ -123,12 +123,15 @@ begin_dag()
   local parent=()
   local dagfile=
   local dagdir=
+  local splice='false'
 
   while [ $# -gt 0 ]; do
     case "$1" in
       -parent)  optargs parent "$@"; shift ${#parent[@]}; ;;
       -dagfile) optarg dagfile $1 "$2"; shift; ;;
       -dagdir)  optarg dagdir  $1 "$2"; shift; ;;
+      -splice)  splice='true';  ;;
+      -subdag)  splice='false'; ;;
       -*)       error "begin_dag: invalid option: $1"; ;;
       *)        [ -z "$node" ] || error "begin_dag: too many arguments"
                 node=$1; ;;
@@ -140,14 +143,18 @@ begin_dag()
   [ -n "$dagdir"  ] || dagdir="$_dagdir/$node"
 
   if [ -n "$_dagfile" ]; then
-    # add SUBDAG node to current (SUB)DAG
-    append "$_dagfile" "\nSUBDAG EXTERNAL $node $topdir/$dagfile\n"
+    # add SUBDAG/SPLICE to current (SUB)DAG/SPLICE
+    if [[ $splice == true ]]; then
+      append "$_dagfile" "\nSPLICE $node $topdir/$dagfile\n"
+    else
+      append "$_dagfile" "\nSUBDAG EXTERNAL $node $topdir/$dagfile\n"
+    fi
     add_edge $node ${parent[@]}
     # push parent DAG info on stack
     _dagfiles=("${_dagfiles[@]}" "${_dagfile}")
     _dagdirs=("${_dagdirs[@]}"   "${_dagdir}")
   fi
-  # start new (SUB)DAG
+  # start new (SUB)DAG/SPLICE
   _dagfile="$dagfile"
   _dagdir="$dagdir"
   if [[ $update == true ]] || [ ! -f "$dagfile" ]; then
