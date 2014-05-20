@@ -63,16 +63,10 @@ ireg_node()
   let N="${#ids[@]} * (${#ids[@]} - 1)"
   [[ $ic == false ]] || let N="$N / 2"
 
-  # command used to invert inverse-consistent transformation
-  local invcmd='ffdinvert'
-  if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
-    invcmd='dofinvert'
-  fi
-  [[ $ic == false ]] || pack_executable $invcmd
 
   # add SUBDAG node
   info "Adding node $node..."
-  begin_dag $node || {
+  begin_dag $node -splice || {
 
     # registration parameters
     local par="Transformation model             = $model"
@@ -82,10 +76,10 @@ ireg_node()
     par="$par\nMaximum streak of rejected steps = 3"
     par="$par\nStrict step length range         = No"
     par="$par\n$params"
-    parin="$_dagdir/$node.par"
+    parin="$_dagdir/ireg.par"
     write "$parin" "$par\n"
 
-    # create generic submission script
+    # create generic ireg submission script
     local sub="arguments    = \""
     if [ -n "$hdrdofs" ]; then
       sub="$sub -image '$imgdir/\$(target).nii.gz' -dof '$hdrdofs/\$(target).dof.gz'"
@@ -98,10 +92,44 @@ ireg_node()
     [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source).dof.gz'"
     sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
     sub="$sub\""
-    sub="$sub\noutput       = $_dagdir/\$(target)/ireg_\$(target),\$(source).out"
-    sub="$sub\nerror        = $_dagdir/\$(target)/ireg_\$(target),\$(source).out"
+    sub="$sub\noutput       = $_dagdir/\$(target)/register_\$(target),\$(source).out"
+    sub="$sub\nerror        = $_dagdir/\$(target)/register_\$(target),\$(source).out"
     sub="$sub\nqueue"
-    make_sub_script "$node.sub" "$sub" -executable ireg
+    make_sub_script "register.sub" "$sub" -executable ireg
+
+    # create generic dofinvert submission script
+    if [[ $ic == true ]]; then
+      # command used to invert inverse-consistent transformation
+      local invcmd='ffdinvert'
+      if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
+        invcmd='dofinvert'
+      fi
+      local sub="arguments    = \"'$dofdir/\$(target)/\$(source).dof.gz' '$dofdir/\$(source)/\$(target).dof.gz'\""
+      sub="$sub\noutput       = $_dagdir/\$(target)/invert_\$(target),\$(source).out"
+      sub="$sub\nerror        = $_dagdir/\$(target)/invert_\$(target),\$(source).out"
+      sub="$sub\nqueue"
+      make_sub_script "invert.sub" "$sub" -executable $invcmd
+    fi
+
+    # job to create output directories
+    # better to have it done by a single script for all directories
+    # than a PRE script for each registration job, which would require
+    # the -maxpre option to avoid memory issues
+    local pre=
+    for id in "${ids[@]}"; do
+      # directory for log files
+      pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
+    done
+    if [ -n "$dofdir" ]; then
+      pre="$pre\n"
+      for id in "${ids[@]}"; do
+        # directory for output files
+        pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
+      done
+    fi
+    make_script "mkdirs.sh" "$pre"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
     # add job nodes
     local n t s prefile pre post
@@ -109,11 +137,6 @@ ireg_node()
     t=0
     for id1 in "${ids[@]}"; do
       let t++
-      # PRE script to create directories
-      prefile="mkdir_$id1.pre"
-      pre="\nmkdir -p '$_dagdir/$id1' || exit 1"
-      [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir/$id1' || exit 1"
-      make_script "$prefile" "$pre"
       # register image id1 to all other images
       s=0
       for id2 in "${ids[@]}"; do
@@ -124,18 +147,17 @@ ireg_node()
           [ $t -ne $s ] || continue
         fi
         let n++
+        # node to register id1 and id2
+        add_node "reg_$id1,$id2" -subfile "registration.sub"   \
+                                 -var     "target=$id1"        \
+                                 -var     "source=$id2"
+        add_edge "reg_$id1,$id2" 'mkdirs'
+        # node to invert inverse-consistent transformation
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-          # POST command to invert inverse consistent transformation
-          post="mkdir -p '$dofdir/$id2' || exit 1"
-          post="$post\nbin/$invcmd '$dofdir/$id1/$id2.dof.gz' '$dofdir/$id2/$id1.dof.gz' || exit 1"
-          # node to register id1 and id2 (symmetric)
-          add_node "ireg_$id1,$id2" -var "target=$id1" -var "source=$id2" \
-                                    -prefile "$prefile" -subfile "$node.sub" \
-                                    -post "$post"
-        else
-          # node to register id1 and id2 (asymmetric)
-          add_node "ireg_$id1,$id2" -var "target=$id1" -var "source=$id2" \
-                                    -prefile "$prefile" -subfile "$node.sub"
+          add_node "invert_$id1,$id2" -subfile "invert.sub"    \
+                                      -var     "target=$id1"   \
+                                      -var     "source=$id2"
+          add_edge "invert_$id1,$id2" "reg_$id1,$id2"
         fi
         info "  Added job `printf '%3d of %d' $n $N`"
       done

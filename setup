@@ -99,7 +99,7 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
-  begin_dag 'alignment'
+  begin_dag 'alignment' -splice
 
     # initialize transformations
     ireg_node 'initdofs' \
@@ -146,7 +146,7 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point
-  begin_dag 'avgffds' -parent 'alignment'
+  begin_dag 'avgffds' -parent 'alignment' -splice
 
     # deformable registration
     ireg_node 'computeffds' \
@@ -174,25 +174,25 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make anatomical atlas images
-  begin_dag 'anatomy' -parent 'avgffds'
+  begin_dag 'anatomy' -parent 'avgffds' -splice
     # TODO
   end_dag
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  begin_dag 'tissues' -parent 'avgffds'
+  begin_dag 'tissues' -parent 'avgffds' -splice
     # TODO
   end_dag
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  begin_dag 'structures' -parent 'avgffds'
+  begin_dag 'structures' -parent 'avgffds' -splice
     # TODO
   end_dag
 
   # ----------------------------------------------------------------------------
   # construct longitudinal growth model
-  begin_dag 'growth' -parent 'avgffds'
+  begin_dag 'growth' -parent 'avgffds' -splice
     # TODO
   end_dag
  
