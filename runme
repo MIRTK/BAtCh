@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$log" ] || log='dagman.log'
 [ -n "$dag" ] || dag='dag/main.dag'
-[ -f "$dag" ] || error "DAG file does not exist: $dag"
+[ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
 
 # submit condor job (even with non-existing executable) such that
 # condor_submit obtains a new Kerberos TGT for this host which
