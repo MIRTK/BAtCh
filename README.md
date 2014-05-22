@@ -46,7 +46,7 @@ Generate Workflow DAG
 
 Given the **age.csv** (and **sub.lst**) as well as the temporal regression kernels
 generated in the previous step, execute the **setup** script to generate the
-HTCondor and DAGMan files which contain the separate jobs to be executed by
+HTCondor and DAGMan files which specify the separate jobs to be executed by
 HTCondor and describe the directed acyclic graph (DAG) of the workflow
 (i.e., job dependencies). The setup script will also copy the used IRTK commands
 into the configured *bindir* to ensure these are not modified while the workflow
