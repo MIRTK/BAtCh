@@ -2,13 +2,13 @@
 #
 ################################################################################
 
-[ -z $__daggen_dag_sh ] || __daggen_dag_sh=0
+[ -z $__daggen_dag_sh ] || return 0
+__daggen_dag_sh=0
 
 # ------------------------------------------------------------------------------
 # import modules
 _moddir="$(dirname "$BASH_SOURCE")"
-. "$_moddir/core.sh" || { echo "Failed to import daggen/core module!" 1>&2; exit 1; }
-. "$_moddir/path.sh" || { echo "Failed to import daggen/path module!" 1>&2; exit 1; }
+. "$_moddir/utils.sh" || { echo "Failed to import daggen/utils module!" 1>&2; exit 1; }
 
 # ==============================================================================
 # auxiliary functions
@@ -39,7 +39,8 @@ pack_executable()
 # executable, environment, and requirements to new file
 make_sub_script()
 {
-  local node=
+  local file=
+  local subdesc=
   local universe=vanilla
   local executable=
   while [ $# -gt 0 ]; do
@@ -48,38 +49,51 @@ make_sub_script()
       -executable) optarg executable $1 "$2"; shift; ;;
       --)          shift; break; ;;
       -*)          error "make_sub_script: invalid option: $1"; ;;
-      *)           [ -z "$node" ] || error "make_sub_script: too many arguments"
-                   node="$1"; ;;
+      *)           if [ -z "$file" ]; then
+                     file="$1"
+                   else
+                     subdesc="$subdesc\n$1"
+                   fi
+                   ;;
     esac
     shift
   done
-  [ -n "$node"       ] || error "make_sub_script: missing name argument"
+  [ -n "$file"       ] || error "make_sub_script: missing filename argument"
   [ -n "$executable" ] || error "make_sub_script: missing -executable argument"
-  pack_executable "$executable"
-  makedir "$(dirname "$node")"
-  cat --<<EOF > "$node"
+  if [[ ${executable:0:1} != / ]]; then
+    pack_executable "$executable"
+    executable="$topdir/$bindir/$executable"
+  fi
+  makedir "$(dirname "$topdir/$_dagdir")"
+  cat --<<EOF > "$topdir/$_dagdir/$file"
 universe     = $universe
 environment  = LD_LIBRARY_PATH=$topdir/$libdir:$LD_LIBRARY_PATH
 initialdir   = $topdir
-executable   = $topdir/$bindir/$executable
+executable   = $executable
 log          = $topdir/$log
 notify_user  = $notify_user
 notification = $notification
 requirements = $requirements
 EOF
+  echo -en "$subdesc" >> "$topdir/$_dagdir/$file"
 }
 
 # ------------------------------------------------------------------------------
 # write PRE/POST script of HTCondor DAGMan node
 make_script()
 {
-  [ $# -eq 1 ] || error "make_script: invalid number of arguments"
-  makedir "$(dirname "$1")"
-  cat --<<EOF > "$1"
+  [ $# -ge 1 ] || error "make_script: invalid number of arguments"
+  local file="$1"; shift
+  makedir "$topdir/$_dagdir"
+  cat --<<EOF > "$topdir/$_dagdir/$file"
 #! /bin/bash
 cd "$topdir" || exit 1
 EOF
-  chmod +x "$1" || exit 1
+  chmod +x "$topdir/$_dagdir/$file" || exit 1
+  while [ $# -gt 0 ]; do
+    echo -ne "$1" >> "$topdir/$_dagdir/$file"
+    shift
+  done
 }
 
 # ==============================================================================
@@ -109,12 +123,15 @@ begin_dag()
   local parent=()
   local dagfile=
   local dagdir=
+  local splice='false'
 
   while [ $# -gt 0 ]; do
     case "$1" in
       -parent)  optargs parent "$@"; shift ${#parent[@]}; ;;
       -dagfile) optarg dagfile $1 "$2"; shift; ;;
       -dagdir)  optarg dagdir  $1 "$2"; shift; ;;
+      -splice)  splice='true';  ;;
+      -subdag)  splice='false'; ;;
       -*)       error "begin_dag: invalid option: $1"; ;;
       *)        [ -z "$node" ] || error "begin_dag: too many arguments"
                 node=$1; ;;
@@ -126,14 +143,18 @@ begin_dag()
   [ -n "$dagdir"  ] || dagdir="$_dagdir/$node"
 
   if [ -n "$_dagfile" ]; then
-    # add SUBDAG node to current (SUB)DAG
-    append "$_dagfile" "\nSUBDAG EXTERNAL $node $topdir/$dagfile\n"
+    # add SUBDAG/SPLICE to current (SUB)DAG/SPLICE
+    if [[ $splice == true ]]; then
+      append "$_dagfile" "\nSPLICE $node $topdir/$dagfile\n"
+    else
+      append "$_dagfile" "\nSUBDAG EXTERNAL $node $topdir/$dagfile\n"
+    fi
     add_edge $node ${parent[@]}
     # push parent DAG info on stack
     _dagfiles=("${_dagfiles[@]}" "${_dagfile}")
     _dagdirs=("${_dagdirs[@]}"   "${_dagdir}")
   fi
-  # start new (SUB)DAG
+  # start new (SUB)DAG/SPLICE
   _dagfile="$dagfile"
   _dagdir="$dagdir"
   if [[ $update == true ]] || [ ! -f "$dagfile" ]; then
@@ -175,29 +196,90 @@ end_dag()
 # write DAGMan node scripts
 add_node()
 {
-  [ $# -eq 2 ] || error "add_node: invalid number of arguments"
-  make_sub_script "$_dagdir/$1.sub" -executable "$2"
-  append "$_dagfile" "\nJOB $1 $topdir/$_dagdir/$1.sub\n"
-  if [ -n "$pre" ]; then
-    make_script "$_dagdir/$1.pre"
-    append "$_dagfile" "SCRIPT PRE $1 $topdir/$_dagdir/$1.pre\n"
+  local name=$1; shift
+  local predesc=
+  local prefile=
+  local subdesc=
+  local subfile=
+  local postdesc=
+  local postfile=
+  local executable=
+  local var=
+  local vars=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -executable) optarg  executable $1 "$2"; shift; ;;
+      -pre)        optarg  predesc    $1 "$2"; shift; ;;
+      -prefile)    optarg  prefile    $1 "$2"; shift; ;;
+      -sub)        optarg  subdesc    $1 "$2"; shift; ;;
+      -subfile)    optarg  subfile    $1 "$2"; shift; ;;
+      -post)       optarg  postdesc   $1 "$2"; shift; ;;
+      -postfile)   optarg  postfile   $1 "$2"; shift; ;;
+      -var)        optarg  var        $1 "$2"; shift; vars="$vars $var"; ;;
+      *) error "add_node: invalid option or argument: $1"; ;;
+    esac
+    shift
+  done
+  [ -n "$name" ] || error "add_node: missing name argument"
+  # SUB description file
+  if [ -n "$subfile" ]; then
+    [ -z "$subdesc" ] || append "$topdir/$_dagdir/$subfile" "$subdesc"
+  else
+    [ -n "$executable" ] || error "add_node: missing -executable or -subfile"
+    subfile=$name.sub
+    make_sub_script "$subfile" "$subdesc" -executable "$executable"
   fi
-  if [ -n "$post" ]; then
-    make_script "$_dagdir/$1.post"
-    append "$_dagfile" "SCRIPT POST $1 $topdir/$_dagdir/$1.post\n"
+  append "$_dagfile" "\nJOB $name $topdir/$_dagdir/$subfile\n"
+  # VARS
+  [ -z "$vars" ] || append "$_dagfile" "VARS $name $vars\n"
+  # PRE script (optional)
+  if [ -n "$prefile" ]; then
+    [ -z "$predesc" ] || append "$topdir/$_dagdir/$prefile" "$predesc"
+    append "$_dagfile" "SCRIPT PRE $name $topdir/$_dagdir/$prefile\n"
+  elif [ -n "$predesc" ]; then
+    prefile=$name.pre
+    make_script "$prefile" "$predesc"
+    append "$_dagfile" "SCRIPT PRE $name $topdir/$_dagdir/$prefile\n"
   fi
-  append_node $1
+  # POST script (optional)
+  if [ -n "$postfile" ]; then
+    [ -z "$postdesc" ] || append "$postfile" "$postdesc"
+    append "$_dagfile" "SCRIPT POST $name $topdir/$_dagdir/$postfile\n"
+  elif [ -n "$postdesc" ]; then
+    postfile=$name.post
+    make_script "$postfile" "$postdesc"
+    append "$_dagfile" "SCRIPT POST $name $topdir/$_dagdir/$postfile\n"
+  fi
 }
 
 # ------------------------------------------------------------------------------
 # append DAGMan node scripts
 append_node()
 {
-  [ $# -eq 1   ] || error "append_node: invalid number of arguments"
-  [ -z "$pre"  ] || append "$_dagdir/$1.pre"  "$pre\n"
-  [ -z "$sub"  ] || append "$_dagdir/$1.sub"  "$sub\n"
-  [ -z "$post" ] || append "$_dagdir/$1.post" "$post\n"
-  pre=''
-  sub=''
-  post=''
+  local name=$1; shift
+  local predesc=
+  local prefile=$name.pre
+  local subdesc=
+  local subfile=$name.sub
+  local postdesc=
+  local postfile=$name.post
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -pre)        optarg  predesc    $1 "$2"; shift; ;;
+      -prefile)    optarg  prefile    $1 "$2"; shift; ;;
+      -sub)        optarg  subdesc    $1 "$2"; shift; ;;
+      -subfile)    optarg  subfile    $1 "$2"; shift; ;;
+      -post)       optarg  postdesc   $1 "$2"; shift; ;;
+      -postfile)   optarg  postfile   $1 "$2"; shift; ;;
+      *) error "append_node: invalid option or argument: $1"; ;;
+    esac
+    shift
+  done
+  [ -n "$name" ] || error "append_node: missing name argument"
+
+  [ -z "$subdesc"  ] || append "$topdir/$_dagdir/$subfile"  "$subdesc"
+  [ -z "$predesc"  ] || append "$topdir/$_dagdir/$prefile"  "$predesc"
+  [ -z "$postdesc" ] || append "$topdir/$_dagdir/$postfile" "$postdesc"
 }
