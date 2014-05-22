@@ -76,20 +76,23 @@ The atlas construction workflow can be executed by simply submitting the
 **$dagdir/main.dag** to HTCondor using **condor_submit_dag**. However, as the
 DAGMan job will run for a long time which requires the periodic renewal of the
 obtained Kerberos v5 ticket granting ticket (TGT) used to authenticate with
-HTCondor which allows DAGMan to submit pending jobs of the workflow, it is
-recommended to execute the **runme** script instead. This script will obtain
-a valid Kerberos ticket and copy the ticket cache to **etc/krb5cc**. It overrides
-the DAGMan generated HTCondor submit script to use a shell script as executable
-which runs **condor_dagman** using **krenew** instead.
+HTCondor such that DAGMan can submit pending jobs of the workflow, it is
+recommended to execute the **runme** script instead. This script will replace
+the condor_dagman executable by a Bash script named **dagman** which runs
+condor_dagman as background job and periodically reinitializes the Kerberos ticket
+cache using kinit. It therefore requires the password of the user who runs DAGMan.
+The runme script therefore queries for this password and writes it (plain text!)
+to the Bash script. To circumvent exposure of the password, the executable Bash
+script is made read and executable only by the user who executed the runme script.
+An alternative approach uses **krenew** which does not require a user password
+to be available to the dagman script, but is only suitable if the maximum
+renewable lifetime of the TGT is longer than the expected runtime of the DAGMan
+job. At the moment, this is not the case at DoC where the maximum lifetime is
+only 10 hours.
 
 ```shell
 ./runme
 ```
-
-**TODO:** The renewal of the Kerberos ticket still does not work and the DAGMan
-          job fails to submit pending jobs when it is running longer than the
-          expiration/life time of the Kerberos ticket obtained when submitting
-          the DAGMan job.
 
 The transformations computed during the atlas construction are written to
 subdirectories within the configured **dofdir** (default: **../dofs**) and the
