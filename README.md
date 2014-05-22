@@ -1,9 +1,21 @@
-Overview
-========
-
 HTCondor DAGMan application for the construction of a spatio-temporal brain atlas
 and growth model from cross-sectional brain MR images optionally available
 tissue and/or structure segmentations.
+
+Initial Setup
+=============
+
+Clone this repository into a **workflow** subdirectory next to the directories
+containing the MR images and segmentation label maps (or symbolic links to the
+respective directories) as follows:
+
+```shell
+mkdir BrainAtlas && cd BrainAtlas
+ln -s <path_to_images> images
+ln -s <path_to_labels> labels
+git clone git@gitlab.doc.ic.ac.uk:as12312/brain-growth-atlas-builder.git workflow
+cd workflow
+```
 
 Configuration Files
 ===================
@@ -12,7 +24,7 @@ The atlas construction workflow is configured by mainly three files:
 
 - **etc/config.sh**: A shell script containing global variables used by **setup**.
 - **etc/age.csv**:   A comma or space separated CSV file with image IDs and corresponding ages.
-- **etc/sub.lsl**:   An optional subject list containing only the IDs of those images
+- **etc/sub.lst**:   An optional subject list containing only the IDs of those images
                      from which the spatio-temporal atlas should be created.
 
 Temporal Regression Kernels
