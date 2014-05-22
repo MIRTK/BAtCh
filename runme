@@ -5,7 +5,7 @@ source lib/daggen/core.sh      || exit 1
 # usage
 print_help()
 {
-  cat --<HELP
+  cat --<<HELP
 usage: $(basename $0) [options]
 
 Options:
@@ -17,12 +17,6 @@ Options:
   -h --help         Print help and exit.
 HELP
 }
-
-# required commands
-dagman="$(which condor_dagman)"
-[ -n "$dagman" ] || { echo "Could not find condor_dagman in the PATH!" 1>&2; exit 1; }
-krenew="$(which krenew)"
-[ -n "$krenew" ] || { echo "Could not find krenew in the PATH!" 1>&2; exit 1; }
 
 # parse arguments
 dag=
@@ -46,46 +40,58 @@ done
 [ -n "$dag" ] || dag='dag/main.dag'
 [ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
 
-# submit condor job (even with non-existing executable) such that
-# condor_submit obtains a new Kerberos TGT for this host which
-# allows it to submit jobs and will be renewed periodically
-# by the krenew command issued below
-#
-# TODO: This might not even be necessary.
-condor_submit <<<"
-  executable = doesnotexist
-  queue" > /dev/null 2>&1
+# required commands
+dagman="$(which condor_dagman)"
+[ -n "$dagman" ] || { echo "Could not find condor_dagman in the PATH!" 1>&2; exit 1; }
+kinit="$(which kinit)"
+[ -n "$kinit" ] || { echo "Could not find kinit in the PATH!" 1>&2; exit 1; }
 
-# get name of ticket cache file
-cache="$(klist | grep "Ticket cache: FILE:" | cut -d: -f3)"
-[ -f "$cache" ] || error "Failed to determine ticket cache, got: \"$cache\""
-
-# make copy of ticket cache in case the DAGMan job itself is not run
-# before the user logs out and OpenSSH destroys it; note that krenew
-# makes a private copy of the ticket cache for the command it runs;
-# therefore we do not need to wory about the lifetime of the ticket
-# cache passed as argument to krenew once it is executed
-krb5cc=$PWD/etc/krb5cc
-cp -f "$cache" "$krb5cc" || exit 1
-
-# write executable script which executes DAGMan using krenew
+# write executable script which executes DAGMan in background
+# and periodically re-initializes the Kerberos v5 ticket cache
 executable='bin/dagman'
+read -p "Password for $USER@IC.AC.UK: " -s password
+rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
+[ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
 cat --<<EOF > "$executable"
-#!/bin/sh
-exec "$krenew" -k "$krb5cc"  -- "$dagman" "\$@"
+#!/bin/bash
+
+# re-initialize Kerberos ticket
+kreinit() { echo "$password" | kinit > /dev/null; }
+
+# kill DAGMan when this script is interrupted
+pid=
+onexit()
+{
+  if [ -n "$pid" ]; then
+    pkill -KILL -P $pid
+    exit 1
+  else
+    exit 0
+  fi
+}
+trap onexit EXIT
+
+# start DAGMan in background and then periodically
+# re-initialize Kerberos ticket cache while it runs
+"$dagman" "\$@" &
+pid=\$!
+while [ \$? -eq 0 ]; do
+  kreinit
+  sleep 3600 && jobs 1
+done
+pid=
 EOF
 [ $? -eq 0 ] || exit 1
-chmod +x "$executable" || exit 1
 
 # remove files of previous run
 rm -f "$log"
 [[ $rescue == true ]] || rm -f "$dag.rescue*"
 
-# submit DAGMan job running with krenew to avoid expiration of
-# Kerberos 5 ticket granting ticket before completion of all jobs
+# submit DAGMan job running auxiliary shell script to avoid expiration
+# of Kerberos v5 ticket granting ticket before completion of all jobs
 condor_submit_dag -append "output      = $log" \
                   -append "error       = $log" \
                   -append "log         = $log" \
                   -append "environment = _CONDOR_DAGMAN_LOG=$log;_CONDOR_SCHEDD_ADDRESS_FILE=/var/log/condor/.schedd_address;_CONDOR_MAX_DAGMAN_LOG=0" \
                   -append "executable  = $executable" \
-                  -f -priority $priority $nosubmit "$dag"
+                  -update_submit -priority $priority $nosubmit "$dag"
