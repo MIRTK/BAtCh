@@ -95,7 +95,7 @@ done
 # workflow
 # ==============================================================================
 
-begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
+begin_dag 'brainatlas' -dagfile "$appdir/dag/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
