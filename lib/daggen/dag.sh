@@ -2,13 +2,13 @@
 #
 ################################################################################
 
-[ -z $__daggen_dag_sh ] || __daggen_dag_sh=0
+[ -z $__daggen_dag_sh ] || return 0
+__daggen_dag_sh=0
 
 # ------------------------------------------------------------------------------
 # import modules
 _moddir="$(dirname "$BASH_SOURCE")"
-. "$_moddir/core.sh" || { echo "Failed to import daggen/core module!" 1>&2; exit 1; }
-. "$_moddir/path.sh" || { echo "Failed to import daggen/path module!" 1>&2; exit 1; }
+. "$_moddir/utils.sh" || { echo "Failed to import daggen/utils module!" 1>&2; exit 1; }
 
 # ==============================================================================
 # auxiliary functions

@@ -1,6 +1,6 @@
 # IRTK installation
-PATH="/vol/biomedic/users/as12312/local/linux-3.6/irtk-nnatlas:$PATH"
-LD_LIBRARY_PATH='/vol/biomedic/users/as12312/local/lib'
+PATH="/vol/biomedic/users/$USER/local/linux-3.6/irtk-nnatlas:$PATH"
+LD_LIBRARY_PATH="/vol/biomedic/users/$USER/local/lib"
 
 # input settings
 topdir="$appdir"                 # top-level/working directory
@@ -22,7 +22,7 @@ dofdir='../dofs'                 # transformations computed during atlas constru
 update='false'                   # enable (true) or disable update of existing DAG files
 
 # HTCondor settings
-notify_user='as12312@imperial.ac.uk'
+notify_user="${USER}@imperial.ac.uk"
 notification='Error'
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && (OpSysMajorVer == 12 || OpSysMajorVer == 13)'
 log='condor.log'
