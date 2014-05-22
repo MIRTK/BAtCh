@@ -53,7 +53,7 @@ executable='bin/dagman'
 read -p "Password for $USER@IC.AC.UK: " -s password
 rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
 [ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
-cat --<<EOF > "$executable"
+cat --<<DAGMAN > "$executable"
 #!/bin/bash
 
 # re-initialize Kerberos ticket
@@ -81,7 +81,7 @@ while [ \$? -eq 0 ]; do
   sleep 3600 && jobs 1
 done
 pid=
-EOF
+DAGMAN
 [ $? -eq 0 ] || exit 1
 
 # remove files of previous run
