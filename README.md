@@ -24,18 +24,18 @@ is found in the **krldir** directory specified in **etc/config.sh**.
 
 The kernels used for the neonatal atlas are based on a Gaussian function with
 mean corresponding to the desired atlas time point (gestational age, GA) and a
-constant standard deviation (default 1 week GA). A variable kernel width is
+constant standard deviation (default 1 week). A variable kernel width is
 possible by generating kernels with varying standard deviation for different
-atlas time points. A input "kernel" is simply a comma or space separated CSV
-file, where the first column contains the ID of the images from which the
-atlas at the respective time point is created and the second column the
-respective kernel weight. The provided **lib/kernel** script can be used to
-create such CSV files using a Gaussian kernel function. It should be noted,
-however, that the kernels can be generated with any tool, including MATLAB.
+atlas time points. An input "kernel" is simply a comma or space separated CSV
+file named **weights_t=<age>.csv**, where the first column contains the ID of
+the images from which the atlas at the respective time point is created and the
+second column the respective kernel weight. The provided **lib/kernel** script
+can be used to create such CSV files using a Gaussian kernel function. It should
+be noted, however, that the kernels can be generated with any tool, including MATLAB.
 
 For example, the kernels for the neonatal atlas build from 420 images for the
 age range 28 to 44 weeks GA, with a temporal resolution of 1 week, were generated
-by setting the `sigma=1` in the **etc/config.sh** file and then running the command
+by setting `sigma=1` in the **etc/config.sh** file and then running the command
 
 ```shell
 lib/kernel -range 28 44 -dt 1
