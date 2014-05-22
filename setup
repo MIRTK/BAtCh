@@ -95,7 +95,7 @@ done
 # workflow
 # ==============================================================================
 
-begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
+begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
@@ -174,26 +174,26 @@ begin_dag 'brainatlas' -dagfile "$appdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make anatomical atlas images
-  begin_dag 'anatomy' -parent 'avgffds' -splice
+  #begin_dag 'anatomy' -parent 'avgffds' -splice
     # TODO
-  end_dag
+  #end_dag
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  begin_dag 'tissues' -parent 'avgffds' -splice
+  #begin_dag 'tissues' -parent 'avgffds' -splice
     # TODO
-  end_dag
+  #end_dag
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  begin_dag 'structures' -parent 'avgffds' -splice
+  #begin_dag 'structures' -parent 'avgffds' -splice
     # TODO
-  end_dag
+  #end_dag
 
   # ----------------------------------------------------------------------------
   # construct longitudinal growth model
-  begin_dag 'growth' -parent 'avgffds' -splice
+  #begin_dag 'growth' -parent 'avgffds' -splice
     # TODO
-  end_dag
+  #end_dag
  
 end_dag
