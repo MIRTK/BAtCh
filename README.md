@@ -61,7 +61,7 @@ generated in the previous step, execute the **setup** script to generate the
 HTCondor and DAGMan files which specify the separate jobs to be executed by
 HTCondor and describe the directed acyclic graph (DAG) of the workflow
 (i.e., job dependencies). The setup script will also copy the used IRTK commands
-into the configured *bindir* to ensure these are not modified while the workflow
+into the configured **bindir** to ensure these are not modified while the workflow
 is being executed. The generated DAG files, parameter files, and job descriptions
 can be found in the configured **dagdir**.
 
@@ -77,22 +77,25 @@ The atlas construction workflow can be executed by simply submitting the
 DAGMan job will run for a long time which requires the periodic renewal of the
 obtained Kerberos v5 ticket granting ticket (TGT) used to authenticate with
 HTCondor such that DAGMan can submit pending jobs of the workflow, it is
-recommended to execute the **runme** script instead. This script will replace
-the condor_dagman executable by a Bash script named **dagman** which runs
-condor_dagman as background job and periodically reinitializes the Kerberos ticket
-cache using kinit. It therefore requires the password of the user who runs DAGMan.
-The runme script therefore queries for this password and writes it (plain text!)
-to the Bash script. To circumvent exposure of the password, the executable Bash
-script is made read and executable only by the user who executed the runme script.
-An alternative approach uses **krenew** which does not require a user password
-to be available to the dagman script, but is only suitable if the maximum
-renewable lifetime of the TGT is longer than the expected runtime of the DAGMan
-job. At the moment, this is not the case at DoC where the maximum lifetime is
-only 10 hours.
+recommended to execute the **runme** script instead:
 
 ```shell
 ./runme
 ```
+
+This script will replace the *condor_dagman* executable usually submitted to
+HTCondor by a Bash script named **$bindir/dagman** which runs *condor_dagman* as
+background job and periodically reinitializes the Kerberos ticket cache using **kinit**.
+It therefore requires the password of the user who runs DAGMan. The runme script
+thus queries this password and writes it (plain text!) to the **dagman** Bash script.
+To circumvent exposure of the password, the Bash script is made read and executable
+only by the user who executed the runme script.
+
+An alternative approach uses **krenew** which does not require a user password
+to be available to the *dagman* script, but is only suitable if the maximum
+renewable lifetime of a TGT is longer than the expected runtime of the DAGMan
+job. At the moment, this is not the case at Imperial's DoC, where the maximum
+lifetime is only 10 hours.
 
 The transformations computed during the atlas construction are written to
 subdirectories within the configured **dofdir** (default: **../dofs**) and the
