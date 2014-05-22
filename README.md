@@ -20,7 +20,7 @@ Temporal Regression Kernels
 
 The atlas construction workflow produces a spatial anatomical atlas and
 tissue/structure probability maps for each time point for which a temporal kernel
-is found in the **krnldir** directory specified in **etc/config.sh**.
+is found in the **krldir** directory specified in **etc/config.sh**.
 
 The kernels used for the neonatal atlas are based on a Gaussian function with
 mean corresponding to the desired atlas time point (gestational age, GA) and a
