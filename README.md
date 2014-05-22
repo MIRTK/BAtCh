@@ -15,8 +15,8 @@ The atlas construction workflow is configured by mainly three files:
 - **etc/sub.lsl**:   An optional subject list containing only the IDs of those images
                      from which the spatio-temporal atlas should be created.
 
-Generate Temporal Regression Kernels
-====================================
+Temporal Regression Kernels
+===========================
 
 The atlas construction workflow produces a spatial anatomical atlas and
 tissue/structure probability maps for each time point for which a temporal kernel
@@ -51,7 +51,11 @@ HTCondor and describe the directed acyclic graph (DAG) of the workflow
 (i.e., job dependencies). The setup script will also copy the used IRTK commands
 into the configured *bindir* to ensure these are not modified while the workflow
 is being executed. The generated DAG files, parameter files, and job descriptions
-can be found in the configured *dagdir*.
+can be found in the configured **dagdir**.
+
+```shell
+./setup
+```
 
 Workflow Execution
 ==================
@@ -62,11 +66,15 @@ DAGMan job will run for a long time which requires the periodic renewal of the
 obtained Kerberos v5 ticket granting ticket (TGT) used to authenticate with
 HTCondor which allows DAGMan to submit pending jobs of the workflow, it is
 recommended to execute the **runme** script instead. This script will obtain
-a valid Kerberos ticket and copy the ticket cache to *etc/krb5cc*. It overrides
+a valid Kerberos ticket and copy the ticket cache to **etc/krb5cc**. It overrides
 the DAGMan generated HTCondor submit script to use a shell script as executable
-which runs *condor_dagman* using *krenew* instead.
+which runs **condor_dagman** using **krenew** instead.
 
-TODO: The renewal of the Kerberos ticket still does not work and the DAGMan
-      job fails to submit pending jobs when it is running longer than the
-      expiration/life time of the Kerberos ticket obtained when submitting
-      the DAGMan job.
+```shell
+./runme
+```
+
+**TODO:** The renewal of the Kerberos ticket still does not work and the DAGMan
+          job fails to submit pending jobs when it is running longer than the
+          expiration/life time of the Kerberos ticket obtained when submitting
+          the DAGMan job.
