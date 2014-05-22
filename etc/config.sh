@@ -1,6 +1,6 @@
 # IRTK installation
 PATH="/vol/biomedic/users/$USER/local/linux-3.6/irtk-nnatlas:$PATH"
-LD_LIBRARY_PATH='/vol/biomedic/users/$USER/local/lib'
+LD_LIBRARY_PATH="/vol/biomedic/users/$USER/local/lib"
 
 # input settings
 topdir="$appdir"                 # top-level/working directory
