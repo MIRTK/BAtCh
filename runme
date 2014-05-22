@@ -9,12 +9,12 @@ print_help()
 usage: $(basename $0) [options]
 
 Options:
-  -dag <file>       Name of DAG file to run. (default: $PWD/dag/main.dag)
-  -log <file>       Name of DAGMan log file. (default: $PWD/dagman.log)
-  -priority <int>   Priority of HTCondor jobs. (default: 0)
-  -norescue         Remove <dag>.rescueXXX files before running DAGMan. (default: keep files)
-  -nosubmit         Create submit script but do not submit DAGMan job. (default: submit)
-  -h --help         Print help and exit.
+  -d -dag <file>       Name of DAG file to run. (default: $PWD/dag/main.dag)
+  -l -log <file>       Name of DAGMan log file. (default: $PWD/dagman.log)
+  -p -priority <int>   Priority of HTCondor jobs. (default: 0)
+  -norescue            Remove <dag>.rescueXXX files before running DAGMan. (default: keep files)
+  -nosubmit            Create submit script but do not submit DAGMan job. (default: submit)
+  -h --help            Print help and exit.
 HELP
 }
 
@@ -27,8 +27,9 @@ priority=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -priority) optarg priority $1 "$2"; shift; ;;
-    -log)      optarg log      $1 "$2"; shift; ;;
+    -d|-dag)      optarg dag      $1 "$2"; shift; ;;
+    -p|-priority) optarg priority $1 "$2"; shift; ;;
+    -l|-log)      optarg log      $1 "$2"; shift; ;;
     -norescue) rescue=false; ;;
     -nosubmit) nosubmit='-no_submit'; ;;
     -h|-help|--help) print_help; exit 0; ;;
