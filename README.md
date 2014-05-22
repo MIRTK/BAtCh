@@ -1,13 +1,13 @@
 HTCondor DAGMan application for the construction of a spatio-temporal brain atlas
-and growth model from cross-sectional brain MR images optionally available
-tissue and/or structure segmentations.
+and growth model from cross-sectional brain MR images.
 
 Initial Setup
 =============
 
 Clone this repository into a **workflow** subdirectory next to the directories
-containing the MR images and segmentation label maps (or symbolic links to the
-respective directories) as follows:
+containing the MR images and segmentation label maps. For example, run the
+following commands to create a new directory for the construction of new brain
+atlas.
 
 ```shell
 mkdir BrainAtlas && cd BrainAtlas
@@ -90,3 +90,7 @@ which runs **condor_dagman** using **krenew** instead.
           job fails to submit pending jobs when it is running longer than the
           expiration/life time of the Kerberos ticket obtained when submitting
           the DAGMan job.
+
+The transformations computed during the atlas construction are written to
+subdirectories within the configured **dofdir** (default: **../dofs**) and the
+final atlas data is written to the configured **outdir** (default: **../atlas**).
