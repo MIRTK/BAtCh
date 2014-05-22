@@ -22,7 +22,7 @@ dofdir='../dofs'                 # transformations computed during atlas constru
 update='false'                   # enable (true) or disable update of existing DAG files
 
 # HTCondor settings
-notify_user="$USER@imperial.ac.uk"
+notify_user="${USER}@imperial.ac.uk"
 notification='Error'
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && (OpSysMajorVer == 12 || OpSysMajorVer == 13)'
 log='condor.log'
