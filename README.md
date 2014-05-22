@@ -1,9 +1,9 @@
 Overview
 ========
 
-HTCondor DAGMan application for the consistent construction of a spatio-temporal
-brain atlas and growth model from cross-sectional brain MR images and automatic
-tissue and structure segmentations.
+HTCondor DAGMan application for the construction of a spatio-temporal brain atlas
+and growth model from cross-sectional brain MR images optionally available
+tissue and/or structure segmentations.
 
 Configuration Files
 ===================
