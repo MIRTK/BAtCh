@@ -2,7 +2,8 @@
 #
 ################################################################################
 
-[ -z $__daggen_core_sh ] || __daggen_core_sh=0
+[ -z $__daggen_core_sh ] || return 0
+__daggen_core_sh=0
 
 [ -n "$verbose" ] || verbose=0 # global verbosity level
 
