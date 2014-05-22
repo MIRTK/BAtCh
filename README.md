@@ -27,7 +27,7 @@ mean corresponding to the desired atlas time point (gestational age, GA) and a
 constant standard deviation (default 1 week). A variable kernel width is
 possible by generating kernels with varying standard deviation for different
 atlas time points. An input "kernel" is simply a comma or space separated CSV
-file named **weights_t=<age>.csv**, where the first column contains the ID of
+file named **weights_t=$age.csv**, where the first column contains the ID of
 the images from which the atlas at the respective time point is created and the
 second column the respective kernel weight. The provided **lib/kernel** script
 can be used to create such CSV files using a Gaussian kernel function. It should
