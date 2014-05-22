@@ -5,9 +5,9 @@ Initial Setup
 =============
 
 Clone this repository into a **workflow** subdirectory next to the directories
-containing the MR images and segmentation label maps. For example, run the
-following commands to create a new directory for the construction of new brain
-atlas.
+containing the individual MR images and corresponding segmentation label maps.
+For example, run the following commands to create a new directory for the
+construction of a new brain atlas.
 
 ```shell
 mkdir BrainAtlas && cd BrainAtlas
