@@ -93,23 +93,23 @@ ireg_node()
     [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source).dof.gz'"
     sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
     sub="$sub\""
-    sub="$sub\noutput       = $_dagdir/\$(target)/register_\$(target),\$(source).out"
-    sub="$sub\nerror        = $_dagdir/\$(target)/register_\$(target),\$(source).out"
+    sub="$sub\noutput       = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
+    sub="$sub\nerror        = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
     sub="$sub\nqueue"
-    make_sub_script "register.sub" "$sub" -executable ireg
+    make_sub_script "imgreg.sub" "$sub" -executable ireg
 
     # create generic dofinvert submission script
     if [[ $ic == true ]]; then
       # command used to invert inverse-consistent transformation
-      local invcmd='ffdinvert'
-      if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
-        invcmd='dofinvert'
-      fi
       local sub="arguments    = \"'$dofdir/\$(target)/\$(source).dof.gz' '$dofdir/\$(source)/\$(target).dof.gz'\""
-      sub="$sub\noutput       = $_dagdir/\$(target)/invert_\$(target),\$(source).out"
-      sub="$sub\nerror        = $_dagdir/\$(target)/invert_\$(target),\$(source).out"
+      sub="$sub\noutput       = $_dagdir/\$(target)/dofinv_\$(target),\$(source).out"
+      sub="$sub\nerror        = $_dagdir/\$(target)/dofinv_\$(target),\$(source).out"
       sub="$sub\nqueue"
-      make_sub_script "invert.sub" "$sub" -executable $invcmd
+      if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
+        make_sub_script "dofinv.sub" "$sub" -executable dofinvert
+      else
+        make_sub_script "dofinv.sub" "$sub" -executable ffdinvert
+      fi
     fi
 
     # job to create output directories
@@ -149,16 +149,16 @@ ireg_node()
         fi
         let n++
         # node to register id1 and id2
-        add_node "reg_$id1,$id2" -subfile "register.sub"    \
-                                 -var     "target=\"$id1\"" \
-                                 -var     "source=\"$id2\""
-        add_edge "reg_$id1,$id2" 'mkdirs'
+        add_node "imgreg_$id1,$id2" -subfile "imgreg.sub"    \
+                                    -var     "target=\"$id1\"" \
+                                    -var     "source=\"$id2\""
+        add_edge "imgreg_$id1,$id2" 'mkdirs'
         # node to invert inverse-consistent transformation
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-          add_node "invert_$id1,$id2" -subfile "invert.sub"      \
+          add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
                                       -var     "target=\"$id1\"" \
                                       -var     "source=\"$id2\""
-          add_edge "invert_$id1,$id2" "reg_$id1,$id2"
+          add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
         fi
         info "  Added job `printf '%3d of %d' $n $N`"
       done
@@ -198,33 +198,45 @@ dofaverage_node()
   [ -n "$node"   ] || error "dofaverage_node: missing name argument"
   [ -n "$dofins" ] || error "dofaverage_node: missing -dofins argument"
 
-  if [ -z "$doflst" ]; then
-    [ ${#ids[@]} -gt 0 ] || error "dofaverage_node: missing -subjects or -doflst argument"
-    local dofnames=
-    for id in "${ids[@]}"; do
-      dofnames="$dofnames$id\t1\n"
-    done
-    doflst="$_dagdir/$node.par"
-    write "$doflst" "$dofnames"
-  elif [ ${#ids[@]} -eq 0 ]; then
-    read_sublst ids "$doflst"
-  fi
-
   info "Adding node $node..."
-  local pre=''
-  local sub=''
-  pre="$pre\nmkdir -p '$_dagdir/$node.log' || exit 1"
-  [ -z "$dofdir" ] || pre="$pre\nmkdir -p '$dofdir' || exit 1"
-  for id in "${ids[@]}"; do
-    sub="$sub\n\n# subject: $id"
-    sub="$sub\narguments = \"'$dofdir/$id.dof.gz' -all$options -add-identity-for-dofname '$id'"
-    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$id/' -suffix .dof.gz"
+  begin_dag $node -splice || {
+
+    # weights of input transformations
+    if [ -z "$doflst" ]; then
+      [ ${#ids[@]} -gt 0 ] || error "dofaverage_node: missing -subjects or -doflst argument"
+      local dofnames=
+      for id in "${ids[@]}"; do
+        dofnames="$dofnames$id\t1\n"
+      done
+      doflst="$_dagdir/dofavg.par"
+      write "$doflst" "$dofnames"
+    elif [ ${#ids[@]} -eq 0 ]; then
+      read_sublst ids "$doflst"
+    fi
+
+    # create generic dofaverage submission script
+    local sub="arguments = \"'$dofdir/\$(id).dof.gz' -all$options -add-identity-for-dofname '\$(id)'"
+    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
     sub="$sub\""
-    sub="$sub\noutput    = $_dagdir/$node.log/dofaverage_$id.out"
-    sub="$sub\nerror     = $_dagdir/$node.log/dofaverage_$id.out"
+    sub="$sub\noutput    = $_dagdir/dofavg_$id.out"
+    sub="$sub\nerror     = $_dagdir/dofavg_$id.out"
     sub="$sub\nqueue"
-  done
-  add_node $node -executable dofaverage -pre "$pre" -sub "$sub"
+    make_sub_script "dofavg.sub" "$sub" -executable dofaverage
+
+    # node to create output directories
+    if [ -n "$dofdir" ]; then
+      make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.out\nqueue"
+    fi
+
+    # add dofaverage nodes to DAG
+    for id in "${ids[@]}"; do
+      add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
+      add_edge "dofavg_$id" 'mkdirs'
+    done
+
+  }; end_dag
   add_edge $node ${parent[@]}
   info "Adding node $node... done"
 }
@@ -262,18 +274,27 @@ dofcombine_node()
   [ -n "$dofdir3" ] || error "dofcombine_node: missing -dofdir3 argument"
 
   info "Adding node $node..."
-  local pre=''
-  local sub=''
-  pre="$pre\nmkdir -p '$_dagdir/$node.log' || exit 1"
-  pre="$pre\nmkdir -p '$dofdir3' || exit 1"
-  for id in "${ids[@]}"; do
-    sub="$sub\n\n# subject: $id"
-    sub="$sub\narguments = \"'$dofdir1/$id.dof.gz' '$dofdir2/$id.dof.gz' '$dofdir3/$id.dof.gz'$options\""
-    sub="$sub\noutput    = $_dagdir/$node.log/dofcombine_$id.out"
-    sub="$sub\nerror     = $_dagdir/$node.log/dofcombine_$id.out"
+  begin_dag $node -splice || {
+
+    # create generic dofaverage submission script
+    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'$options\""
+    sub="$sub\noutput    = $_dagdir/dofcat_$id.out"
+    sub="$sub\nerror     = $_dagdir/dofcat_$id.out"
     sub="$sub\nqueue"
-  done
-  add_node $node -executable dofcombine -pre "$pre" -sub "$sub"
+    make_sub_script "dofcat.sub" "$sub" -executable dofaverage
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add dofaverage nodes to DAG
+    for id in "${ids[@]}"; do
+      add_node "dofcat_$id" -subfile "avgdof.sub" -var "id=\"$id\""
+      add_edge "dofcat_$id" 'mkdirs'
+    done
+
+  }; end_dag
   add_edge $node ${parent[@]}
   info "Adding node $node... done"
 }
