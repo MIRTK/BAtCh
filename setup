@@ -164,33 +164,77 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -dofdir    "$dofdir/2.1_ffd" \
         -symmetric
 
-    # average dofs
+    # for each atlas time point...
     for t in ${timepoints[@]}; do
-      dofaverage_node "avgffds_$t" -parent 'computeffds' \
+
+      # average deformations
+      dofaverage_node "avgffd_$t" -parent 'computeffds' \
           -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2___avgffd/t=$t"
+          -dofdir "$dofdir/2.2_avgffd/t=$t"
+
+      # compose final average dofs
+      ffdcompose_node "avgdof_$t" -parent "avgffd_$t" \
+          -sublst  "$kernel/weights_t=$t.csv" \
+          -dofdir1 "$dofdir/1___affine" \
+          -dofdir2 "$dofdir/2.2_avgffd/t=$t" \
+          -dofdir3 "$dofdir/2___fluid/t=$t"
+
     done
 
   end_dag
 
   # ----------------------------------------------------------------------------
   # make anatomical atlas images
-  #begin_dag 'anatomy' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'anatomy' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+
+      average_node "template_$t" -voxelwise \
+          -sublst "$kernel/weights_t=$t.csv" \
+          -imgdir "$imgdir" -imgsuf '.nii.gz' \
+          -dofdir "$dofdir/2___fluid/t=$t" \
+          -output "$outdir/template/t2w_$t.nii.gz" \
+ 
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  #begin_dag 'tissues' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'tissues' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+      for l in {1..7}; do
+
+        average_node "tissue_$l_$t" -voxelwise -label $l \
+            -sublst "$kernel/weights_t=$t.csv" \
+            -imgdir "$lbldir" -imgsuf '-tissues.nii.gz' \
+            -dofdir "$dofdir/2___fluid/t=$t" \
+            -output "$outdir/pbmaps/$t/tissue_$l.nii.gz" \
+ 
+      done
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  #begin_dag 'structures' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'structures' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+      for l in {1..87}; do
+
+        average_node "structure_$l_$t" -voxelwise -label $l \
+            -sublst "$kernel/weights_t=$t.csv" \
+            -imgdir "$lbldir" -imgsuf '-all.nii.gz' \
+            -dofdir "$dofdir/2___fluid/t=$t" \
+            -output "$outdir/pbmaps/$t/structure_$l.nii.gz" \
+ 
+      done
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # construct longitudinal growth model
