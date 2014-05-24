@@ -64,7 +64,7 @@ make_sub_script()
     pack_executable "$executable"
     executable="$topdir/$bindir/$executable"
   fi
-  makedir "$(dirname "$topdir/$_dagdir")"
+  makedir "$(dirname "$topdir/$_dagdir/$file")"
   cat --<<EOF > "$topdir/$_dagdir/$file"
 universe     = $universe
 environment  = LD_LIBRARY_PATH=$topdir/$libdir:$LD_LIBRARY_PATH
@@ -84,7 +84,7 @@ make_script()
 {
   [ $# -ge 1 ] || error "make_script: invalid number of arguments"
   local file="$1"; shift
-  makedir "$topdir/$_dagdir"
+  makedir "$(dirname "$topdir/$_dagdir/$file")"
   cat --<<EOF > "$topdir/$_dagdir/$file"
 #! /bin/bash
 cd "$topdir" || exit 1
