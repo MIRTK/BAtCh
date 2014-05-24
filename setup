@@ -156,6 +156,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -par       "No. of resolution levels         = 4"    \
         -par       "Bending energy weight            = 1e-3" \
         -par       "Jacobian penalty weight          = 1e-2" \
+        -par       "Maximum streak of rejected steps = 2"    \
         -subjects  "${subids[@]}" \
         -bgvalue   "$bgvalue" \
         -hdrdofs   "$dofdir/1___affine" \
