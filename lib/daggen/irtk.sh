@@ -147,6 +147,7 @@ ireg_node()
         else
           [ $t -ne $s ] || continue
         fi
+        [ ! -f "$dofdir/$id1/$id2.dof.gz" ] || continue
         let n++
         # node to register id1 and id2
         add_node "imgreg_$id1,$id2" -subfile "imgreg.sub"    \
