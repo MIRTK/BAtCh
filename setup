@@ -87,9 +87,10 @@ cd "$topdir" || error "Failed to change to top-level directory!"
 # with another tool (e.g. MATLAB), or using the "kernel" shell script
 timepoints=()
 for doflst in $(ls "$kernel/weights_t="*".csv"); do
-  t=${f/*=}; t=${f/.csv}
-  timepoints=(${t[@]} $t)
+  t=${doflst/*_t=}; t=${t/.csv}
+  timepoints=(${timepoints[@]} $t)
 done
+[ ${#timepoints[@]} -gt 0 ] || error "No temporal kernels $PWD/$kernel/weights_t=*.csv found"
 
 # ==============================================================================
 # workflow
