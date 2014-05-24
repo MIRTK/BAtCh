@@ -299,3 +299,145 @@ dofcombine_node()
   add_edge $node ${parent[@]}
   info "Adding node $node... done"
 }
+
+# ------------------------------------------------------------------------------
+# add node for composition of linear and global transformations
+ffdcompose_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local idlst=()
+  local dofdir1=
+  local dofdir2=
+  local dofdir3=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -sublst)   optarg  idlst   $1 "$2"; shift; ;;
+      -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
+      -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
+      -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
+      -*)        error "ffdcompose_node: invalid option: $1"; ;;
+      *)         [ -z "$node" ] || error "ffdcompose_node: too many arguments"
+                 node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"    ] || error "ffdcompose_node: missing name argument"
+  [ -n "$dofdir1" ] || error "ffdcompose_node: missing -dofdir1 argument"
+  [ -n "$dofdir2" ] || error "ffdcompose_node: missing -dofdir2 argument"
+  [ -n "$dofdir3" ] || error "ffdcompose_node: missing -dofdir3 argument"
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # read IDs from specified text file
+    [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+
+    # create generic dofaverage submission script
+    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'\""
+    sub="$sub\noutput    = $_dagdir/dofcat_$id.out"
+    sub="$sub\nerror     = $_dagdir/dofcat_$id.out"
+    sub="$sub\nqueue"
+    make_sub_script "dofcat.sub" "$sub" -executable ffdcompose
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add dofaverage nodes to DAG
+    for id in "${ids[@]}"; do
+      add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
+      add_edge "dofcat_$id" 'mkdirs'
+    done
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# add node for computation of average image
+average_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local idlst=()
+  local imgdir=
+  local imgpre=
+  local imgsuf='.nii.gz'
+  local dofdir=
+  local dofpre=
+  local dofsuf='.dof.gz'
+  local average=
+  local options=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -sublst)   optarg  idlst   $1 "$2"; shift; ;;
+      -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
+      -imgpre)   optarg  imgpre  $1 "$2"; shift; ;;
+      -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
+      -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
+      -dofpre)   optarg  dofpre  $1 "$2"; shift; ;;
+      -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
+      -output)   optarg  average $1 "$2"; shift; ;;
+      -voxelwise) options="$options -voxelwise"; ;;
+      -*)        error "average_node: invalid option: $1"; ;;
+      *)         [ -z "$node" ] || error "average_node: too many arguments"
+                 node="$1"; ;;
+    esac
+    shift
+  done
+  [ -n "$node"    ] || error "average_node: missing name argument"
+  [ -n "$average" ] || error "average_node: missing -image argument"
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # write image list with optional transformations and weights
+    local imglst="$_dagdir/imgavg.par"
+    local images="$topdir\n"
+    if [ -n "$idlst" ]; then
+      [ ${#ids[@]} -eq 0 ] || error "average_node: options -subjects and -sublst are mutually exclusive"
+      local pair id weight
+      while read line; do
+        pair=($line)
+        id=${pair[0]}
+        weight=${pair[1]}
+        images="$images$imgdir/$imgpre$id$imgsuf"
+        [ -z "$dofdir" ] || images="$images\t$dofdir/$dofpre$id$dofsuf"
+        [ -z "$weight" ] || images="$images\t$weight"
+        images="$images\n"
+      done < "$idlst"
+    else
+      for id in "${ids[@]}"; do
+        images="$images$imgdir/$id.nii.gz\n"
+      done
+    fi
+    write "$imglst" "$images"
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$(dirname "$average")' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add average node to DAG
+    local sub="arguments = \"$average -images '$imglst'$mode\""
+    sub="$sub\noutput    = $_dagdir/average.out"
+    sub="$sub\nerror     = $_dagdir/average.out"
+    sub="$sub\nqueue"
+    add_node "average" -sub "$sub" -executable average
+    add_edge "average" 'mkdirs'
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
