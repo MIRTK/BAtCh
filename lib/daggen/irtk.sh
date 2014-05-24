@@ -147,19 +147,24 @@ ireg_node()
         else
           [ $t -ne $s ] || continue
         fi
-        [ ! -f "$dofdir/$id1/$id2.dof.gz" ] || continue
         let n++
-        # node to register id1 and id2
-        add_node "imgreg_$id1,$id2" -subfile "imgreg.sub"    \
-                                    -var     "target=\"$id1\"" \
-                                    -var     "source=\"$id2\""
-        add_edge "imgreg_$id1,$id2" 'mkdirs'
-        # node to invert inverse-consistent transformation
-        if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-          add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
+        if [ ! -f "$dofdir/$id1/$id2.dof.gz" ]; then
+          # node to register id1 and id2
+          add_node "imgreg_$id1,$id2" -subfile "imgreg.sub"    \
                                       -var     "target=\"$id1\"" \
                                       -var     "source=\"$id2\""
-          add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
+          add_edge "imgreg_$id1,$id2" 'mkdirs'
+        fi
+        # node to invert inverse-consistent transformation
+        if [[ $ic == true ]] && [ -n "$dofdir" ]; then
+          if [ ! -f "$dofdir/$id2/$id1.dof.gz" ]; then
+            add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
+                                        -var     "target=\"$id1\"" \
+                                        -var     "source=\"$id2\""
+          fi
+          if [ ! -f "$dofdir/$id1/$id2.dof.gz" ]; then
+            add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
+          fi
         fi
         info "  Added job `printf '%3d of %d' $n $N`"
       done
