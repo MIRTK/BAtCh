@@ -81,7 +81,7 @@ trap onexit EXIT
 pid=\$!
 while [ \$? -eq 0 ]; do
   kreinit
-  sleep 3600 && jobs 1 1> /dev/null 2> /dev/null
+  sleep 3600 && jobs 1 1> /dev/null 2> /dev/null || break
 done
 pid=
 DAGMAN
