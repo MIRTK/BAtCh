@@ -24,6 +24,8 @@ log=
 nosubmit=
 rescue=true
 priority=0
+keytab="/homes/$USER/kerb5.keytab"
+[ -f "$keytab" ] || keytab=
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -49,15 +51,16 @@ kinit="$(which kinit)"
 
 # write executable script which executes DAGMan in background
 # and periodically re-initializes the Kerberos v5 ticket cache
-executable='bin/dagman'
-read -p "Password for $USER@IC.AC.UK: " -s password
-rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
-[ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
-cat --<<DAGMAN > "$executable"
+if [ -n "$keytab" ]; then
+  principal=$(klist | grep 'Default principal: ' | cut -d' ' -f3)
+  executable='bin/dagman'
+  rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
+  [ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
+  cat --<<DAGMAN > "$executable"
 #!/bin/bash
 
 # re-initialize Kerberos ticket
-kreinit() { echo "$password" | kinit > /dev/null; }
+kreinit() { kinit -k -t "$keytab" $principal; }
 
 # kill DAGMan when this script is interrupted
 pid=
@@ -82,7 +85,10 @@ while [ \$? -eq 0 ]; do
 done
 pid=
 DAGMAN
-[ $? -eq 0 ] || exit 1
+  [ $? -eq 0 ] || exit 1
+else
+  executable="$dagman"
+fi
 
 # remove files of previous run
 rm -f "$log"
