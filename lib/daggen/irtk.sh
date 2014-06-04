@@ -381,6 +381,7 @@ average_node()
   local dofsuf='.dof.gz'
   local average=
   local options=
+  local label
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -395,6 +396,7 @@ average_node()
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -output)   optarg  average $1 "$2"; shift; ;;
       -voxelwise) options="$options -voxelwise"; ;;
+      -label)    optarg  label   $1 "$2"; shift; options="$options -label $label";;
       -*)        error "average_node: invalid option: $1"; ;;
       *)         [ -z "$node" ] || error "average_node: too many arguments"
                  node="$1"; ;;
