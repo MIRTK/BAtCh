@@ -52,7 +52,8 @@ kinit="$(which kinit)"
 # write executable script which executes DAGMan in background
 # and periodically re-initializes the Kerberos v5 ticket cache
 if [ -n "$keytab" ]; then
-  principal=$(klist | grep 'Default principal: ' | cut -d' ' -f3)
+  principal=$USER@$(klist -k "$keytab" | grep "$USER@" | cut -d@ -f2)
+  kinit -k -t "$keytab" $principal # for condor_submit_dag below
   executable='bin/dagman'
   rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
   [ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
@@ -66,8 +67,8 @@ kreinit() { kinit -k -t "$keytab" $principal; }
 pid=
 onexit()
 {
-  if [ -n "$pid" ]; then
-    pkill -KILL -P $pid
+  if [ -n "\$pid" ]; then
+    pkill -KILL -P \$pid
     exit 1
   else
     exit 0
