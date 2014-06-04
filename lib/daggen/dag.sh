@@ -96,6 +96,34 @@ EOF
   done
 }
 
+# ------------------------------------------------------------------------------
+# write rescue file with DONE nodes
+make_rescue_file()
+{
+  local nodes_done=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -done) optargs nodes_done "$@"; shift ${#nodes_done[@]}; ;;
+      *)     error "make_rescue_file: invalid option: $1"; ;;
+    esac
+    shift
+  done
+
+  local n=0
+  local m=0
+  for f in "$_dagfile.rescue???"; do
+    n=${f/rescue}
+    [ $n -le $m ] || m=$n
+  done
+  let m=m+1
+
+  str=
+  for node in ${nodes_done[@]}; do
+    str="${str}DONE $node\n"
+  done
+  write "$(printf "$_dagfile.rescue%03d" $m)" "$str"
+}
+
 # ==============================================================================
 # DAG description
 # ==============================================================================
