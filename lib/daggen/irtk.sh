@@ -69,7 +69,6 @@ ireg_node()
   # add SUBDAG node
   info "Adding node $node..."
   begin_dag $node -splice || {
-    local _done=()
 
     # registration parameters
     local par="Transformation model             = $model"
@@ -156,21 +155,19 @@ ireg_node()
                                     -var     "target=\"$id1\"" \
                                     -var     "source=\"$id2\""
         add_edge "imgreg_$id1,$id2" 'mkdirs'
-        [ ! -f "$dofdir/$id1/$id2.dof.gz" ] || _done=(${_done[@]} "imgreg_$id1,$id2")
+        [ ! -f "$dofdir/$id1/$id2.dof.gz" ] || node_done "imgreg_$id1,$id2"
         # node to invert inverse-consistent transformation
         if [[ $ic == true ]] && [ -n "$dofdir" ]; then
           add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
                                       -var     "target=\"$id1\"" \
                                       -var     "source=\"$id2\""
           add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
-          [ ! -f "$dofdir/$id2/$id1.dof.gz" ] ||  _done=(${_done[@]} "dofinv_$id1,$id2")
+          [ ! -f "$dofdir/$id2/$id1.dof.gz" ] || node_done "dofinv_$id1,$id2"
         fi
+
         info "  Added job `printf '%3d of %d' $n $N`"
       done
     done
-
-    # write rescue file with already DONE nodes
-    [ ${#_done[@]} -eq 0 ] || make_rescue_file -done ${_done[@]}
 
   }; end_dag
   add_edge $node ${parent[@]}
