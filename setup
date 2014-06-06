@@ -216,7 +216,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     for t in ${timepoints[@]}; do
       for l in {1..7}; do
 
-        average_node "tissue_$l_$t" -voxelwise -label $l \
+        average_node "tissue_${l}_${t}" -voxelwise -label $l \
             -sublst "$kernel/weights_t=$t.csv" \
             -imgdir "$lbldir" -imgsuf '-tissues.nii.gz' \
             -dofdir "$dofdir/2___fluid/t=$t" \
@@ -234,7 +234,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     for t in ${timepoints[@]}; do
       for l in {1..87}; do
 
-        average_node "structure_$l_$t" -voxelwise -label $l \
+        average_node "structure_${l}_${t}" -voxelwise -label $l \
             -sublst "$kernel/weights_t=$t.csv" \
             -imgdir "$lbldir" -imgsuf '-all.nii.gz' \
             -dofdir "$dofdir/2___fluid/t=$t" \
