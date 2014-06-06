@@ -1,5 +1,6 @@
 /dag/
 /bin/
+/bin
 *.log
 .*.swo
 .*.swp
