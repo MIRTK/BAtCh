@@ -149,6 +149,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # generate reference image/mask
   average_node 'reference' -parent 'alignment' \
       -subjects  "${subids[@]}" \
+      -imgdir    "$imgdir" -imgsuf '.nii.gz' \
       -dofdir    "$dofdir/1___affine" \
       -output    "$pardir/ref.nii.gz" \
       -voxelwise

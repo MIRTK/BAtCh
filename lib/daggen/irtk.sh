@@ -408,6 +408,8 @@ average_node()
   done
   [ -n "$node"    ] || error "average_node: missing name argument"
   [ -n "$average" ] || error "average_node: missing -image argument"
+  [ -z "$imgdir"  ] || imgpre="$imgdir/$imgpre"
+  [ -z "$dofdir"  ] || dofpre="$dofdir/$dofpre"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -422,15 +424,15 @@ average_node()
         pair=($line)
         id=${pair[0]}
         weight=${pair[1]}
-        images="$images$imgdir/$imgpre$id$imgsuf"
-        [ -z "$dofdir" ] || images="$images\t$dofdir/$dofpre$id$dofsuf"
-        [ -z "$weight" ] || images="$images\t$weight"
+        images="$images$imgpre$id$imgsuf"
+        [ -z "$dofdir" ] || images="$images $dofpre$id$dofsuf"
+        [ -z "$weight" ] || images="$images $weight"
         images="$images\n"
       done < "$idlst"
     else
       for id in "${ids[@]}"; do
-        images="$images$imgdir/$imgpre$id$imgsuf"
-        [ -z "$dofdir" ] || images="$images\t$dofdir/$dofpre$id$dofsuf"
+        images="$images$imgpre$id$imgsuf"
+        [ -z "$dofdir" ] || images="$images $dofpre$id$dofsuf"
         images="$images\n"
       done
     fi
@@ -442,7 +444,7 @@ average_node()
                       -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
     # add average node to DAG
-    local sub="arguments = \"$average -images '$imglst'$mode\""
+    local sub="arguments = \"$average -images '$imglst'$options\""
     sub="$sub\noutput    = $_dagdir/average.out"
     sub="$sub\nerror     = $_dagdir/average.out"
     sub="$sub\nqueue"
