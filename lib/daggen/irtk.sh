@@ -206,7 +206,6 @@ dofaverage_node()
 
   info "Adding node $node..."
   begin_dag $node -splice || {
-    local _done=()
 
     # weights of input transformations
     if [ -z "$doflst" ]; then
@@ -241,11 +240,8 @@ dofaverage_node()
     for id in "${ids[@]}"; do
       add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
       add_edge "dofavg_$id" 'mkdirs'
-      [ ! -f "$dofdir/$id.dof.gz" ] || _done=(${_done[@]} "dofavg_$id")
+      [ ! -f "$dofdir/$id.dof.gz" ] || node_done "dofavg_$id"
     done
-
-    # write rescue file with already DONE nodes
-    [ ${#_done[@]} -eq 0 ] || make_rescue_file -done ${_done[@]}
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -286,7 +282,6 @@ dofcombine_node()
 
   info "Adding node $node..."
   begin_dag $node -splice || {
-    local _done=()
 
     # create generic dofaverage submission script
     local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'$options\""
@@ -304,11 +299,8 @@ dofcombine_node()
     for id in "${ids[@]}"; do
       add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
       add_edge "dofcat_$id" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || _done=(${_done[@]} "dofcat_$id")
+      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
     done
-
-    # write rescue file with already DONE nodes
-    [ ${#_done[@]} -eq 0 ] || make_rescue_file -done ${_done[@]}
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -348,7 +340,6 @@ ffdcompose_node()
 
   info "Adding node $node..."
   begin_dag $node -splice || {
-    local _done=()
 
     # read IDs from specified text file
     [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
@@ -369,11 +360,8 @@ ffdcompose_node()
     for id in "${ids[@]}"; do
       add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
       add_edge "dofcat_$id" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || _done=(${_done[@]} "dofcat_$id")
+      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
     done
-
-    # write rescue file with already DONE nodes
-    [ ${#_done[@]} -eq 0 ] || make_rescue_file -done ${_done[@]}
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -423,7 +411,6 @@ average_node()
 
   info "Adding node $node..."
   begin_dag $node -splice || {
-    local _done=()
 
     # write image list with optional transformations and weights
     local imglst="$_dagdir/imgavg.par"
@@ -461,10 +448,7 @@ average_node()
     sub="$sub\nqueue"
     add_node "average" -sub "$sub" -executable average
     add_edge "average" 'mkdirs'
-    [ ! -f "$average" ] || _done=(${_done[@]} average)
-
-    # write rescue file with already DONE nodes
-    [ ${#_done[@]} -eq 0 ] || make_rescue_file -done ${_done[@]}
+    [ ! -f "$average" ] || node_done average
 
   }; end_dag
   add_edge $node ${parent[@]}
