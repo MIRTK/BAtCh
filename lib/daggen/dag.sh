@@ -43,18 +43,24 @@ make_sub_script()
   local subdesc=
   local universe=vanilla
   local executable=
+  local _requirements="$requirements"
+  local requirement
+
   while [ $# -gt 0 ]; do
     case "$1" in
-      -universe)   optarg universe   $1 "$2"; shift; ;;
-      -executable) optarg executable $1 "$2"; shift; ;;
-      --)          shift; break; ;;
-      -*)          error "make_sub_script: invalid option: $1"; ;;
-      *)           if [ -z "$file" ]; then
-                     file="$1"
-                   else
-                     subdesc="$subdesc\n$1"
-                   fi
-                   ;;
+      -universe)    optarg universe    $1 "$2"; shift; ;;
+      -executable)  optarg executable  $1 "$2"; shift; ;;
+      -requirement) optarg requirement $1 "$2"; shift;
+                    [ -z "$_requirements" ] || _requirements="$_requirements && "
+                    _requirements="$_requirements($requirement)"
+      --) shift; break; ;;
+      -*) error "make_sub_script: invalid option: $1"; ;;
+      *)  if [ -z "$file" ]; then
+            file="$1"
+          else
+            subdesc="$subdesc\n$1"
+          fi
+          ;;
     esac
     shift
   done
@@ -73,7 +79,7 @@ executable   = $executable
 log          = $topdir/$log
 notify_user  = $notify_user
 notification = $notification
-requirements = $requirements
+requirements = $_requirements
 EOF
   echo -en "$subdesc" >> "$topdir/$_dagdir/$file"
 }
