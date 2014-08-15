@@ -53,6 +53,7 @@ make_sub_script()
       -requirement) optarg requirement $1 "$2"; shift;
                     [ -z "$_requirements" ] || _requirements="$_requirements && "
                     _requirements="$_requirements($requirement)"
+                    ;;
       --) shift; break; ;;
       -*) error "make_sub_script: invalid option: $1"; ;;
       *)  if [ -z "$file" ]; then
