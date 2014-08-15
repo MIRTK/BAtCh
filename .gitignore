@@ -1,6 +1,7 @@
 /dag/
 /bin/
 /bin
+/etc/test
 *.log
 .*.swo
 .*.swp
