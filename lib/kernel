@@ -167,6 +167,7 @@ generate_kernel()
   for mu in ${kernel_mean[@]}; do
     std=${kernel_sigma[$k]}
     lst="$kernel/weights_t=$mu.csv"
+    [ ! -f "${lst}" ] || rm -f "${lst}"
     i=0
     for id in ${ids[@]}; do
       w=$(gaussian ${age[$i]} $mu $std)
