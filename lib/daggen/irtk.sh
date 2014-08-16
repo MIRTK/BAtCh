@@ -224,8 +224,8 @@ dofaverage_node()
     local sub="arguments = \"'$dofdir/\$(id).dof.gz' -all$options -add-identity-for-dofname '\$(id)'"
     sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
     sub="$sub\""
-    sub="$sub\noutput    = $_dagdir/dofavg_$id.out"
-    sub="$sub\nerror     = $_dagdir/dofavg_$id.out"
+    sub="$sub\noutput    = $_dagdir/dofavg_\$(id).out"
+    sub="$sub\nerror     = $_dagdir/dofavg_\$(id).out"
     sub="$sub\nqueue"
     make_sub_script "dofavg.sub" "$sub" -executable dofaverage
 
@@ -285,8 +285,8 @@ dofcombine_node()
 
     # create generic dofaverage submission script
     local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'$options\""
-    sub="$sub\noutput    = $_dagdir/dofcat_$id.out"
-    sub="$sub\nerror     = $_dagdir/dofcat_$id.out"
+    sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
+    sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
     sub="$sub\nqueue"
     make_sub_script "dofcat.sub" "$sub" -executable dofcombine
 
@@ -346,8 +346,8 @@ ffdcompose_node()
 
     # create generic dofaverage submission script
     local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'\""
-    sub="$sub\noutput    = $_dagdir/dofcat_$id.out"
-    sub="$sub\nerror     = $_dagdir/dofcat_$id.out"
+    sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
+    sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
     sub="$sub\nqueue"
     make_sub_script "dofcat.sub" "$sub" -executable ffdcompose
 
