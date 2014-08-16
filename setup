@@ -152,7 +152,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       -imgdir    "$imgdir" -imgsuf '.nii.gz' \
       -dofdir    "$dofdir/1___affine" \
       -output    "$pardir/ref.nii.gz" \
-      -voxelwise
+      -voxelwise -bgvalue "$bgvalue" -margin 5
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point
@@ -181,7 +181,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       dofaverage_node "avgffd_$t" -parent 'computeffds' \
           -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2.2_avgffd/t=$t"
+          -dofdir "$dofdir/2.2_avgffd/t=$t" \
+          -dofs
 
       # compose final average dofs
       ffdcompose_node "avgdof_$t" -parent "avgffd_$t" \
