@@ -221,39 +221,36 @@ transformation_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    local sub
+    # create generic transformation submission script
+    local sub="arguments    = \""
+    sub="$sub '$prefix\$(source)$suffix'"
+    sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
+    [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(source).dof.gz'"
+    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -matchInputType -target '$ref' -$interp"
+    sub="$sub\""
+    sub="$sub\noutput       = $_dagdir/\$(target)/transform_\$(target),\$(source).out"
+    sub="$sub\nerror        = $_dagdir/\$(target)/transform_\$(target),\$(source).out"
+    sub="$sub\nqueue"
+    make_sub_script "transform.sub" "$sub" -executable transformation
 
-    # create generic global transformation submission script
+    # create generic header transformation submission script
     if [ -n "$hdrdofs" ]; then
       sub="arguments    = \""
-      sub="$sub '$prefix\$(id)$suffix' '$outdir/aligned/\$(id)$suffix'"
-      sub="$sub -dofin '$hdrdofs/\$(id).dof.gz' -invert -matchInputType -target '$ref' -$interp"
-      sub="$sub\noutput       = $_dagdir/\$(id)/align_\$(id).out"
-      sub="$sub\nerror        = $_dagdir/\$(id)/align_\$(id).out"
+      sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
+      sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
+      sub="$sub -dofin_i '$hdrdofs/\$(target).dof.gz'"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/\$(target)/postalign_\$(target),\$(source).out"
+      sub="$sub\nerror        = $_dagdir/\$(target)/postalign_\$(target),\$(source).out"
       sub="$sub\nqueue"
-      make_sub_script "align.sub" "$sub" -executable transformation
+      make_sub_script "postalign.sub" "$sub" -executable headertool
     fi
-
-    # create generic local transformation submission script
-    sub="arguments    = \""
-    if [ -n "$hdrdofs" ]; then
-      sub="$sub '$outdir/aligned/\$(source)$suffix'"
-    else
-      sub="$sub '$prefix\$(source)$suffix'"
-    fi
-    sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
-    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -matchInputType -target '$ref' -$interp"
-    sub="$sub\noutput       = $_dagdir/\$(target)/warp_\$(target),\$(source).out"
-    sub="$sub\nerror        = $_dagdir/\$(target)/warp_\$(target),\$(source).out"
-    sub="$sub\nqueue"
-    make_sub_script "warp.sub" "$sub" -executable transformation
 
     # job to create output directories
     local pre=''
     for id in "${ids[@]}"; do
       pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
     done
-    [ -z "$hdrdofs" ] || pre="$pre\n\nmkdir -p '$outdir/aligned' || exit 1"
     pre="$pre\n"
     for id in "${ids[@]}"; do
       pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
@@ -273,19 +270,16 @@ transformation_node()
         let s++
         [ $t -ne $s ] || continue
         let n++
+        add_node "transform_$id1,$id2" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        add_edge "transform_$id1,$id2" 'mkdirs'
         if [ -n "$hdrdofs" ]; then
-          add_node "align_$id2" -subfile "align.sub" -var "id=\"$id2\""
-          add_edge "align_$id2" 'mkdirs'
-          [ ! -f "$outdir/aligned/$id2$suffix" ] || node_done "align_$id2"
+          add_node "postalign_$id1,$id2" -subfile "postalign.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+          add_edge "postalign_$id1,$id2" "transform_$id1,$id2"
         fi
-        add_node "warp_$id1,$id2" -subfile "warp.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
-        if [ -n "$hdrdofs" ]; then
-          add_edge "warp_$id1,$id2" "align_$id2"
-        else
-          add_edge "warp_$id1,$id2" 'mkdirs'
-        fi
-        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "warp_$id1,$id2"
-
+        [ ! -f "$outdir/$id1/$id2$suffix" ] || {
+          node_done "transform_$id1,$id2"
+          [ -z "$hdrdofs" ] || node_done "postalign_$id1,$id2"
+        }
         info "  Added job `printf '%3d of %d' $n $N`"
       done
     done
