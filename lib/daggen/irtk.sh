@@ -175,6 +175,127 @@ ireg_node()
 }
 
 # ------------------------------------------------------------------------------
+# add node for application of pairwise image transformations
+transformation_node()
+{
+  local node=
+  local parent=()
+  local ids=
+  local outdir=
+  local ref="$pardir/ref.nii.gz"
+  local hdrdofs=
+  local dofins=
+  local padding=0
+  local prefix=
+  local suffix='.nii.gz'
+  local interp='linear'
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)             optargs parent    "$@"; shift ${#parent[@]}; ;;
+      -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
+      -outdir)             optarg  outdir     $1 "$2"; shift; ;;
+      -ref)                optarg  ref        $1 "$2"; shift; ;;
+      -prefix)             optarg  prefix     $1 "$2"; shift; ;;
+      -suffix)             optarg  suffix     $1 "$2"; shift; ;;
+      -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; ;;
+      -dofins)             optarg  dofins     $1 "$2"; shift; ;;
+      -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
+      -interp)             optarg  interp     $1 "$2"; shift; ;;
+      -*)                  error "transformation_node: invalid option: $1"; ;;
+      *)                   [ -z "$node" ] || error "transformation_node: too many arguments"
+                           node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"       ] || error "transformation_node: missing name argument"
+  [ -n "$dofins"     ] || error "transformation_node: missing -dofins argument"
+  [ -n "$outdir"     ] || error "transformation_node: missing -outdir argument"
+  [ ${#ids[@]} -ge 2 ] || error "transformation_node: not enough -subjects specified"
+
+  # number of pairwise transformations
+  local N
+  let N="${#ids[@]} * (${#ids[@]} - 1)"
+
+  # add SUBDAG node
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    local sub
+
+    # create generic global transformation submission script
+    if [ -n "$hdrdofs" ]; then
+      sub="arguments    = \""
+      sub="$sub '$prefix\$(id)$suffix' '$outdir/aligned/\$(id)$suffix'"
+      sub="$sub -dofin '$hdrdofs/\$(id).dof.gz' -invert -matchInputType -target '$ref' -$interp"
+      sub="$sub\noutput       = $_dagdir/\$(id)/align_\$(id).out"
+      sub="$sub\nerror        = $_dagdir/\$(id)/align_\$(id).out"
+      sub="$sub\nqueue"
+      make_sub_script "align.sub" "$sub" -executable transformation
+    fi
+
+    # create generic local transformation submission script
+    sub="arguments    = \""
+    if [ -n "$hdrdofs" ]; then
+      sub="$sub '$outdir/aligned/\$(source)$suffix'"
+    else
+      sub="$sub '$prefix\$(source)$suffix'"
+    fi
+    sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
+    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -matchInputType -target '$ref' -$interp"
+    sub="$sub\noutput       = $_dagdir/\$(target)/warp_\$(target),\$(source).out"
+    sub="$sub\nerror        = $_dagdir/\$(target)/warp_\$(target),\$(source).out"
+    sub="$sub\nqueue"
+    make_sub_script "warp.sub" "$sub" -executable transformation
+
+    # job to create output directories
+    local pre=''
+    for id in "${ids[@]}"; do
+      pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
+    done
+    [ -z "$hdrdofs" ] || pre="$pre\n\nmkdir -p '$outdir/aligned' || exit 1"
+    pre="$pre\n"
+    for id in "${ids[@]}"; do
+      pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
+    done
+    make_script "mkdirs.sh" "$pre"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add job nodes
+    local n t s
+    n=0
+    t=0
+    for id1 in "${ids[@]}"; do
+      let t++
+      s=0
+      for id2 in "${ids[@]}"; do
+        let s++
+        [ $t -ne $s ] || continue
+        let n++
+        if [ -n "$hdrdofs" ]; then
+          add_node "align_$id2" -subfile "align.sub" -var "id=\"$id2\""
+          add_edge "align_$id2" 'mkdirs'
+          [ ! -f "$outdir/aligned/$id2$suffix" ] || node_done "align_$id2"
+        fi
+        add_node "warp_$id1,$id2" -subfile "warp.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        if [ -n "$hdrdofs" ]; then
+          add_edge "warp_$id1,$id2" "align_$id2"
+        else
+          add_edge "warp_$id1,$id2" 'mkdirs'
+        fi
+        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "warp_$id1,$id2"
+
+        info "  Added job `printf '%3d of %d' $n $N`"
+      done
+    done
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
 # add node for averaging of transformations
 dofaverage_node()
 {
@@ -283,7 +404,7 @@ dofcombine_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    # create generic dofaverage submission script
+    # create generic dofcombine submission script
     local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'$options\""
     sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
     sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
