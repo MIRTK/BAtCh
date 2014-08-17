@@ -40,7 +40,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 [ -n "$log" ] || log='dagman.log'
-[ -n "$dag" ] || dag='dag/main.dag'
+[ -n "$dag" ] || dag='main'
+dag="dag/$dag.dag"
 [ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
 
 # required commands
@@ -80,12 +81,17 @@ trap onexit EXIT
 # re-initialize Kerberos ticket cache while it runs
 "$dagman" "\$@" &
 pid=\$!
-while [ \$? -eq 0 ]; do
+while [ -n "\$pid" ]; do
   kreinit
-  sleep 600
-  jobs 1 1> /dev/null 2> /dev/null
+  for i in {1..60}; do
+    sleep 10
+    jobs 1 1> /dev/null 2> /dev/null
+    if [ \$? -ne 0 ]; then
+      pid=
+      break
+    fi
+  done
 done
-pid=
 DAGMAN
   [ $? -eq 0 ] || exit 1
 else
