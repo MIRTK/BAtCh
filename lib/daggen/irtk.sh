@@ -189,6 +189,7 @@ transformation_node()
   local prefix=
   local suffix='.nii.gz'
   local interp='linear'
+  local resample='false'
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -202,6 +203,7 @@ transformation_node()
       -dofins)             optarg  dofins     $1 "$2"; shift; ;;
       -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
       -interp)             optarg  interp     $1 "$2"; shift; ;;
+      -include_identity)   resample='true'; ;;
       -*)                  error "transformation_node: invalid option: $1"; ;;
       *)                   [ -z "$node" ] || error "transformation_node: too many arguments"
                            node=$1; ;;
@@ -221,8 +223,10 @@ transformation_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
+    local sub
+
     # create generic transformation submission script
-    local sub="arguments    = \""
+    sub="arguments    = \""
     sub="$sub '$prefix\$(source)$suffix'"
     sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
     [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(source).dof.gz'"
@@ -232,6 +236,20 @@ transformation_node()
     sub="$sub\nerror        = $_dagdir/\$(target)/transform_\$(target),\$(source).out"
     sub="$sub\nqueue"
     make_sub_script "transform.sub" "$sub" -executable transformation
+
+    # create generic resample submission script
+    if [ $resample == true ]; then
+      sub="arguments    = \""
+      sub="$sub '$prefix\$(id)$suffix'"
+      sub="$sub '$outdir/\$(id)/\$(id)$suffix'"
+      [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(id).dof.gz'"
+      sub="$sub -dofin identity -matchInputType -target '$ref' -$interp"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/\$(id)/resample_\$(id).out"
+      sub="$sub\nerror        = $_dagdir/\$(id)/resample_\$(id).out"
+      sub="$sub\nqueue"
+      make_sub_script "resample.sub" "$sub" -executable transformation
+    fi
 
     # create generic header transformation submission script
     if [ -n "$hdrdofs" ]; then
@@ -268,9 +286,14 @@ transformation_node()
       s=0
       for id2 in "${ids[@]}"; do
         let s++
-        [ $t -ne $s ] || continue
-        let n++
-        add_node "transform_$id1,$id2" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        if [ $t -eq $s ]; then
+          [ $resample == true ] || continue
+          let n++
+          add_node "transform_$id1,$id2" -subfile "resample.sub" -var "id=\"$id1\""
+        else
+          let n++
+          add_node "transform_$id1,$id2" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        fi
         add_edge "transform_$id1,$id2" 'mkdirs'
         if [ -n "$hdrdofs" ]; then
           add_node "postalign_$id1,$id2" -subfile "postalign.sub" -var "target=\"$id1\"" -var "source=\"$id2\""

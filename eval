@@ -95,7 +95,7 @@ done
 # workflow
 # ==============================================================================
 
-begin_dag 'eval' -dagfile "$dagdir/eval.dag" -dagdir "$dagdir"
+begin_dag 'eval' -dagfile "$dagdir/eval.dag"
 
   transformation_node 'warp_images' \
       -outdir    "../eval/warped-images" \
@@ -106,7 +106,8 @@ begin_dag 'eval' -dagfile "$dagdir/eval.dag" -dagdir "$dagdir"
       -ref       "$pardir/ref.nii.gz" \
       -prefix    "$imgdir/" \
       -suffix    ".nii.gz" \
-      -interp    "linear"
+      -interp    "linear" \
+      -include_identity
 
   transformation_node 'warp_tissues' \
       -outdir    "../eval/warped-labels" \
@@ -117,6 +118,7 @@ begin_dag 'eval' -dagfile "$dagdir/eval.dag" -dagdir "$dagdir"
       -ref       "$pardir/ref.nii.gz" \
       -prefix    "$lbldir/" \
       -suffix    "-tissues.nii.gz" \
-      -interp    "nn"
+      -interp    "nn" \
+      -include_identity
 
 end_dag
