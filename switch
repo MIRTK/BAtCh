@@ -1,0 +1,51 @@
+#! /bin/bash
+
+[ $# -eq 3 -o $# -eq 4 ] || { echo "usage: $(basename $0) [<rev>] <ds> <be> <lj>" 1>&2; exit 1; }
+
+if [ $# -eq 4 ]; then
+  rev=$1
+  shift
+else
+  rev=$(bin/ireg -revision)
+fi
+ds=$1
+be=$2
+lj=$3
+
+pardir="dag/avgffds/computeffds"
+dofdir="../dofs"
+resdir="../eval"
+
+parid="$(printf _ds=%1.1f_be=%1.5f_lj=%1.5f $ds $be $lj)"
+dofid="ireg=$rev$parid"
+
+if [ ! -f "$pardir/ireg$parid.par" ]; then
+  echo "Missing parameter file: $pardir/ireg$parid.par"
+  exit 1
+fi
+
+try() { echo "$@" && "$@" 2> /dev/null; }
+run() { echo "$@" && "$@" || exit 1; }
+
+run mkdir -p "$dofdir/$dofid/2.1_ffd"
+run mkdir -p "$dofdir/$dofid/2.2_avgffd"
+run mkdir -p "$dofdir/$dofid/2___fluid"
+run mkdir -p "$resdir/$dofid/overlap"
+run mkdir -p "$resdir/$dofid/warped-labels"
+run mkdir -p "$resdir/$dofid/warped-images"
+
+try unlink "$pardir/ireg.par"
+try unlink "$dofdir/2.1_ffd"
+try unlink "$dofdir/2.2_avgffd"    
+try unlink "$dofdir/2___fluid"
+try unlink "$resdir/overlap"
+try unlink "$resdir/warped-labels"
+try unlink "$resdir/warped-images"
+
+run ln -s "ireg$parid.par"       "$pardir/ireg.par"
+run ln -s "$dofid/2.1_ffd"       "$dofdir/2.1_ffd"
+run ln -s "$dofid/2.2_avgffd"    "$dofdir/2.2_avgffd"
+run ln -s "$dofid/2___fluid"     "$dofdir/2___fluid"
+run ln -s "$dofid/overlap"       "$resdir/overlap"
+run ln -s "$dofid/warped-labels" "$resdir/warped-labels"
+run ln -s "$dofid/warped-images" "$resdir/warped-images"
