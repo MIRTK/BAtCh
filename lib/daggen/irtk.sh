@@ -326,7 +326,7 @@ dofcombine_node()
     sub="$sub\noutput    = $_dagdir/dofcat_$id.out"
     sub="$sub\nerror     = $_dagdir/dofcat_$id.out"
     sub="$sub\nqueue"
-    make_sub_script "dofcat.sub" "$sub" -executable dofaverage
+    make_sub_script "dofcat.sub" "$sub" -executable dofcombine
 
     # node to create output directories
     make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
