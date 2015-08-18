@@ -197,6 +197,7 @@ o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
     -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -sigma)     let a=o+1; optarg sigma  ${!o} "${!a}"; ;;
   esac
   let o++
 done
@@ -226,8 +227,7 @@ read_sublst subids "$sublst"
 subage=()
 i=0
 for id in ${subids[@]}; do
-  age=($(egrep "$id[[:space:]][,;]?[[:space:]]?[0-9]+(\.[0-9]+)*" "$agelst" | tail -n1))
-  age=${age[1]}
+  age=$(awk "\$1 ~ /$id/ { print gensub(/^$id([[:space:]]+|,)([0-9.]+)/, \"\\\\2\", \"g\") }" "$agelst")
   [ -n "${age}" ] || error "Failed to read age of subject $id from file $agelst"
   subage[$i]=$age
   let i++
