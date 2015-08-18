@@ -33,6 +33,7 @@ Options:
   -c -config <config.sh>   Configuration file.
                            (default: $appdir/etc/config.sh)
 
+  -u -update               Overwrite existing DAGMan files.
   -h -help                 Print help and exit.
   -v -verbose              Enable verbose output messages.
 HELP
@@ -62,6 +63,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
     -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -u|-update)      update='true'; ;;
     -c|-config)      shift; ;; # already loaded
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose)     let verbose++; ;;
