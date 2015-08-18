@@ -6,11 +6,17 @@ LD_LIBRARY_PATH="$OPT/lib:$OPT/mcr/v83/runtime/glnxa64:$OPT/mcr/v83/bin/glnxa64:
 # input settings
 topdir="$appdir"                 # top-level/working directory
 imgdir='../images'               # anatomical brain images
+imgpre=''                        # image file name prefix
+imgsuf='_brain.nii.gz'           # image file name suffix
 lbldir='../labels'               # input tissue and structure segmentations
+lblpre=''                        # label image file name prefix
+lblsuf='.nii.gz'                 # label image file name suffix
 bgvalue=0                        # background value of skull-stripped images
 
 # reference for global normalization
 refdir='etc'                     # directory of reference image
+refpre=''                        # reference image file name prefix
+refsuf='.nii.gz'                 # reference image file name suffix
 refid='serag-40'                 # ID of reference image (optional)
                                  #
                                  # Set reference ID to empty string to compute age-

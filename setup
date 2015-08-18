@@ -125,6 +125,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofins   "$dofdir/1.1_initial" \
           -dofdir   "$dofdir/1___affine"
 
+      # global normalization output
+      hdrdofs_opt="-invhdrdofs"
+      hdrdofs="$dofdir/1___affine/$refid"
+
     else
 
       # initialize transformations
@@ -168,6 +172,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir2  "$dofdir/1.5_average" \
           -dofdir3  "$dofdir/1___affine"
 
+      # global normalization output
+      hdrdofs_opt="-hdrdofs"
+      hdrdofs="$dofdir/1___affine"
+
     fi
 
   end_dag
@@ -178,16 +186,17 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
     # deformable registration
     ireg_node 'computeffds' \
-        -model     "SVFFD" \
-        -par       "Multi-level transformation = None" \
-        -par       "Control point spacing      = 2.5"  \
-        -par       "No. of resolution levels   = 4"    \
-        -par       "Bending energy weight      = 1e-3" \
-        -par       "Jacobian penalty weight    = 1e-2" \
-        -subjects  "${subids[@]}" \
-        -bgvalue   "$bgvalue" \
-        -hdrdofs   "$dofdir/1___affine" \
-        -dofdir    "$dofdir/2.1_ffd" \
+        -model       "SVFFD" \
+        -par         "Multi-level transformation = None" \
+        -par         "Control point spacing      = 2.5"  \
+        -par         "No. of resolution levels   = 4"    \
+        -par         "Bending energy weight      = 1e-3" \
+        -par         "Jacobian penalty weight    = 1e-2" \
+        -subjects    "${subids[@]}" \
+        -bgvalue     "$bgvalue" \
+        $hdrdofs_opt "$hdrdofs" \
+        -dofdir      "$dofdir/2.1_ffd" \
+        -dofins      "Id" \
         -symmetric
 
     # average dofs

@@ -32,6 +32,7 @@ ireg_node()
   local fidelity='SIM[Similarity](I1, I2 o T)'
   local similarity='NMI'
   local hdrdofs=
+  local hdrdof_opt='-dof'
   local dofins=
   local dofdir=
   local params=
@@ -45,7 +46,8 @@ ireg_node()
       -refdir)             optarg  refdir     $1 "$2"; shift; ;;
       -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
       -model)              optarg  model      $1 "$2"; shift; ;;
-      -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; ;;
+      -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof'; ;;
+      -invhdrdofs)         optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof_i'; ;;
       -dofins)             optarg  dofins     $1 "$2"; shift; ;;
       -dofdir)             optarg  dofdir     $1 "$2"; shift; ;;
       -par)                optarg  param      $1 "$2"; shift; params="$params\n$param"; ;;
@@ -91,20 +93,27 @@ ireg_node()
     local sub="arguments    = \"-v"
     if [ -n "$refid" -a -n "$refdir" ]; then
       if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$refdir/\$(target).nii.gz' -image '$imgdir/\$(source).nii.gz' -dof '$hdrdofs/\$(source).dof.gz'"
+        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
+        sub="$sub $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
       else
-        sub="$sub -image '$refdir/\$(target).nii.gz' -image '$imgdir/\$(source).nii.gz'"
+        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
     else
       if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$imgdir/\$(target).nii.gz'"
-        [ -n "$refid" ] || sub="$sub -dof '$hdrdofs/\$(target).dof.gz'"
-        sub="$sub -image '$imgdir/\$(source).nii.gz' -dof '$hdrdofs/\$(source).dof.gz'"
+        sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf'"
+        [ -n "$refid" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target).dof.gz'"
+        sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
       else
-        sub="$sub -image '$imgdir/\$(target).nii.gz' -image '$imgdir/\$(source).nii.gz'"
+        sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
     fi
-    [ -z "$dofins" ] || sub="$sub -dofin  '$dofins/\$(target)/\$(source).dof.gz'"
+    [ -z "$dofins" ] || {
+      if [[ "$dofins" == "Id" ]]; then
+        sub="$sub -dofin Id"
+      else
+        sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz'"
+      fi
+    }
     [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source).dof.gz'"
     sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
     sub="$sub\""
@@ -132,16 +141,25 @@ ireg_node()
     # than a PRE script for each registration job, which would require
     # the -maxpre option to avoid memory issues
     local pre=
-    for id in "${ids[@]}"; do
+    if [ -n "$refid" ]; then
       # directory for log files
-      pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
-    done
-    if [ -n "$dofdir" ]; then
-      pre="$pre\n"
-      for id in "${ids[@]}"; do
+      pre="$pre\nmkdir -p '$_dagdir/$refid' || exit 1"
+      if [ -n "$dofdir" ]; then
         # directory for output files
-        pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
+        pre="$pre\nmkdir -p '$dofdir/$refid' || exit 1"
+      fi
+    else
+      for id in "${ids[@]}"; do
+        # directory for log files
+        pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
       done
+      if [ -n "$dofdir" ]; then
+        pre="$pre\n"
+        for id in "${ids[@]}"; do
+          # directory for output files
+          pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
+        done
+      fi
     fi
     make_script "mkdirs.sh" "$pre"
     add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
