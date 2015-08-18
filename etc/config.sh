@@ -18,7 +18,7 @@ refid='serag-40'                 # ID of reference image (optional)
 
 # kernel regression
 epsilon=0.001                    # kernel weight threshold
-[ -n "$sigma" ] || sigma=1       # (default) standard deviation of Gaussian
+[ -n "$sigma" ] || sigma=0.5     # (default) standard deviation of Gaussian
 kernel="etc/kernel_sigma=$sigma" # directory containing temporal kernel files
 
 # output settings
