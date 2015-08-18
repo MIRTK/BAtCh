@@ -187,7 +187,7 @@ generate_kernel()
 
 verbose=0
 epsilon=0.001
-sigma=1
+sigma=
 options=()
 sublst=
 agelst="$appdir/etc/age.csv"
