@@ -46,11 +46,13 @@ verbose=0
 sublst=
 agelst="$appdir/etc/age.csv"
 config="$appdir/etc/config.sh"
+sigma=
 
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
     -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -sigma)     let a=o+1; optarg sigma  ${!o} "${!a}"; ;;
   esac
   let o++
 done
