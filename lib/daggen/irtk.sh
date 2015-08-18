@@ -263,8 +263,8 @@ dofaverage_node()
     local sub="arguments = \"'$dofdir/\$(id).dof.gz' -all$options -add-identity-for-dofname '\$(id)'"
     sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
     sub="$sub\""
-    sub="$sub\noutput    = $_dagdir/dofavg_$id.out"
-    sub="$sub\nerror     = $_dagdir/dofavg_$id.out"
+    sub="$sub\noutput    = $_dagdir/dofavg_\$(id).out"
+    sub="$sub\nerror     = $_dagdir/dofavg_\$(id).out"
     sub="$sub\nqueue"
     make_sub_script "dofavg.sub" "$sub" -executable dofaverage
 
