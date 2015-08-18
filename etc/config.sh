@@ -1,6 +1,7 @@
 # IRTK installation
-PATH="/vol/biomedic/users/$USER/bin:$PATH"
-LD_LIBRARY_PATH="/vol/biomedic/users/$USER/lib"
+OPT="/vol/biomedic/users/$USER"
+PATH="$OPT/bin:$PATH"
+LD_LIBRARY_PATH="$OPT/lib:$OPT/mcr/v83/runtime/glnxa64:$OPT/mcr/v83/bin/glnxa64:$OPT/mcr/v83/sys/os/glnxa64"
 
 # input settings
 topdir="$appdir"                 # top-level/working directory
