@@ -89,11 +89,14 @@ cd "$topdir" || error "Failed to change to top-level directory!"
 
 # atlas time points for which kernel was create either manually,
 # with another tool (e.g. MATLAB), or using the "kernel" shell script
-timepoints=()
-for doflst in $(ls "$kernel/weights_t="*".csv"); do
-  t=${f/*=}; t=${f/.csv}
-  timepoints=(${t[@]} $t)
-done
+timepoints=($(ls "$kernel/" | awk '{
+  if ($0 ~ /weights_t=[0-9]+(.[0-9]+)?.csv/) {
+    print gensub(/weights_t=([0-9.]+(.[0-9]+)?).csv/, "\\1", "g")
+  }
+}'))
+if [ ${#timepoints} -eq 0 ]; then
+  error "No regression kernels matching pattern \"$kernel/weights_t=*.csv\" found"
+fi
 
 # ==============================================================================
 # workflow
