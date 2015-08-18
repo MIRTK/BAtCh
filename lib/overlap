@@ -1,0 +1,143 @@
+#!/bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+appname="$(basename "$BASH_SOURCE")"
+. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+Compute overlap of all pairwise transformations.
+
+Options:
+  -s -sublst <sub.lst>     Text file listing the IDs of the images
+                           to use for the atlas construction. If not
+                           specified, the IDs are read from the -agelst.
+                           (default: $appdir/etc/sub.lst)
+
+  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
+                           first column contains the image ID and the
+                           second column the associated age.
+                           (default: $appdir/etc/age.csv)
+
+  -c -config <config.sh>   Configuration file.
+                           (default: $appdir/etc/config.sh)
+
+  -i -input <dir>          Input directory containing the warped label maps.
+                           (default: $indir)
+
+  -o -output <dir>         Output directory where to write the results to.
+                           (default: $outdir)
+
+  -l -label  <label>...    Segmentation label: 1=CSF, 2=cGM, 3=WM, 4=BG, 5=VENT, 6=Cerebellum+Brainstem, 7=dGM.
+                           (default: all, excl. BG)
+
+  -m -metric <metric>      Overlap metric: Sensitivity, Specificity, Dice, Jaccard.
+                           (default: Dice)
+
+  -h -help                 Print help and exit.
+  -v -verbose              Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# auxiliary functions
+# ==============================================================================
+
+label_name()
+{
+  [ $1 -eq 1 ] && echo -n 'CSF'
+  [ $1 -eq 2 ] && echo -n 'cGM'
+  [ $1 -eq 3 ] && echo -n 'WM'
+  [ $1 -eq 4 ] && echo -n 'Background'
+  [ $1 -eq 5 ] && echo -n 'Ventricles'
+  [ $1 -eq 6 ] && echo -n 'Cerebellum+Brainstem'
+  [ $1 -eq 7 ] && echo -n 'dGM'
+  [ $1 -lt 0 -o $1 -gt 7 ] && echo -n $1
+}
+
+# ==============================================================================
+# main
+# ==============================================================================
+
+verbose=0
+options=()
+label=(1 2 3 5 6 7)
+metric='Dice'
+sublst=
+agelst="$appdir/etc/age.csv"
+config="$appdir/etc/config.sh"
+indir="$(cd  "$appdir/../eval/warped-labels" && pwd)"
+outdir="$(cd "$appdir/../eval/overlap"       && pwd)"
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+  esac
+  let o++
+done
+. "$config"  || error "Failed to load configuration from file: $config"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i|-input)       optarg indir  $1 "$2"; shift; ;;
+    -o|-output)      optarg outdir $1 "$2"; shift; ;;
+    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -c|-config)      shift; ;; # already loaded
+    -l|-label)       label=(); optargs label "$@"; shift ${#label[@]}; ;;
+    -m|-metric)      optarg $1 "$2"; shift; ;;
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose)     let verbose++; ;;
+    *)               options=("${options[@]}" "$1"); ;;
+  esac
+  shift
+done
+
+if [ -z "$agelst" ]; then
+  error "Missing CSV file with subject IDs and corresponding ages!"
+fi
+if [ -z "$sublst" ]; then
+  sublst="$appdir/etc/sub.lst"
+  [ -f "$sublst" ] || sublst="$agelst"
+fi
+read_sublst subids "$sublst"
+
+csv_header=''
+for id2 in ${subids[@]}; do
+  [[ $id2 == ${subids[0]} ]] || csv_header="$csv_header,"
+  csv_header="$csv_header$id2"
+done
+
+mkdir -p "$outdir" || exit 1
+
+for lbl in ${label[@]}; do
+  structure=$(label_name $lbl)
+  [ $verbose -le 0 ] || echo "Evaluating pairwise overlap for $structure..."
+  csv_name="$outdir/$metric-${structure}.csv"
+  rm -f "${csv_name}"
+  echo "${csv_header}" >> "${csv_name}"
+  t=0
+  for id1 in ${subids[@]}; do
+    let t++
+    [ $verbose -le 1 ] || echo "Evaluating pairwise overlap for $structure... $(printf %3d/%d $t ${#subids[@]}) (target=$id1)"
+    tgt="$indir/$id1/$id1-tissues.nii.gz"
+    src=()
+    for id2 in ${subids[@]}; do
+      src=("${src[@]}" "$indir/$id1/$id2-tissues.nii.gz")
+    done
+    overlap "$tgt" "${src[@]}" -v 0 -metric $metric -label $lbl -delim ',' >> "${csv_name}"
+    echo >> "${csv_name}"
+  done
+  [ $verbose -le 0 ] || echo "Evaluating pairwise overlap for $structure... done"
+done
+wait

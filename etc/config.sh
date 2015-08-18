@@ -1,15 +1,22 @@
 # IRTK installation
-PATH="/vol/biomedic/users/$USER/bin:$PATH"
-LD_LIBRARY_PATH="/vol/biomedic/users/$USER/lib"
+OPT="/vol/biomedic/users/$USER"
+PATH="$OPT/bin:$PATH"
+LD_LIBRARY_PATH="$OPT/lib:$OPT/mcr/v83/runtime/glnxa64:$OPT/mcr/v83/bin/glnxa64:$OPT/mcr/v83/sys/os/glnxa64"
 
 # input settings
 topdir="$appdir"                 # top-level/working directory
 imgdir='../images'               # anatomical brain images
+imgpre=''                        # image file name prefix
+imgsuf='_brain.nii.gz'           # image file name suffix
 lbldir='../labels'               # input tissue and structure segmentations
+lblpre=''                        # label image file name prefix
+lblsuf='.nii.gz'                 # label image file name suffix
 bgvalue=0                        # background value of skull-stripped images
 
 # reference for global normalization
 refdir='etc'                     # directory of reference image
+refpre=''                        # reference image file name prefix
+refsuf='.nii.gz'                 # reference image file name suffix
 refid='serag-40'                 # ID of reference image (optional)
                                  #
                                  # Set reference ID to empty string to compute age-
@@ -18,7 +25,7 @@ refid='serag-40'                 # ID of reference image (optional)
 
 # kernel regression
 epsilon=0.001                    # kernel weight threshold
-[ -n "$sigma" ] || sigma=1       # (default) standard deviation of Gaussian
+[ -n "$sigma" ] || sigma=0.5     # (default) standard deviation of Gaussian
 kernel="etc/kernel_sigma=$sigma" # directory containing temporal kernel files
 
 # output settings

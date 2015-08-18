@@ -33,6 +33,7 @@ Options:
   -c -config <config.sh>   Configuration file.
                            (default: $appdir/etc/config.sh)
 
+  -u -update               Overwrite existing DAGMan files.
   -h -help                 Print help and exit.
   -v -verbose              Enable verbose output messages.
 HELP
@@ -62,6 +63,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
     -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -u|-update)      update='true'; ;;
     -c|-config)      shift; ;; # already loaded
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose)     let verbose++; ;;
@@ -87,11 +89,14 @@ cd "$topdir" || error "Failed to change to top-level directory!"
 
 # atlas time points for which kernel was create either manually,
 # with another tool (e.g. MATLAB), or using the "kernel" shell script
-timepoints=()
-for doflst in $(ls "$kernel/weights_t="*".csv"); do
-  t=${f/*=}; t=${f/.csv}
-  timepoints=(${t[@]} $t)
-done
+timepoints=($(ls "$kernel/" | awk '{
+  if ($0 ~ /weights_t=[0-9]+(.[0-9]+)?.csv/) {
+    print gensub(/weights_t=([0-9.]+(.[0-9]+)?).csv/, "\\1", "g")
+  }
+}'))
+if [ ${#timepoints} -eq 0 ]; then
+  error "No regression kernels matching pattern \"$kernel/weights_t=*.csv\" found"
+fi
 
 # ==============================================================================
 # workflow
@@ -122,6 +127,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -dofins   "$dofdir/1.1_initial" \
           -dofdir   "$dofdir/1___affine"
+
+      # global normalization output
+      hdrdofs_opt="-invhdrdofs"
+      hdrdofs="$dofdir/1___affine/$refid"
 
     else
 
@@ -166,55 +175,116 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir2  "$dofdir/1.5_average" \
           -dofdir3  "$dofdir/1___affine"
 
+      # global normalization output
+      hdrdofs_opt="-hdrdofs"
+      hdrdofs="$dofdir/1___affine"
+
     fi
 
   end_dag
 
   # ----------------------------------------------------------------------------
+  # generate reference image/mask
+  average_node 'reference' -parent 'alignment' \
+      -subjects  "${subids[@]}" \
+      -imgdir    "$imgdir" -imgsuf '.nii.gz' \
+      -dofdir    "$dofdir/1___affine" \
+      -output    "$pardir/ref.nii.gz" \
+      -voxelwise -bgvalue "$bgvalue" -margin 5
+
+  # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point
-  begin_dag 'avgffds' -parent 'alignment' -splice
+  begin_dag 'avgffds' -parent 'reference' -splice
 
     # deformable registration
     ireg_node 'computeffds' \
         -model     "SVFFD" \
-        -par       "Multi-level transformation = None" \
-        -par       "Control point spacing      = 2.5"  \
-        -par       "No. of resolution levels   = 4"    \
-        -par       "Bending energy weight      = 1e-3" \
-        -par       "Jacobian penalty weight    = 1e-2" \
+        -par       "Multi-level transformation       = None" \
+        -par       "Control point spacing            = 2.5"  \
+        -par       "No. of resolution levels         = 4"    \
+        -par       "Bending energy weight            = 1e-3" \
+        -par       "Jacobian penalty weight          = 1e-2" \
+        -par       "Maximum streak of rejected steps = 2"    \
         -subjects  "${subids[@]}" \
         -bgvalue   "$bgvalue" \
-        -hdrdofs   "$dofdir/1___affine" \
+        $hdrdofs_opt "$hdrdofs" \
         -dofdir    "$dofdir/2.1_ffd" \
+        -dofins    "Id" \
+        -mask      "$pardir/ref.nii.gz" \
         -symmetric
 
-    # average dofs
+    # for each atlas time point...
     for t in ${timepoints[@]}; do
-      dofaverage_node "avgffds_$t" -parent 'computeffds' \
+
+      # average deformations
+      dofaverage_node "avgffd_$t" -parent 'computeffds' \
           -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2___avgffd/t=$t"
+          -dofdir "$dofdir/2.2_avgffd/t=$t" \
+          -dofs
+
+      # compose final average dofs
+      ffdcompose_node "avgdof_$t" -parent "avgffd_$t" \
+          -sublst  "$kernel/weights_t=$t.csv" \
+          -dofdir1 "$dofdir/1___affine" \
+          -dofdir2 "$dofdir/2.2_avgffd/t=$t" \
+          -dofdir3 "$dofdir/2___fluid/t=$t"
+
     done
 
   end_dag
 
   # ----------------------------------------------------------------------------
   # make anatomical atlas images
-  #begin_dag 'anatomy' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'anatomy' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+
+      average_node "template_$t" -voxelwise \
+          -sublst "$kernel/weights_t=$t.csv" \
+          -imgdir "$imgdir" -imgsuf '.nii.gz' \
+          -dofdir "$dofdir/2___fluid/t=$t" \
+          -output "$outdir/template/t2w_$t.nii.gz" \
+ 
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  #begin_dag 'tissues' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'tissues' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+      for l in {1..7}; do
+
+        average_node "tissue_${l}_${t}" -voxelwise -label $l \
+            -sublst "$kernel/weights_t=$t.csv" \
+            -imgdir "$lbldir" -imgsuf '-tissues.nii.gz' \
+            -dofdir "$dofdir/2___fluid/t=$t" \
+            -output "$outdir/pbmaps/$t/tissue_$l.nii.gz" \
+ 
+      done
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  #begin_dag 'structures' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
+  begin_dag 'structures' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+      for l in {1..87}; do
+
+        average_node "structure_${l}_${t}" -voxelwise -label $l \
+            -sublst "$kernel/weights_t=$t.csv" \
+            -imgdir "$lbldir" -imgsuf '-all.nii.gz' \
+            -dofdir "$dofdir/2___fluid/t=$t" \
+            -output "$outdir/pbmaps/$t/structure_$l.nii.gz" \
+ 
+      done
+    done
+
+  end_dag
 
   # ----------------------------------------------------------------------------
   # construct longitudinal growth model
