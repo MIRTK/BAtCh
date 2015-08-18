@@ -97,6 +97,11 @@ renewable lifetime of a TGT is longer than the expected runtime of the DAGMan
 job. At the moment, this is not the case at Imperial's DoC, where the maximum
 lifetime is only 10 hours.
 
+Another, and possibly better, option is to set up a cron job that periodically
+obtains a new Kerberos ticket. Details on how this can be setup at DoC are
+available to BioMedIA members at
+http://biomedic.doc.ic.ac.uk/index.php?n=Internal.KerberosTickets.
+
 The transformations computed during the atlas construction are written to
 subdirectories within the configured **dofdir** (default: **../dofs**) and the
 final atlas data is written to the configured **outdir** (default: **../atlas**).
