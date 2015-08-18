@@ -99,7 +99,7 @@ while [ $# -gt 0 ]; do
                      outdir="$(cd "$appdir/../eval/warped-images" && pwd)"
                      prefix=''; suffix='.nii.gz'
                      interp='linear'; ;;
-    -tissues)        indir="$(cd "$appdir/$lbldir" && pwd)"
+    -labels)         indir="$(cd "$appdir/$lbldir" && pwd)"
                      outdir="$(cd "$appdir/../eval/warped-labels" && pwd)"
                      prefix=''; suffix='-tissues.nii.gz'
                      interp='nn'; ;;
@@ -137,22 +137,24 @@ for id1 in ${subids[@]}; do
   let t++
   [ $verbose -le 1 ] || echo "Transforming images to space of subject $id1... $(printf %3d/%d $t ${#subids[@]})"
   mkdir -p "$outdir/$id1" || exit 1
-  (
-    # resample target in affine reference space
-    $appdir/bin/transformation "$indir/$prefix$id1$suffix" \
-                               "$outdir/$id1/$prefix$id1$suffix" \
-                               -dof "$dofdir/1___affine/$id1.dof.gz" \
-                               -dofin identity \
-                               -matchInputType \
-                               -target "$pardir/ref.nii.gz" \
-                               -nn > /dev/null
-    # transform resampled target back to original target space
-    $appdir/bin/headertool "$outdir/$id1/$prefix$id1$suffix" \
-                           "$outdir/$id1/$prefix$id1$suffix" \
-                           -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
-                           > /dev/null
-  ) &
-  pid=(${pid[@]} $!)
+  if [ ! -f "$outdir/$id1/$prefix$id1$suffix" ]; then
+    (
+      # resample target in affine reference space
+      $appdir/bin/transformation "$indir/$prefix$id1$suffix" \
+                                 "$outdir/$id1/$prefix$id1$suffix" \
+                                 -dof "$dofdir/1___affine/$id1.dof.gz" \
+                                 -dofin identity \
+                                 -matchInputType \
+                                 -target "$pardir/ref.nii.gz" \
+                                 -nn > /dev/null
+      # transform resampled target back to original target space
+      $appdir/bin/headertool "$outdir/$id1/$prefix$id1$suffix" \
+                             "$outdir/$id1/$prefix$id1$suffix" \
+                             -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
+                             > /dev/null
+    ) &
+    pid=(${pid[@]} $!)
+  fi
   for id2 in ${subids[@]}; do
     [[ $id1 != $id2 ]] || continue
     if [ ${#pid[@]} -eq 8 ]; then
@@ -160,22 +162,24 @@ for id1 in ${subids[@]}; do
       unset pid[0]
       pid=(${pid[@]})
     fi
-    (
-      # deform and resample source in affine reference space
-      $appdir/bin/transformation "$indir/$prefix$id2$suffix" \
-                                 "$outdir/$id1/$prefix$id2$suffix" \
-                                 -dof   "$dofdir/1___affine/$id2.dof.gz" \
-                                 -dofin "$dofdir/2.1_ffd/$id1/$id2.dof.gz" \
-                                 -matchInputType \
-                                 -target "$pardir/ref.nii.gz" \
-                                 -nn > /dev/null
-      # transform warped source to original target space
-      $appdir/bin/headertool "$outdir/$id1/$prefix$id2$suffix" \
-                             "$outdir/$id1/$prefix$id2$suffix" \
-                             -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
-                             > /dev/null
-    ) &
-    pid=(${pid[@]} $!)
+    if [ ! -f "$outdir/$id1/$prefix$id2$suffix" ]; then
+      (
+        # deform and resample source in affine reference space
+        $appdir/bin/transformation "$indir/$prefix$id2$suffix" \
+                                   "$outdir/$id1/$prefix$id2$suffix" \
+                                   -dof   "$dofdir/1___affine/$id2.dof.gz" \
+                                   -dofin "$dofdir/2.1_ffd/$id1/$id2.dof.gz" \
+                                   -matchInputType \
+                                   -target "$pardir/ref.nii.gz" \
+                                   -nn > /dev/null
+        # transform warped source to original target space
+        $appdir/bin/headertool "$outdir/$id1/$prefix$id2$suffix" \
+                               "$outdir/$id1/$prefix$id2$suffix" \
+                               -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
+                               > /dev/null
+      ) &
+      pid=(${pid[@]} $!)
+    fi
   done
   wait && pid=()
   [ $verbose -le 1 ] || echo "Transforming images to space of subject $id1... done"
