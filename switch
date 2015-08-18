@@ -1,22 +1,25 @@
 #! /bin/bash
 
-[ $# -eq 3 -o $# -eq 4 ] || { echo "usage: $(basename $0) [<rev>] <ds> <be> <lj>" 1>&2; exit 1; }
+[ $# -eq 6 -o $# -eq 7 ] || { echo "usage: $(basename $0) [<rev>] <ds> <be> <lj> <ni> <bch> (sym|ic)" 1>&2; exit 1; }
 
-if [ $# -eq 4 ]; then
+if [ $# -eq 7 ]; then
   rev=$1
   shift
 else
   rev=$(bin/ireg -revision)
 fi
-ds=$1
-be=$2
-lj=$3
+ds=$1  # final control point spacing
+be=$2  # bending energy weight
+lj=$3  # log Jacobian penalty weight
+ni=$4  # numerical integration method
+bch=$5 # no. of BCH terms
+fn=$6  # sym(metric) or i(nverse) c(onsistent) energy
 
 pardir="dag/avgffds/computeffds"
 dofdir="../dofs"
 resdir="../eval"
 
-parid="$(printf _ds=%1.1f_be=%1.5f_lj=%1.5f $ds $be $lj)"
+parid="$(printf '_ds=%1.1f_be=%1.5f_lj=%1.5f_ni=%s_bch=%d_%s' $ds $be $lj $ni $bch $fn)"
 dofid="ireg=$rev$parid"
 
 if [ ! -f "$pardir/ireg$parid.par" ]; then
