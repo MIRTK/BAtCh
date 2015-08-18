@@ -1,0 +1,54 @@
+#! /bin/bash
+
+[ $# -eq 6 -o $# -eq 7 ] || { echo "usage: $(basename $0) [<rev>] <ds> <be> <lj> <ni> <bch> (sym|ic)" 1>&2; exit 1; }
+
+if [ $# -eq 7 ]; then
+  rev=$1
+  shift
+else
+  rev=$(bin/ireg -revision)
+fi
+ds=$1  # final control point spacing
+be=$2  # bending energy weight
+lj=$3  # log Jacobian penalty weight
+ni=$4  # numerical integration method
+bch=$5 # no. of BCH terms
+fn=$6  # sym(metric) or i(nverse) c(onsistent) energy
+
+pardir="dag/avgffds/computeffds"
+dofdir="../dofs"
+resdir="../eval"
+
+parid="$(printf '_ds=%1.1f_be=%1.5f_lj=%1.5f_ni=%s_bch=%d_%s' $ds $be $lj $ni $bch $fn)"
+dofid="ireg=$rev$parid"
+
+if [ ! -f "$pardir/ireg$parid.par" ]; then
+  echo "Missing parameter file: $pardir/ireg$parid.par"
+  exit 1
+fi
+
+try() { echo "$@" && "$@" 2> /dev/null; }
+run() { echo "$@" && "$@" || exit 1; }
+
+run mkdir -p "$dofdir/$dofid/2.1_ffd"
+run mkdir -p "$dofdir/$dofid/2.2_avgffd"
+run mkdir -p "$dofdir/$dofid/2___fluid"
+run mkdir -p "$resdir/$dofid/overlap"
+run mkdir -p "$resdir/$dofid/warped-labels"
+run mkdir -p "$resdir/$dofid/warped-images"
+
+try unlink "$pardir/ireg.par"
+try unlink "$dofdir/2.1_ffd"
+try unlink "$dofdir/2.2_avgffd"    
+try unlink "$dofdir/2___fluid"
+try unlink "$resdir/overlap"
+try unlink "$resdir/warped-labels"
+try unlink "$resdir/warped-images"
+
+run ln -s "ireg$parid.par"       "$pardir/ireg.par"
+run ln -s "$dofid/2.1_ffd"       "$dofdir/2.1_ffd"
+run ln -s "$dofid/2.2_avgffd"    "$dofdir/2.2_avgffd"
+run ln -s "$dofid/2___fluid"     "$dofdir/2___fluid"
+run ln -s "$dofid/overlap"       "$resdir/overlap"
+run ln -s "$dofid/warped-labels" "$resdir/warped-labels"
+run ln -s "$dofid/warped-images" "$resdir/warped-images"
