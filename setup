@@ -101,46 +101,70 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # global normalization (translation, rotation, and scale)
   begin_dag 'alignment' -splice
 
-    # initialize transformations
-    ireg_node 'initdofs' \
-        -model    "Similarity" \
-        -subjects "${subids[@]}" \
-        -dofdir   "$dofdir/1.1_initial"
+    if [ -n "$refid" ]; then
 
-    # affine registration
-    ireg_node 'affinereg' -parent 'initdofs' \
-        -model    "Affine" -par "Allow shearing = No" \
-        -subjects "${subids[@]}" \
-        -bgvalue  "$bgvalue" \
-        -dofins   "$dofdir/1.1_initial" \
-        -dofdir   "$dofdir/1.2_affine"
+      # initialize transformations
+      ireg_node 'initdofs' \
+          -model    "Similarity" \
+          -refid    "$refid" \
+          -refdir   "$refdir" \
+          -subjects "${subids[@]}" \
+          -dofdir   "$dofdir/1.1_initial"
 
-    # average dofs
-    dofaverage_node 'avgdofs1' -parent 'affinereg' \
-        -subjects "${subids[@]}" \
-        -dofins   "$dofdir/1.2_affine" \
-        -dofdir   "$dofdir/1.3_average"
+      # affine registration
+      ireg_node 'affinereg' -parent 'initdofs' \
+          -model    "Affine" -par "Allow shearing = No" \
+          -refid    "$refid" \
+          -refdir   "$refdir" \
+          -subjects "${subids[@]}" \
+          -bgvalue  "$bgvalue" \
+          -dofins   "$dofdir/1.1_initial" \
+          -dofdir   "$dofdir/1___affine"
 
-    # affine refinement
-    ireg_node 'refine' -parent 'avgdofs1' \
-        -model    "Affine" -par "Allow shearing = No" \
-        -subjects "${subids[@]}" \
-        -bgvalue  "$bgvalue" \
-        -hdrdofs  "$dofdir/1.3_average" \
-        -dofdir   "$dofdir/1.4_refined"
+    else
 
-    # average dofs
-    dofaverage_node 'avgdofs2' -parent 'refine' \
-        -subjects "${subids[@]}" \
-        -dofins   "$dofdir/1.4_refined" \
-        -dofdir   "$dofdir/1.5_average"
+      # initialize transformations
+      ireg_node 'initdofs' \
+          -model    "Similarity" \
+          -subjects "${subids[@]}" \
+          -dofdir   "$dofdir/1.1_initial"
 
-    # compose average dofs
-    dofcombine_node 'finalize' -parent 'avgdofs2' \
-        -subjects "${subids[@]}" \
-        -dofdir1  "$dofdir/1.3_average" \
-        -dofdir2  "$dofdir/1.5_average" \
-        -dofdir3  "$dofdir/1___affine"
+      # affine registration
+      ireg_node 'affinereg' -parent 'initdofs' \
+          -model    "Affine" -par "Allow shearing = No" \
+          -subjects "${subids[@]}" \
+          -bgvalue  "$bgvalue" \
+          -dofins   "$dofdir/1.1_initial" \
+          -dofdir   "$dofdir/1.2_affine"
+
+      # average dofs
+      dofaverage_node 'avgdofs1' -parent 'affinereg' \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.2_affine" \
+          -dofdir   "$dofdir/1.3_average"
+
+      # affine refinement
+      ireg_node 'refine' -parent 'avgdofs1' \
+          -model    "Affine" -par "Allow shearing = No" \
+          -subjects "${subids[@]}" \
+          -bgvalue  "$bgvalue" \
+          -hdrdofs  "$dofdir/1.3_average" \
+          -dofdir   "$dofdir/1.4_refined"
+
+      # average dofs
+      dofaverage_node 'avgdofs2' -parent 'refine' \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.4_refined" \
+          -dofdir   "$dofdir/1.5_average"
+
+      # compose average dofs
+      dofcombine_node 'finalize' -parent 'avgdofs2' \
+          -subjects "${subids[@]}" \
+          -dofdir1  "$dofdir/1.3_average" \
+          -dofdir2  "$dofdir/1.5_average" \
+          -dofdir3  "$dofdir/1___affine"
+
+    fi
 
   end_dag
 
@@ -150,12 +174,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
     # deformable registration
     ireg_node 'computeffds' \
-        -model     "BSplineSVFFD" \
-        -par       "Multi-level transformation       = None" \
-        -par       "Control point spacing            = 2.5"  \
-        -par       "No. of resolution levels         = 4"    \
-        -par       "Bending energy weight            = 1e-3" \
-        -par       "Jacobian penalty weight          = 1e-2" \
+        -model     "SVFFD" \
+        -par       "Multi-level transformation = None" \
+        -par       "Control point spacing      = 2.5"  \
+        -par       "No. of resolution levels   = 4"    \
+        -par       "Bending energy weight      = 1e-3" \
+        -par       "Jacobian penalty weight    = 1e-2" \
         -subjects  "${subids[@]}" \
         -bgvalue   "$bgvalue" \
         -hdrdofs   "$dofdir/1___affine" \
