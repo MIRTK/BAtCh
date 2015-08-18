@@ -149,7 +149,7 @@ ireg_node()
 
     # add job nodes
     local n t s prefile pre post
-    if [ -n "$ref" ]; then
+    if [ -n "$refid" ]; then
       n=0
       for id in "${ids[@]}"; do
         let n++
