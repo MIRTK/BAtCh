@@ -80,10 +80,10 @@ submit new jobs and monitor running jobs. The current Imperial College London
 Department of Computing (DoC) HTCondor installation uses Kerberos v5
 authentication. The user running the DAGMan job must periodically renew
 their Kerberos ticket granting ticket (TGT). This can be done by executing
-the **runme** launcher script instead of calling **condor_submit_dag** directly:
+the **submit** script instead of calling **condor_submit_dag** directly:
 
 ```shell
-./runme
+./submit
 ```
 
 This script will replace the *condor_dagman* executable usually submitted to
