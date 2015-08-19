@@ -27,8 +27,13 @@ ireg_node()
   local parent=()
   local refid=
   local refdir=
+  local refpre=''
+  local refsuf='.nii.gz'
   local mask=
   local ids=
+  local imgpre=
+  local imgsuf='.nii.gz'
+  local dofsuf='.dof.gz'
   local model=
   local mask=
   local fidelity='SIM[Similarity](I1, I2 o T)'
@@ -46,8 +51,13 @@ ireg_node()
       -parent)             optargs parent    "$@"; shift ${#parent[@]}; ;;
       -refid)              optarg  refid      $1 "$2"; shift; ;;
       -refdir)             optarg  refdir     $1 "$2"; shift; ;;
+      -refpre)             optarg  refpre     $1 "$2"; shift; ;;
+      -refsuf)             optarg  refsuf     $1 "$2"; shift; ;;
       -mask)               optarg  mask       $1 "$2"; shift; ;;
       -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
+      -imgpre)             optarg  imgpre     $1 "$2"; shift; ;;
+      -imgsuf)             optarg  imgsuf     $1 "$2"; shift; ;;
+      -dofsuf)             optarg  dofsuf     $1 "$2"; shift; ;;
       -model)              optarg  model      $1 "$2"; shift; ;;
       -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof'; ;;
       -invhdrdofs)         optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof_i'; ;;
@@ -97,15 +107,15 @@ ireg_node()
     if [ -n "$refid" -a -n "$refdir" ]; then
       if [ -n "$hdrdofs" ]; then
         sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
-        sub="$sub $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
+        sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
       else
         sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
     else
       if [ -n "$hdrdofs" ]; then
         sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf'"
-        [ -n "$refid" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target).dof.gz'"
-        sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
+        [ -n "$refid" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target)$dofsuf'"
+        sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
       else
         sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
@@ -114,10 +124,10 @@ ireg_node()
       if [[ "$dofins" == "Id" ]]; then
         sub="$sub -dofin Id"
       else
-        sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz'"
+        sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
       fi
     }
-    [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source).dof.gz'"
+    [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source)$dofsuf'"
     [ -z "$mask"   ] || sub="$sub -mask '$mask'"
     sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
     sub="$sub\""
@@ -129,7 +139,7 @@ ireg_node()
     # create generic dofinvert submission script
     if [[ $ic == true ]] && [ -z "$refid" ] ; then
       # command used to invert inverse-consistent transformation
-      local sub="arguments    = \"'$dofdir/\$(target)/\$(source).dof.gz' '$dofdir/\$(source)/\$(target).dof.gz'\""
+      local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
       sub="$sub\noutput       = $_dagdir/\$(target)/dofinv_\$(target),\$(source).out"
       sub="$sub\nerror        = $_dagdir/\$(target)/dofinv_\$(target),\$(source).out"
       sub="$sub\nqueue"
@@ -180,7 +190,7 @@ ireg_node()
                                      -var     "target=\"$refid\"" \
                                      -var     "source=\"$id\""
         add_edge "imgreg_$refid,$id" 'mkdirs'
-        [ ! -f "$dofdir/$refid/$id.dof.gz" ] || node_done "imgreg_$refid,$id"
+        [ ! -f "$dofdir/$refid/$id$dofsuf" ] || node_done "imgreg_$refid,$id"
       done
     else
       n=0
@@ -202,14 +212,14 @@ ireg_node()
                                       -var     "target=\"$id1\"" \
                                       -var     "source=\"$id2\""
           add_edge "imgreg_$id1,$id2" 'mkdirs'
-          [ ! -f "$dofdir/$id1/$id2.dof.gz" ] || node_done "imgreg_$id1,$id2"
+          [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "imgreg_$id1,$id2"
           # node to invert inverse-consistent transformation
           if [[ $ic == true ]] && [ -n "$dofdir" ]; then
             add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
                                         -var     "target=\"$id1\"" \
                                         -var     "source=\"$id2\""
             add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
-            [ ! -f "$dofdir/$id2/$id1.dof.gz" ] || node_done "dofinv_$id1,$id2"
+            [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "dofinv_$id1,$id2"
           fi
           info "  Added job `printf '%3d of %d' $n $N`"
         done
@@ -351,6 +361,61 @@ transformation_node()
         }
         info "  Added job `printf '%3d of %d' $n $N`"
       done
+    done
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# add node for inverting all transformations
+dofinvert_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local dofins=
+  local dofdir=
+  local dofsuf='.dof.gz'
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -dofins)   optarg  dofins $1 "$2"; shift; ;;
+      -dofdir)   optarg  dofdir $1 "$2"; shift; ;;
+      -dofsuf)   optarg  dofsuf $1 "$2"; shift; ;;
+      -*)        error "dofinvert_node: invalid option: $1"; ;;
+      *)         [ -z "$node" ] || error "dofinvert_node: too many arguments"
+                 node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"   ] || error "dofinvert_node: missing name argument"
+  [ -n "$dofins" ] || error "dofinvert_node: missing -dofins argument"
+  [ -n "$dofdir" ] || error "dofinvert_node: missing -dofdir argument"
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create generic dofinvert submission script
+    local sub="arguments = \"'$dofins/\$(id)$dofsuf' '$dofdir/\$(id)$dofsuf'\""
+    sub="$sub\noutput    = $_dagdir/dofinv_\$(id).out"
+    sub="$sub\nerror     = $_dagdir/dofinv_\$(id).out"
+    sub="$sub\nqueue"
+    make_sub_script "dofinv.sub" "$sub" -executable dofinvert
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add dofinvert nodes to DAG
+    for id in "${ids[@]}"; do
+      add_node "dofinv_$id" -subfile "dofinv.sub" -var "id=\"$id\""
+      add_edge "dofinv_$id" 'mkdirs'
+      [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofinv_$id"
     done
 
   }; end_dag

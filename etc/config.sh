@@ -8,9 +8,12 @@ topdir="$appdir"                 # top-level/working directory
 imgdir='../images'               # anatomical brain images
 imgpre=''                        # image file name prefix
 imgsuf='_brain.nii.gz'           # image file name suffix
-lbldir='../labels'               # input tissue and structure segmentations
-lblpre=''                        # label image file name prefix
-lblsuf='.nii.gz'                 # label image file name suffix
+lbldir='../labels'               # input tissue segmentations
+lblpre=''                        # tissue segmentation file name prefix
+lblsuf='-tissues.nii.gz'         # tissue segmentation file name suffix
+segdir='../labels'               # input structural segmentations
+segpre=''                        # structural segmentation file name prefix
+segsuf='-all.nii.gz'             # structural segmentation file name suffix
 bgvalue=0                        # background value of skull-stripped images
 
 # reference for global normalization
