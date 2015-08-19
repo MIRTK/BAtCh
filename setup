@@ -137,9 +137,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir   "$dofdir/1.2_affine"
 
       # invert transformations
-      dofinvert_node 'finalize' -parent 'affinereg'
+      dofinvert_node 'finalize' -parent 'affinereg' \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_affine"
+          -dofins   "$dofdir/1.2_affine" \
           -dofdir   "$dofdir/1___affine"
 
     else
@@ -217,7 +217,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -par       "Control point spacing            = 2.5"  \
         -par       "No. of resolution levels         = 4"    \
         -par       "Bending energy weight            = 1e-3" \
-        -par       "Jacobian penalty weight          = 1e-2" \
+        -par       "Jacobian penalty weight          = 0"    \
         -par       "Maximum streak of rejected steps = 2"    \
         -subjects  "${subids[@]}" \
         -imgpre    "$imgpre" \
@@ -270,7 +270,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  if [ $(find "$lbldir" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
+  if [ -d "$lbldir" ] && [ $(find "$lbldir" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
     begin_dag 'tissues' -parent 'avgffds' -splice
 
       for t in ${timepoints[@]}; do
@@ -292,7 +292,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  if [ $(find "$segdir" -name "$segpre*$segsuf" | wc -l) -gt 0 ]; then
+  if [ -d "$segdir" ] && [ $(find "$segdir" -name "$segpre*$segsuf" | wc -l) -gt 0 ]; then
     begin_dag 'structures' -parent 'avgffds' -splice
 
       for t in ${timepoints[@]}; do
