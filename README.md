@@ -73,11 +73,14 @@ Workflow Execution
 ==================
 
 The atlas construction workflow can be executed by simply submitting the
-**$dagdir/main.dag** to HTCondor using **condor_submit_dag**. However, as the
-DAGMan job will run for a long time which requires the periodic renewal of the
-obtained Kerberos v5 ticket granting ticket (TGT) used to authenticate with
-HTCondor such that DAGMan can submit pending jobs of the workflow, it is
-recommended to execute the **runme** script instead:
+**$dagdir/main.dag** to HTCondor using **condor_submit_dag**.
+
+The long running DAGMan job needs to have a valid authentication method to
+submit new jobs and monitor running jobs. The current Imperial College London
+Department of Computing (DoC) HTCondor installation uses Kerberos v5
+authentication. The user running the DAGMan job must periodically renew
+their Kerberos ticket granting ticket (TGT). This can be done by executing
+the **runme** launcher script instead of calling **condor_submit_dag** directly:
 
 ```shell
 ./runme
@@ -86,22 +89,25 @@ recommended to execute the **runme** script instead:
 This script will replace the *condor_dagman* executable usually submitted to
 HTCondor by a Bash script named **$bindir/dagman** which runs *condor_dagman* as
 background job and periodically reinitializes the Kerberos ticket cache using **kinit**.
-It therefore requires the password of the user who runs DAGMan. The runme script
-thus queries this password and writes it (plain text!) to the **dagman** Bash script.
-To circumvent exposure of the password, the Bash script is made read and executable
-only by the user who executed the runme script.
+To be able to do so without the user account password, it requires a user-generated
+kerb5.keytab file.
 
-An alternative approach uses **krenew** which does not require a user password
-to be available to the *dagman* script, but is only suitable if the maximum
-renewable lifetime of a TGT is longer than the expected runtime of the DAGMan
-job. At the moment, this is not the case at Imperial's DoC, where the maximum
-lifetime is only 10 hours.
+Alternatively, a cron job independently of this atlas creation workflow can be setup,
+which periodically obtains a new Kerberos ticket. Instructions are available to
+BioMedIA members at http://biomedic.doc.ic.ac.uk/index.php?n=Internal.KerberosTickets.
 
-Another, and possibly better, option is to set up a cron job that periodically
-obtains a new Kerberos ticket. Details on how this can be setup at DoC are
-available to BioMedIA members at
-http://biomedic.doc.ic.ac.uk/index.php?n=Internal.KerberosTickets.
+
+Output Files
+============
 
 The transformations computed during the atlas construction are written to
 subdirectories within the configured **dofdir** (default: **../dofs**) and the
-final atlas data is written to the configured **outdir** (default: **../atlas**).
+final atlas data is written to the configured **outdir** (default: **..**).
+
+
+References
+==========
+
+- A. Schuh, M. Murgasova, A. Makropoulos, C. Ledig, S.J. Counsell, J.V. Hajnal, P. Aljabar, D. Rueckert,
+  "Construction of a 4D Brain Atlas and Growth Model using Diffeomorphic Registration",
+  MICCAI STIA Workshop, LNCS Volume 8682, pp. 27-37 (2014)

@@ -98,6 +98,7 @@ ireg_node()
     cfg="$cfg\nPadding value                    = $padding"
     cfg="$cfg\nMaximum streak of rejected steps = 1"
     cfg="$cfg\nStrict step length range         = No"
+    cfg="$cfg\nNo. of bins                      = 64"
     cfg="$cfg\n$params"
     parin="$_dagdir/ireg.cfg"
     write "$parin" "$cfg\n"
