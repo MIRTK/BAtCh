@@ -103,3 +103,11 @@ Output Files
 The transformations computed during the atlas construction are written to
 subdirectories within the configured **dofdir** (default: **../dofs**) and the
 final atlas data is written to the configured **outdir** (default: **..**).
+
+
+References
+==========
+
+- A. Schuh, M. Murgasova, A. Makropoulos, C. Ledig, S.J. Counsell, J.V. Hajnal, P. Aljabar, D. Rueckert,
+  "Construction of a 4D Brain Atlas and Growth Model using Diffeomorphic Registration",
+  MICCAI STIA Workshop, LNCS Volume 8682, pp. 27-37 (2014)

@@ -214,11 +214,11 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     ireg_node 'computeffds' \
         -model     "SVFFD" \
         -par       "Multi-level transformation       = None" \
-        -par       "Control point spacing            = 2.5"  \
-        -par       "No. of resolution levels         = 4"    \
-        -par       "Bending energy weight            = 1e-3" \
-        -par       "Jacobian penalty weight          = 0"    \
-        -par       "Maximum streak of rejected steps = 2"    \
+        -par       "Control point spacing            = 2.5" \
+        -par       "No. of resolution levels         = 4" \
+        -par       "Bending energy weight            = 0.005" \
+        -par       "Jacobian penalty weight          = 0" \
+        -par       "Maximum streak of rejected steps = 2" \
         -subjects  "${subids[@]}" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
