@@ -49,13 +49,13 @@ ireg_node()
   while [ $# -gt 0 ]; do
     case "$1" in
       -parent)             optargs parent    "$@"; shift ${#parent[@]}; ;;
-      -refid)              optarg  refid      $1 "$2"; shift; ;;
-      -refdir)             optarg  refdir     $1 "$2"; shift; ;;
-      -refpre)             optarg  refpre     $1 "$2"; shift; ;;
+      -refid)              refid="$2"; shift; ;;
+      -refdir)             refdir="$2"; shift; ;;
+      -refpre)             refpre="$2"; shift; ;;
       -refsuf)             optarg  refsuf     $1 "$2"; shift; ;;
       -mask)               optarg  mask       $1 "$2"; shift; ;;
       -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
-      -imgpre)             optarg  imgpre     $1 "$2"; shift; ;;
+      -imgpre)             imgpre="$2"; shift; ;;
       -imgsuf)             optarg  imgsuf     $1 "$2"; shift; ;;
       -dofsuf)             optarg  dofsuf     $1 "$2"; shift; ;;
       -model)              optarg  model      $1 "$2"; shift; ;;
@@ -103,7 +103,7 @@ ireg_node()
     write "$parin" "$cfg\n"
 
     # create generic ireg submission script
-    local sub="arguments    = \"-v"
+    local sub="arguments    = \""
     if [ -n "$refid" -a -n "$refdir" ]; then
       if [ -n "$hdrdofs" ]; then
         sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
@@ -641,7 +641,7 @@ average_node()
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
       -sublst)   optarg  idlst   $1 "$2"; shift; ;;
       -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
-      -imgpre)   optarg  imgpre  $1 "$2"; shift; ;;
+      -imgpre)   imgpre="$2"; shift; ;;
       -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
       -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
       -dofpre)   optarg  dofpre  $1 "$2"; shift; ;;
