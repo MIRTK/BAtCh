@@ -96,6 +96,7 @@ ireg_node()
     cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
     cfg="$cfg\nSimilarity measure               = $similarity"
     cfg="$cfg\nPadding value                    = $padding"
+    cfg="$cfg\nInterpolation mode               = Fast linear with padding"
     cfg="$cfg\nMaximum streak of rejected steps = 1"
     cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of bins                      = 64"
