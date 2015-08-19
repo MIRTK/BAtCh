@@ -139,7 +139,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # invert transformations
       dofinvert_node 'finalize' -parent 'affinereg' \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_affine" \
+          -dofins   "$dofdir/1.2_affine/$refid" \
           -dofdir   "$dofdir/1___affine"
 
     else
