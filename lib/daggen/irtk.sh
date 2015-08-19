@@ -36,7 +36,7 @@ ireg_node()
   local dofsuf='.dof.gz'
   local model=
   local mask=
-  local fidelity='SIM[Similarity](I1, I2 o T)'
+  local fidelity='SIM[Similarity](I(1), I(2) o T)'
   local similarity='NMI'
   local hdrdofs=
   local hdrdof_opt='-dof'
@@ -66,8 +66,8 @@ ireg_node()
       -par)                optarg  param      $1 "$2"; shift; params="$params\n$param"; ;;
       -similarity)         optarg  similarity $1 "$2"; shift; ;;
       -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
-      -inverse-consistent) ic='true'; fidelity='0.5 SIM[Forward similarity](I1, I2 o T) + 0.5 SIM[Backward similarity](I1 o T^-1, I2)'; ;;
-      -symmetric)          ic='true'; fidelity='SIM[Similarity](I1 o T^-0.5, I2 o T^0.5)'; ;;
+      -inverse-consistent) ic='true'; fidelity='0.5 SIM[Forward similarity](I(1), I(2) o T) + 0.5 SIM[Backward similarity](I(1) o T^-1, I(2))'; ;;
+      -symmetric)          ic='true'; fidelity='SIM[Similarity](I(1) o T^-0.5, I(2) o T^0.5)'; ;;
       -*)                  error "ireg_node: invalid option: $1"; ;;
       *)                   [ -z "$node" ] || error "ireg_node: too many arguments"
                            node=$1; ;;
