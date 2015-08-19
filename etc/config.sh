@@ -37,6 +37,7 @@ libdir='lib'                     # dependencies of job executables
 dagdir='dag'                     # DAG files for HTCondor DAGMan job
 logdir='log'                     # log files written by HTCondor jobs
 dofdir='../dofs'                 # transformations computed during atlas construction
+outdir='..'                      # top level directory of output atlas files
 update='false'                   # enable (true) or disable update of existing DAG files
 
 # HTCondor settings
