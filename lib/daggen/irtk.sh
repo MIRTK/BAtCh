@@ -633,7 +633,7 @@ average_node()
   local dofpre=
   local dofsuf='.dof.gz'
   local average=
-  local options=
+  local options='-v'
   local label margin bgvalue
 
   while [ $# -gt 0 ]; do
@@ -696,7 +696,7 @@ average_node()
                       -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
     # add average node to DAG
-    local sub="arguments = \"$average -images '$imglst'$options\""
+    local sub="arguments = \"$average -images '$imglst' $options\""
     sub="$sub\noutput    = $_dagdir/average.out"
     sub="$sub\nerror     = $_dagdir/average.out"
     sub="$sub\nqueue"
