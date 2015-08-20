@@ -25,12 +25,17 @@ ireg_node()
 {
   local node=
   local parent=()
-  local refid=
-  local refdir=
-  local refpre=''
-  local refsuf='.nii.gz'
+  local tgtdir=
+  local tgtid=
+  local tgtpre=
+  local tgtsuf='.nii.gz'
+  local srcdir=
+  local srcid=
+  local srcpre=
+  local srcsuf='.nii.gz'
   local mask=
   local ids=
+  local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
   local dofsuf='.dof.gz'
@@ -49,14 +54,19 @@ ireg_node()
   while [ $# -gt 0 ]; do
     case "$1" in
       -parent)             optargs parent    "$@"; shift ${#parent[@]}; ;;
-      -refid)              refid="$2"; shift; ;;
-      -refdir)             refdir="$2"; shift; ;;
-      -refpre)             refpre="$2"; shift; ;;
-      -refsuf)             optarg  refsuf     $1 "$2"; shift; ;;
+      -tgtid|-refid)       tgtid="$2";  shift; ;;
+      -srcid)              srcid="$2";  shift; ;;
+      -tgtdir|-refdir)     tgtdir="$2"; shift; ;;
+      -srcdir)             tgtdir="$2"; shift; ;;
+      -tgtpre|-refpre)     tgtpre="$2"; shift; ;;
+      -srcpre)             srcpre="$2"; shift; ;;
+      -imgpre)             imgpre="$2"; shift; ;;
+      -tgtsuf|-refsuf)     tgtsuf="$2"; shift; ;;
+      -srcsuf)             srcsuf="$2"; shift; ;;
+      -imgsuf)             optarg  imgsuf     $1 "$2"; shift; ;;
+      -imgdir)             optarg  imgdir     $1 "$2"; shift; ;;
       -mask)               optarg  mask       $1 "$2"; shift; ;;
       -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
-      -imgpre)             imgpre="$2"; shift; ;;
-      -imgsuf)             optarg  imgsuf     $1 "$2"; shift; ;;
       -dofsuf)             optarg  dofsuf     $1 "$2"; shift; ;;
       -model)              optarg  model      $1 "$2"; shift; ;;
       -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof'; ;;
@@ -76,11 +86,20 @@ ireg_node()
   done
   [ -n "$node"       ] || error "ireg_node: missing name argument"
   [ -n "$model"      ] || error "ireg_node: missing -model argument"
-  [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$refid" ] || error "ireg_node: not enough -subjects specified"
+  [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || error "ireg_node: not enough -subjects specified"
+  if [ -n "$tgtid" -a -n "$srcid" ]; then
+    error "ireg_node: either -tgtid or -srcid can be fixed, but not both"
+  fi
+  [ -n "$tgtdir"                ] || tgtdir="$imgdir"
+  [ -n "$tgtpre" -o -n "$tgtid" ] || tgtpre="$imgpre"
+  [ -n "$tgtsuf"                ] || tgtsuf="$imgsuf"
+  [ -n "$srcdir"                ] || srcdir="$imgdir"
+  [ -n "$srcpre" -o -n "$srcid" ] || srcpre="$imgpre"
+  [ -n "$srcsuf"                ] || srcsuf="$imgsuf"
 
   # number of registrations
   local N
-  if [ -n "$refid" ]; then
+  if [ -n "$tgtid" -o -n "$srcid" ]; then
     N=${#ids[@]}
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
@@ -105,40 +124,64 @@ ireg_node()
 
     # create generic ireg submission script
     local sub="arguments    = \""
-    if [ -n "$refid" -a -n "$refdir" ]; then
-      if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
-        sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
-      else
-        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
+    [ -z "$mask" ] || sub="$sub -mask '$mask'"
+    sub="$sub -parin '$parin'"
+    if [ -n "$tgtid" ]; then
+      sub="$sub -parout '$_dagdir/ireg_\$(source).par'"
+      sub="$sub -image '$tgtdir/$tgtpre$tgtid$tgtsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
+      [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
+      if [ -z "$dofins" ]; then
+        if [[ "$dofins" == "Id" ]]; then
+          sub="$sub -dofin Id"
+        else
+          sub="$sub -dofin '$dofins/\$(source)$dofsuf'"
+        fi
       fi
+      [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(source)$dofsuf'"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/imgreg_\$(source).out"
+      sub="$sub\nerror        = $_dagdir/imgreg_\$(source).out"
+    elif [ -n "$srcid" ]; then
+      sub="$sub -parout '$_dagdir/ireg_\$(target).par'"
+      sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf'"
+      [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target)$dofsuf'"
+      sub="$sub -image '$srcdir/$srcpre$srcid$srcsuf'"
+      if [ -z "$dofins" ]; then
+        if [[ "$dofins" == "Id" ]]; then
+          sub="$sub -dofin Id"
+        else
+          sub="$sub -dofin '$dofins/\$(target)$dofsuf'"
+        fi
+      fi
+      [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)$dofsuf'"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/imgreg_\$(target).out"
+      sub="$sub\nerror        = $_dagdir/imgreg_\$(target).out"
     else
+      sub="$sub -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
       if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf'"
-        [ -n "$refid" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target)$dofsuf'"
+        sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf' $hdrdof_opt '$hdrdofs/\$(target)$dofsuf'"
         sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
       else
         sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
-    fi
-    [ -z "$dofins" ] || {
-      if [[ "$dofins" == "Id" ]]; then
-        sub="$sub -dofin Id"
-      else
-        sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
+      [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source)$dofsuf'"
+      if [ -z "$dofins" ]; then
+        if [[ "$dofins" == "Id" ]]; then
+          sub="$sub -dofin Id"
+        else
+          sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
+        fi
       fi
-    }
-    [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source)$dofsuf'"
-    [ -z "$mask"   ] || sub="$sub -mask '$mask'"
-    sub="$sub -parin '$parin' -parout '$_dagdir/\$(target)/ireg_\$(target),\$(source).par'"
-    sub="$sub\""
-    sub="$sub\noutput       = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
-    sub="$sub\nerror        = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
+      sub="$sub\nerror        = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
+    fi
     sub="$sub\nqueue"
     make_sub_script "imgreg.sub" "$sub" -executable ireg
 
     # create generic dofinvert submission script
-    if [[ $ic == true ]] && [ -z "$refid" ] ; then
+    if [[ $ic == true ]] && [ -z "$tgtid" -a -z "$srcid" ] ; then
       # command used to invert inverse-consistent transformation
       local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
       sub="$sub\noutput       = $_dagdir/\$(target)/dofinv_\$(target),\$(source).out"
@@ -156,42 +199,49 @@ ireg_node()
     # than a PRE script for each registration job, which would require
     # the -maxpre option to avoid memory issues
     local pre=
-    if [ -n "$refid" ]; then
-      # directory for log files
-      pre="$pre\nmkdir -p '$_dagdir/$refid' || exit 1"
+    if [ -n "$tgtid" -o -n "$srcid" ]; then
+      # directory for output files
       if [ -n "$dofdir" ]; then
-        # directory for output files
-        pre="$pre\nmkdir -p '$dofdir/$refid' || exit 1"
+        pre="$pre\nmkdir -p '$dofdir' || exit 1"
       fi
     else
+      # directory for log files
       for id in "${ids[@]}"; do
-        # directory for log files
         pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
       done
+      # directory for output files
       if [ -n "$dofdir" ]; then
         pre="$pre\n"
         for id in "${ids[@]}"; do
-          # directory for output files
           pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
         done
       fi
     fi
-    make_script "mkdirs.sh" "$pre"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+    if [ -n "$pre" ]; then
+      make_script "mkdirs.sh" "$pre"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.out\nqueue"
+    fi
 
     # add job nodes
-    local n t s prefile pre post
-    if [ -n "$refid" ]; then
+    local n t s
+    if [ -n "$tgtid" ]; then
       n=0
       for id in "${ids[@]}"; do
         let n++
-        # node to register image to common reference
-        add_node "imgreg_$refid,$id" -subfile "imgreg.sub" \
-                                     -var     "target=\"$refid\"" \
-                                     -var     "source=\"$id\""
-        add_edge "imgreg_$refid,$id" 'mkdirs'
-        [ ! -f "$dofdir/$refid/$id$dofsuf" ] || node_done "imgreg_$refid,$id"
+        # node to register subject image to common reference
+        add_node "imgreg_$id" -subfile "imgreg.sub" -var "source=\"$id\""
+        [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
+        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
+      done
+    elif [ -n "$srcid" ]; then
+      n=0
+      for id in "${ids[@]}"; do
+        let n++
+        # node to register common reference to subject image
+        add_node "imgreg_$id" -subfile "imgreg.sub" -var "target=\"$id\""
+        [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
+        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
       done
     else
       n=0
@@ -505,18 +555,26 @@ dofcombine_node()
   local node=
   local parent=()
   local ids=()
+  local dofid1=
+  local dofid2=
+  local dofid3=
   local dofdir1=
   local dofdir2=
   local dofdir3=
+  local dofsuf='.dof.gz'
   local options=
 
   while [ $# -gt 0 ]; do
     case "$1" in
       -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -dofid1)   optarg  dofid1  $1 "$2"; shift; ;;
+      -dofid2)   optarg  dofid2  $1 "$2"; shift; ;;
+      -dofid3)   optarg  dofid3  $1 "$2"; shift; ;;
       -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
       -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
       -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
+      -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -invert1)  options="$options -invert1";  ;;
       -invert2)  options="$options -invert2"; ;;
       -*)        error "dofcombine_node: invalid option: $1"; ;;
@@ -529,14 +587,33 @@ dofcombine_node()
   [ -n "$dofdir1" ] || error "dofcombine_node: missing -dofdir1 argument"
   [ -n "$dofdir2" ] || error "dofcombine_node: missing -dofdir2 argument"
   [ -n "$dofdir3" ] || error "dofcombine_node: missing -dofdir3 argument"
+  if [ -n "$dofid3" ]; then
+    if [ -z "$dofid1" -o -z "$dofid2" ]; then
+      error "dofcombine_node: -dofid3 requires fixed -dofid1 and -dofid2"
+    fi
+  else
+    [ ${#ids[@]} -gt 0 ] || error "dofcombine_node: no -subjects specified"
+  fi
 
   info "Adding node $node..."
   begin_dag $node -splice || {
 
     # create generic dofcombine submission script
-    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'$options\""
-    sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
-    sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
+    local sub="arguments = \""
+    if [ -n "$dofid1" ]; then sub="$sub '$dofdir1/$dofid1$dofsuf'"
+    else                      sub="$sub '$dofdir1/\$(id)$dofsuf'"; fi
+    if [ -n "$dofid2" ]; then sub="$sub '$dofdir2/$dofid2$dofsuf'"
+    else                      sub="$sub '$dofdir2/\$(id)$dofsuf'"; fi
+    if [ -n "$dofid3" ]; then sub="$sub '$dofdir3/$dofid3$dofsuf'"
+    else                      sub="$sub '$dofdir3/\$(id)$dofsuf'"; fi
+    sub="$sub\""
+    if [ -n "$dofid3" ]; then
+      sub="$sub\noutput    = $_dagdir/dofcat_$dofid3.out"
+      sub="$sub\nerror     = $_dagdir/dofcat_$dofid3.out"
+    else
+      sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
+      sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
+    fi
     sub="$sub\nqueue"
     make_sub_script "dofcat.sub" "$sub" -executable dofcombine
 
@@ -545,12 +622,18 @@ dofcombine_node()
     add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                       -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
-    # add dofaverage nodes to DAG
-    for id in "${ids[@]}"; do
-      add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
-      add_edge "dofcat_$id" 'mkdirs'
+    # add dofcombine nodes to DAG
+    if [ -n "$dofid3" ]; then
+      add_node "dofcat_$dofid3" -subfile "dofcat.sub"
+      add_edge "dofcat_$dofid3" 'mkdirs'
       [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
-    done
+    else
+      for id in "${ids[@]}"; do
+        add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
+        add_edge "dofcat_$id" 'mkdirs'
+        [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
+      done
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -659,7 +742,7 @@ average_node()
     shift
   done
   [ -n "$node"    ] || error "average_node: missing name argument"
-  [ -n "$average" ] || error "average_node: missing -image argument"
+  [ -n "$average" ] || error "average_node: missing -output argument"
   [ -z "$imgdir"  ] || imgpre="$imgdir/$imgpre"
   [ -z "$dofdir"  ] || dofpre="$dofdir/$dofpre"
 

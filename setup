@@ -48,6 +48,7 @@ sublst=
 agelst="$appdir/etc/age.csv"
 config="$appdir/etc/config.sh"
 sigma=
+interimref='true'
 
 o=0
 while [ $o -lt $# ]; do
@@ -104,20 +105,23 @@ fi
 
 begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
+  hdrdofs="$dofdir/1___affine" # default directory of affine alignment transformations
+
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
   begin_dag 'alignment' -splice
 
-    if [ -n "$refid" ]; then
+    if [[ $interimref == 'false' ]] && [ -n "$refid" ]; then
 
       # initialize transformations
       ireg_node 'initdofs' \
           -model    "Similarity" \
-          -refdir   "$refdir" \
-          -refpre   "$refpre" \
-          -refid    "$refid" \
-          -refsuf   "$refsuf" \
           -subjects "${subids[@]}" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcid    "$refid" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -dofdir   "$dofdir/1.1_initial"
@@ -125,22 +129,17 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # affine registration
       ireg_node 'affinereg' -parent 'initdofs' \
           -model    "Affine" -par "Allow shearing = No" \
-          -refdir   "$refdir" \
-          -refpre   "$refpre" \
-          -refid    "$refid" \
-          -refsuf   "$refsuf" \
           -subjects "${subids[@]}" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcid    "$refid" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
           -dofins   "$dofdir/1.1_initial" \
-          -dofdir   "$dofdir/1.2_affine"
-
-      # invert transformations
-      dofinvert_node 'finalize' -parent 'affinereg' \
-          -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_affine" \
-          -dofdir   "$dofdir/1___affine"
+          -dofdir   "$hdrdofs"
 
     else
 
@@ -148,6 +147,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       ireg_node 'initdofs' \
           -model    "Similarity" \
           -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -dofdir   "$dofdir/1.1_initial"
@@ -156,6 +156,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       ireg_node 'affinereg' -parent 'initdofs' \
           -model    "Affine" -par "Allow shearing = No" \
           -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
@@ -172,6 +173,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       ireg_node 'refine' -parent 'avgdofs1' \
           -model    "Affine" -par "Allow shearing = No" \
           -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
@@ -184,12 +186,16 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofins   "$dofdir/1.4_refined" \
           -dofdir   "$dofdir/1.5_average"
 
+      # after construction of intermediate reference image,
+      # this reference is aligned with the user supplied reference
+      [ -z "$refid" ] || hdrdofs="$dofdir/1.6_affine"
+
       # compose average dofs
       dofcombine_node 'finalize' -parent 'avgdofs2' \
           -subjects "${subids[@]}" \
           -dofdir1  "$dofdir/1.3_average" \
           -dofdir2  "$dofdir/1.5_average" \
-          -dofdir3  "$dofdir/1___affine"
+          -dofdir3  "$hdrdofs"
 
     fi
 
@@ -202,9 +208,45 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       -imgdir    "$imgdir" \
       -imgpre    "$imgpre" \
       -imgsuf    "$imgsuf" \
-      -dofdir    "$dofdir/1___affine" \
+      -dofdir    "$hdrdofs" \
       -output    "$refdir/ref.nii.gz" \
       -voxelwise -bgvalue "$bgvalue" -margin 5
+
+  # ----------------------------------------------------------------------------
+  # align images to user supplied input reference
+  if [ -n "$refid" ]; then
+
+    begin_dag 'alignref' -parent 'reference' -splice
+
+      # register user reference to constructed affine reference
+      ireg_node 'regrefs' \
+          -model   "Similarity+Affine" -par "Allow shearing = No" \
+          -imgdir  "$refdir" \
+          -tgtid   "ref" \
+          -tgtsuf  ".nii.gz" \
+          -srcid   "$refid" \
+          -srcpre  "$refpre" \
+          -srcsuf  "$refsuf" \
+          -bgvalue "$bgvalue" \
+          -dofdir  "$refdir" \
+          -dofid   "ref"
+
+      # compose affine transformations: image -> auto-ref -> user-ref
+      dofcombine_node 'alignimgs' -parent 'regrefs' \
+          -subjects "${subids[@]}" \
+          -dofdir1  "$hdrdofs" \
+          -dofdir2  "$refdir" \
+          -dofdir3  "$dofdir/1___affine" \
+          -dofid2   "ref"
+
+      hdrdofs="$dofdir/1___affine"
+
+    end_dag
+
+    mask="$refdir/$refpre$refid$refsuf"
+  else
+    mask="$refdir/ref.nii.gz"
+  fi
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point
@@ -220,13 +262,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -par       "Jacobian penalty weight          = 0" \
         -par       "Maximum streak of rejected steps = 2" \
         -subjects  "${subids[@]}" \
+        -imgdir    "$imgdir" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -bgvalue   "$bgvalue" \
-        -hdrdofs   "$dofdir/1___affine" \
+        -hdrdofs   "$hdrdofs" \
         -dofins    "Id" \
         -dofdir    "$dofdir/2.1_ffd" \
-        -mask      "$refdir/ref.nii.gz" \
+        -mask      "$mask" \
         -symmetric
 
     # for each atlas time point...
