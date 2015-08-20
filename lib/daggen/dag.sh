@@ -240,6 +240,100 @@ add_node()
   local executable=
   local var=
   local vars=
+  local grpvar=
+  local grpval=()
+  local opt=
+  local i
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -executable) optarg  executable $1 "$2"; shift; ;;
+      -pre)        optarg  predesc    $1 "$2"; shift; ;;
+      -prefile)    optarg  prefile    $1 "$2"; shift; ;;
+      -sub)        optarg  subdesc    $1 "$2"; shift; ;;
+      -subfile)    optarg  subfile    $1 "$2"; shift; ;;
+      -post)       optarg  postdesc   $1 "$2"; shift; ;;
+      -postfile)   optarg  postfile   $1 "$2"; shift; ;;
+      -var)        optarg  var        $1 "$2"; shift; vars="$vars $var"; ;;
+      -grpvar)     optarg  grpvar     $1 "$2"; shift; ;;
+      -grpval)     optargs grpval "$@"; shift ${#grpval[@]}; ;;
+      *) error "add_node: invalid option or argument: $1"; ;;
+    esac
+    shift
+  done
+  [ -n "$name" ] || error "add_node: missing name argument"
+  [ -z "$grpvar" ] || [ ${#grpval[@]} -gt 0 ] || error "add_node: missing values for group variable"
+  # SUB description file
+  if [ -n "$subfile" ]; then
+    [ -z "$subdesc" ] || append "$topdir/$_dagdir/$subfile" "$subdesc"
+  else
+    [ -n "$executable" ] || error "add_node: missing -executable or -subfile"
+    subfile=$name.sub
+    make_sub_script "$subfile" "$subdesc" -executable "$executable"
+  fi
+  if [ -n "$grpvar" ]; then
+    if [ ! -f "$topdir/$_dagdir/$subfile.${#grpval[@]}" ]; then
+      append "$topdir/$_dagdir/$subfile.${#grpval[@]}" "$(awk '
+      BEGIN { is_header = 1; }
+      {
+        if ($0 ~ /^arguments/) { is_header = 0; }
+        if (is_header == 1) { print; }
+      }' "$topdir/$_dagdir/$subfile")"
+      i=1
+      while [ $i -le ${#grpval[@]} ]; do
+        append "$topdir/$_dagdir/$subfile.${#grpval[@]}" "\n\n$(awk '
+        BEGIN { is_header = 1; }
+        {
+          if ($0 ~ /^arguments/) { is_header = 0; }
+          if (is_header == 0) { print gensub(/\$\('$grpvar'\)/, "$('$grpvar$i')", "g"); }
+        }' "$topdir/$_dagdir/$subfile")"
+        let i++
+      done
+    fi
+    subfile="$subfile.${#grpval[@]}"
+  fi
+  append "$_dagfile" "\nJOB $name $topdir/$_dagdir/$subfile\n"
+  # VARS
+  i=1
+  while [ $i -le ${#grpval[@]} ]; do
+    vars="$vars $grpvar$i=\"${grpval[$i-1]}\""
+    let i++
+  done
+  [ -z "$vars" ] || append "$_dagfile" "VARS $name $vars\n"
+  # PRE script (optional)
+  if [ -n "$prefile" ]; then
+    [ -z "$predesc" ] || append "$topdir/$_dagdir/$prefile" "$predesc"
+    append "$_dagfile" "SCRIPT PRE $name $topdir/$_dagdir/$prefile\n"
+  elif [ -n "$predesc" ]; then
+    prefile=$name.pre
+    make_script "$prefile" "$predesc"
+    append "$_dagfile" "SCRIPT PRE $name $topdir/$_dagdir/$prefile\n"
+  fi
+  # POST script (optional)
+  if [ -n "$postfile" ]; then
+    [ -z "$postdesc" ] || append "$postfile" "$postdesc"
+    append "$_dagfile" "SCRIPT POST $name $topdir/$_dagdir/$postfile\n"
+  elif [ -n "$postdesc" ]; then
+    postfile=$name.post
+    make_script "$postfile" "$postdesc"
+    append "$_dagfile" "SCRIPT POST $name $topdir/$_dagdir/$postfile\n"
+  fi
+}
+
+# ------------------------------------------------------------------------------
+# write DAGMan node scripts
+add_group_node()
+{
+  local name=$1; shift
+  local predesc=
+  local prefile=
+  local subdesc=
+  local subfile=
+  local postdesc=
+  local postfile=
+  local executable=
+  local var=
+  local vars=
 
   while [ $# -gt 0 ]; do
     case "$1" in

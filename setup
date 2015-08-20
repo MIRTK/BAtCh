@@ -124,7 +124,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
-          -dofdir   "$dofdir/1.1_initial"
+          -bgvalue  "$bgvalue" \
+          -dofdir   "$dofdir/1.1_initial" \
+          -group    20
 
       # affine registration
       ireg_node 'affinereg' -parent 'initdofs' \
@@ -138,8 +140,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
           -dofins   "$dofdir/1.1_initial" \
-          -dofdir   "$hdrdofs"
+          -dofdir   "$hdrdofs" \
+          -group    20
 
     else
 
@@ -150,7 +154,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
-          -dofdir   "$dofdir/1.1_initial"
+          -bgvalue  "$bgvalue" \
+          -dofdir   "$dofdir/1.1_initial" \
+          -group    20
 
       # affine registration
       ireg_node 'affinereg' -parent 'initdofs' \
@@ -160,8 +166,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
           -dofins   "$dofdir/1.1_initial" \
-          -dofdir   "$dofdir/1.2_affine"
+          -dofdir   "$dofdir/1.2_affine" \
+          -group    20
 
       # average dofs
       dofaverage_node 'avgdofs1' -parent 'affinereg' \
@@ -177,8 +185,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
           -hdrdofs  "$dofdir/1.3_average" \
-          -dofdir   "$dofdir/1.4_refined"
+          -dofdir   "$dofdir/1.4_refined" \
+          -group    20
 
       # average dofs
       dofaverage_node 'avgdofs2' -parent 'refine' \
@@ -186,7 +196,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofins   "$dofdir/1.4_refined" \
           -dofdir   "$dofdir/1.5_average"
 
-      # after construction of intermediate reference image,
+      # after construction of intermediate affine reference image,
       # this reference is aligned with the user supplied reference
       [ -z "$refid" ] || hdrdofs="$dofdir/1.6_affine"
 
@@ -215,7 +225,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # align images to user supplied input reference
   if [ -n "$refid" ]; then
-
     begin_dag 'alignref' -parent 'reference' -splice
 
       # register user reference to constructed affine reference
@@ -228,6 +237,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -srcpre  "$refpre" \
           -srcsuf  "$refsuf" \
           -bgvalue "$bgvalue" \
+          -padding "$bgvalue" \
           -dofdir  "$refdir" \
           -dofid   "ref"
 
@@ -239,10 +249,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir3  "$dofdir/1___affine" \
           -dofid2   "ref"
 
+      # use user supplied reference space for non-rigid atlas construction
       hdrdofs="$dofdir/1___affine"
 
     end_dag
-
     mask="$refdir/$refpre$refid$refsuf"
   else
     mask="$refdir/ref.nii.gz"
@@ -266,6 +276,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -bgvalue   "$bgvalue" \
+        -padding   "$bgvalue" \
         -hdrdofs   "$hdrdofs" \
         -dofins    "Id" \
         -dofdir    "$dofdir/2.1_ffd" \

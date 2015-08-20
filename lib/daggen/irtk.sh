@@ -38,7 +38,6 @@ ireg_node()
   local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
-  local dofsuf='.dof.gz'
   local model=
   local mask=
   local fidelity='SIM[Similarity](I(1), I(2) o T)'
@@ -47,9 +46,13 @@ ireg_node()
   local hdrdof_opt='-dof'
   local dofins=
   local dofdir=
+  local dofid=
+  local dofsuf='.dof.gz'
   local params=
+  local bgvalue=-32767
   local padding=-32767
   local ic='false'
+  local group=1
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -67,17 +70,20 @@ ireg_node()
       -imgdir)             optarg  imgdir     $1 "$2"; shift; ;;
       -mask)               optarg  mask       $1 "$2"; shift; ;;
       -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
-      -dofsuf)             optarg  dofsuf     $1 "$2"; shift; ;;
       -model)              optarg  model      $1 "$2"; shift; ;;
       -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof'; ;;
       -invhdrdofs)         optarg  hdrdofs    $1 "$2"; shift; hdrdof_opt='-dof_i'; ;;
       -dofins)             optarg  dofins     $1 "$2"; shift; ;;
       -dofdir)             optarg  dofdir     $1 "$2"; shift; ;;
+      -dofid)              optarg  dofid      $1 "$2"; shift; ;;
+      -dofsuf)             optarg  dofsuf     $1 "$2"; shift; ;;
       -par)                optarg  param      $1 "$2"; shift; params="$params\n$param"; ;;
       -similarity)         optarg  similarity $1 "$2"; shift; ;;
-      -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
+      -bgvalue)            optarg  bgvalue    $1 "$2"; shift; ;;
+      -padding)            optarg  padding    $1 "$2"; shift; ;;
       -inverse-consistent) ic='true'; fidelity='0.5 SIM[Forward similarity](I(1), I(2) o T) + 0.5 SIM[Backward similarity](I(1) o T^-1, I(2))'; ;;
       -symmetric)          ic='true'; fidelity='SIM[Similarity](I(1) o T^-0.5, I(2) o T^0.5)'; ;;
+      -group)              optarg group $1 "$2"; shift; ;;
       -*)                  error "ireg_node: invalid option: $1"; ;;
       *)                   [ -z "$node" ] || error "ireg_node: too many arguments"
                            node=$1; ;;
@@ -87,8 +93,14 @@ ireg_node()
   [ -n "$node"       ] || error "ireg_node: missing name argument"
   [ -n "$model"      ] || error "ireg_node: missing -model argument"
   [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || error "ireg_node: not enough -subjects specified"
-  if [ -n "$tgtid" -a -n "$srcid" ]; then
-    error "ireg_node: either -tgtid or -srcid can be fixed, but not both"
+  if [ -n "$dofid" ]; then
+    if [ -z "$tgtid" -o -z "$srcid" ]; then
+      error "ireg_node: -dofid requires a fixed -tgtid and -srcid"
+    fi
+  else
+    if [ -n "$tgtid" -a -n "$srcid" ]; then
+      error "ireg_node: -dofid required when -tgtid and -srcid are fixed"
+    fi
   fi
   [ -n "$tgtdir"                ] || tgtdir="$imgdir"
   [ -n "$tgtpre" -o -n "$tgtid" ] || tgtpre="$imgpre"
@@ -97,9 +109,14 @@ ireg_node()
   [ -n "$srcpre" -o -n "$srcid" ] || srcpre="$imgpre"
   [ -n "$srcsuf"                ] || srcsuf="$imgsuf"
 
+  local interp='Fast linear'
+  [ $padding -eq -32767 ] || interp="$interp with padding"
+
   # number of registrations
   local N
-  if [ -n "$tgtid" -o -n "$srcid" ]; then
+  if [ -n "$dofid" ]; then
+    N=1
+  elif [ -n "$tgtid" -o -n "$srcid" ]; then
     N=${#ids[@]}
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
@@ -114,8 +131,9 @@ ireg_node()
     local cfg="Transformation model             = $model"
     cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
     cfg="$cfg\nSimilarity measure               = $similarity"
+    cfg="$cfg\nBackground value                 = $bgvalue"
     cfg="$cfg\nPadding value                    = $padding"
-    cfg="$cfg\nInterpolation mode               = Fast linear with padding"
+    cfg="$cfg\nInterpolation mode               = $interp"
     cfg="$cfg\nMaximum streak of rejected steps = 1"
     cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of bins                      = 64"
@@ -127,16 +145,21 @@ ireg_node()
     local sub="arguments    = \""
     [ -z "$mask" ] || sub="$sub -mask '$mask'"
     sub="$sub -parin '$parin'"
-    if [ -n "$tgtid" ]; then
+    if [ -n "$tgtid" -a -n "$srcid" ]; then
+      sub="$sub -parout '$_dagdir/ireg_$tgtid,$srcid.par'"
+      sub="$sub -image '$tgtdir/$tgtpre$tgtid$tgtsuf' -image '$srcdir/$srcpre$srcid$srcsuf'"
+      sub="$sub -dofout '$dofdir/$dofid$dofsuf'"
+      sub="$sub\""
+      sub="$sub\noutput       = $_dagdir/imgreg_$tgtid,$srcid.out"
+      sub="$sub\nerror        = $_dagdir/imgreg_$tgtid,$srcid.out"
+    elif [ -n "$tgtid" ]; then
       sub="$sub -parout '$_dagdir/ireg_\$(source).par'"
       sub="$sub -image '$tgtdir/$tgtpre$tgtid$tgtsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
-      if [ -z "$dofins" ]; then
-        if [[ "$dofins" == "Id" ]]; then
-          sub="$sub -dofin Id"
-        else
-          sub="$sub -dofin '$dofins/\$(source)$dofsuf'"
-        fi
+      if [[ "$dofins" == "Id" ]]; then
+        sub="$sub -dofin Id"
+      elif [ -n "$dofins" ]; then
+        sub="$sub -dofin '$dofins/\$(source)$dofsuf'"
       fi
       [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(source)$dofsuf'"
       sub="$sub\""
@@ -147,12 +170,10 @@ ireg_node()
       sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf'"
       [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(target)$dofsuf'"
       sub="$sub -image '$srcdir/$srcpre$srcid$srcsuf'"
-      if [ -z "$dofins" ]; then
-        if [[ "$dofins" == "Id" ]]; then
-          sub="$sub -dofin Id"
-        else
-          sub="$sub -dofin '$dofins/\$(target)$dofsuf'"
-        fi
+      if [[ "$dofins" == "Id" ]]; then
+        sub="$sub -dofin Id"
+      elif [ -n "$dofins" ]; then
+        sub="$sub -dofin '$dofins/\$(target)$dofsuf'"
       fi
       [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)$dofsuf'"
       sub="$sub\""
@@ -167,12 +188,10 @@ ireg_node()
         sub="$sub -image '$imgdir/$imgpre\$(target)$imgsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
       fi
       [ -z "$dofdir" ] || sub="$sub -dofout '$dofdir/\$(target)/\$(source)$dofsuf'"
-      if [ -z "$dofins" ]; then
-        if [[ "$dofins" == "Id" ]]; then
-          sub="$sub -dofin Id"
-        else
-          sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
-        fi
+      if [[ "$dofins" == "Id" ]]; then
+        sub="$sub -dofin Id"
+      elif [ -n "$dofins" ]; then
+        sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
       fi
       sub="$sub\""
       sub="$sub\noutput       = $_dagdir/\$(target)/imgreg_\$(target),\$(source).out"
@@ -224,57 +243,159 @@ ireg_node()
                         -sub        "error = $_dagdir/mkdirs.out\nqueue"
     fi
 
-    # add job nodes
-    local n t s
-    if [ -n "$tgtid" ]; then
-      n=0
-      for id in "${ids[@]}"; do
-        let n++
-        # node to register subject image to common reference
-        add_node "imgreg_$id" -subfile "imgreg.sub" -var "source=\"$id\""
-        [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
-        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
-      done
+    local i j n t s is_done
+    # add node to register target to source
+    if [ -n "$tgtid" -a -n "$srcid" ]; then
+      n=1
+      add_node "imgreg_$tgtid,$srcid" -subfile "imgreg.sub"
+      [ -z "$pre" ] || add_edge "imgreg_$tgtid,$srcid" 'mkdirs'
+      [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "imgreg_$tgtid,$srcid"
+    # add nodes to register subject images to common reference
+    elif [ -n "$tgtid" ]; then
+      if [ $group -gt 1 ]; then
+        i=1
+        while [ $i -le ${#ids[@]} ]; do
+          let j=$i+$group-1
+          add_node "imgreg_$i-$j" -subfile "imgreg.sub" -grpvar source -grpval ${ids[@]:$i-1:$group}
+          [ -z "$pre" ] || add_edge "imgreg_$i-$j" 'mkdirs'
+          is_done='true'
+          for id in ${ids[@]:$i:$group}; do
+            if [ ! -f "$dofdir/$id$dofsuf" ]; then
+              is_done='false'
+              break
+            fi
+          done
+          [[ $is_done == false ]] || node_done "imgreg_$i-$j"
+          let i="$j+1"
+        done
+      else
+        n=0
+        for id in "${ids[@]}"; do
+          let n++
+          add_node "imgreg_$id" -subfile "imgreg.sub" -var "source=\"$id\""
+          [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
+          [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
+        done
+      fi
+    # add nodes to register common reference to subject images
     elif [ -n "$srcid" ]; then
-      n=0
-      for id in "${ids[@]}"; do
-        let n++
-        # node to register common reference to subject image
-        add_node "imgreg_$id" -subfile "imgreg.sub" -var "target=\"$id\""
-        [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
-        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
-      done
+      if [ $group -gt 1 ]; then
+        i=1
+        while [ $i -le ${#ids[@]} ]; do
+          let j=$i+$group-1
+          add_node "imgreg_$i-$j" -subfile "imgreg.sub" -grpvar target -grpval ${ids[@]:$i-1:$group}
+          [ -z "$pre" ] || add_edge "imgreg_$i-$j" 'mkdirs'
+          is_done='true'
+          for id in ${ids[@]:$i:$group}; do
+            if [ ! -f "$dofdir/$id$dofsuf" ]; then
+              is_done='false'
+              break
+            fi
+          done
+          [[ $is_done == false ]] || node_done "imgreg_$i-$j"
+          let i="$j+1"
+        done
+      else
+        n=0
+        for id in "${ids[@]}"; do
+          let n++
+          add_node "imgreg_$id" -subfile "imgreg.sub" -var "target=\"$id\""
+          [ -z "$pre" ] || add_edge "imgreg_$id" 'mkdirs'
+          [ ! -f "$dofdir/$id$dofsuf" ] || node_done "imgreg_$id"
+        done
+      fi
+    # add pairwise registration nodes
     else
       n=0
       t=0
+      local s1 s2 S i grpids
       for id1 in "${ids[@]}"; do
         let t++
-        # register image id1 to all other images
-        s=0
-        for id2 in "${ids[@]}"; do
-          let s++
+        # register all other images to image of subject id1
+        if [ $group -gt 1 ]; then
+          s1=1
           if [[ $ic == true ]]; then
-            [ $t -lt $s ] || continue
+            let S="$t-1"
           else
-            [ $t -ne $s ] || continue
+            let S=${#ids[@]}
           fi
-          let n++
-          # node to register id1 and id2
-          add_node "imgreg_$id1,$id2" -subfile "imgreg.sub" \
-                                      -var     "target=\"$id1\"" \
-                                      -var     "source=\"$id2\""
-          add_edge "imgreg_$id1,$id2" 'mkdirs'
-          [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "imgreg_$id1,$id2"
-          # node to invert inverse-consistent transformation
-          if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-            add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
+          i=0
+          while [ $s1 -le $S ]; do
+            s=$s1
+            srcids=()
+            let s2="$s1+$group-1"
+            if [[ $ic == true ]]; then
+              while [ $s -le $s2 ]; do
+                [ $s -ge $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
+                let s++
+              done
+            else
+              while [ $s -le $s2 ]; do
+                [ $s -eq $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
+                let s++
+              done
+            fi
+            if [ ${#srcids[@]} -gt 0 ]; then
+              let i++
+              let n++
+              # node to register id1 and id2
+              add_node "imgreg_$id1-$i" -subfile "imgreg.sub" \
+                                        -var     "target=\"$id1\"" \
+                                        -grpvar source -grpval ${srcids[@]}
+              add_edge "imgreg_$id1-$i" 'mkdirs'
+              is_done='true'
+              for id2 in ${srcids[@]}; do
+                if [ ! -f "$dofdir/$id1/$id2$dofsuf" ]; then
+                  is_done='false'
+                  break
+                fi
+              done
+              [[ $is_done == false ]] || node_done "imgreg_$id1-$i"
+              # node to invert inverse-consistent transformation
+              if [[ $ic == true ]] && [ -n "$dofdir" ]; then
+                add_node "dofinv_$id1-$i" -subfile "dofinv.sub"      \
+                                          -var     "target=\"$id1\"" \
+                                          -grpvar source -grpval ${srcids[@]}
+                add_edge "dofinv_$id1-$i" "imgreg_$id1-$i"
+                is_done='true'
+                for id2 in ${srcids[@]}; do
+                  if [ ! -f "$dofdir/$id2/$id1$dofsuf" ]; then
+                    is_done='false'
+                    break
+                  fi
+                done
+                [[ $is_done == false ]] || node_done "dofinv_$id1-$i"
+              fi
+            fi
+            let s1="$s2+1"
+          done
+        else
+          s=0
+          for id2 in "${ids[@]}"; do
+            let s++
+            if [[ $ic == true ]]; then
+              [ $t -lt $s ] || continue
+            else
+              [ $t -ne $s ] || continue
+            fi
+            let n++
+            # node to register id1 and id2
+            add_node "imgreg_$id1,$id2" -subfile "imgreg.sub" \
                                         -var     "target=\"$id1\"" \
                                         -var     "source=\"$id2\""
-            add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
-            [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "dofinv_$id1,$id2"
-          fi
-          info "  Added job `printf '%3d of %d' $n $N`"
-        done
+            add_edge "imgreg_$id1,$id2" 'mkdirs'
+            [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "imgreg_$id1,$id2"
+            # node to invert inverse-consistent transformation
+            if [[ $ic == true ]] && [ -n "$dofdir" ]; then
+              add_node "dofinv_$id1,$id2" -subfile "dofinv.sub"      \
+                                          -var     "target=\"$id1\"" \
+                                          -var     "source=\"$id2\""
+              add_edge "dofinv_$id1,$id2" "imgreg_$id1,$id2"
+              [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "dofinv_$id1,$id2"
+            fi
+            info "  Added job `printf '%3d of %d' $n $N`"
+          done
+        fi
       done
     fi
   }; end_dag
