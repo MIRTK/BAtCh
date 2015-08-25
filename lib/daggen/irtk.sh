@@ -752,12 +752,12 @@ dofcombine_node()
     if [ -n "$dofid3" ]; then
       add_node "dofcat_$dofid3" -subfile "dofcat.sub"
       add_edge "dofcat_$dofid3" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
+      [ ! -f "$dofdir3/$dofid3$dofsuf" ] || node_done "dofcat_$dofid3"
     else
       for id in "${ids[@]}"; do
         add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
         add_edge "dofcat_$id" 'mkdirs'
-        [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
+        [ ! -f "$dofdir3/$id$dofsuf" ] || node_done "dofcat_$id"
       done
     fi
 
