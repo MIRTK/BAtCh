@@ -834,7 +834,7 @@ dofinit_node()
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofini_$dofid"
     else
       for id in "${ids[@]}"; do
-        add_node "dofini_$id" -subfile "dofcat.sub" -var "id=\"$id\""
+        add_node "dofini_$id" -subfile "dofini.sub" -var "id=\"$id\""
         add_edge "dofini_$id" 'mkdirs'
         [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofini_$id"
       done
