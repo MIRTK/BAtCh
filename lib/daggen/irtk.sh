@@ -767,6 +767,85 @@ dofcombine_node()
 }
 
 # ------------------------------------------------------------------------------
+# add node for creation/approximation of (affine) transformations
+dofinit_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local dofid=
+  local dofins=
+  local dofdir=
+  local dofsuf='.dof.gz'
+  local options=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)        optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects)      optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -dofid)         optarg  dofid  $1 "$2"; shift; ;;
+      -dofins)        optarg  dofins $1 "$2"; shift; ;;
+      -dofdir)        optarg  dofdir $1 "$2"; shift; ;;
+      -dofsuf)        optarg  dofsuf $1 "$2"; shift; ;;
+      -notranslation) options="$options -notranslations";  ;;
+      -norotation)    options="$options -norotations"; ;;
+      -noscaling)     options="$options -noscaling"; ;;
+      -noshearing)    options="$options -noshearing"; ;;
+      -*)             error "dofinit_node: invalid option: $1"; ;;
+      *)              [ -z "$node" ] || error "dofinit_node: too many arguments"
+                      node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"   ] || error "dofinit_node: missing name argument"
+  [ -n "$dofins" ] || error "dofinit_node: missing -dofins argument"
+  [ -n "$dofdir" ] || error "dofinit_node: missing -dofdir argument"
+  [ -n "$dofid" ] || [ ${#ids[@]} -gt 0 ] || error "dofinit_node: no -subjects or -dofid specified"
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create generic dofcreate submission script
+    local sub="arguments = \""
+    if [ -n "$dofid" ]; then sub="$sub '$dofdir/$dofid$dofsuf'"
+    else                     sub="$sub '$dofdir/\$(id)$dofsuf'"; fi
+    if [ -n "$dofid" ]; then sub="$sub -disp '$dofins/$dofid$dofsuf'"
+    else                     sub="$sub -disp '$dofins/\$(id)$dofsuf'"; fi
+    sub="$sub $options\""
+    if [ -n "$dofid" ]; then
+      sub="$sub\noutput    = $_dagdir/dofini_$dofid.out"
+      sub="$sub\nerror     = $_dagdir/dofini_$dofid.out"
+    else
+      sub="$sub\noutput    = $_dagdir/dofini_\$(id).out"
+      sub="$sub\nerror     = $_dagdir/dofini_\$(id).out"
+    fi
+    sub="$sub\nqueue"
+    make_sub_script "dofini.sub" "$sub" -executable dofcreate
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add dofcreate nodes to DAG
+    if [ -n "$dofid" ]; then
+      add_node "dofini_$dofid" -subfile "dofini.sub"
+      add_edge "dofini_$dofid" 'mkdirs'
+      [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofini_$dofid"
+    else
+      for id in "${ids[@]}"; do
+        add_node "dofini_$id" -subfile "dofcat.sub" -var "id=\"$id\""
+        add_edge "dofini_$id" 'mkdirs'
+        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofini_$id"
+      done
+    fi
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
 # add node for composition of linear and global transformations
 ffdcompose_node()
 {
