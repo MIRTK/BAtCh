@@ -180,6 +180,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # affine refinement
       ireg_node 'refine' -parent 'avgdofs1' \
           -model    "Affine" -par "Allow shearing = No" \
+          -par      "No. of resolution levels = 1" \
           -subjects "${subids[@]}" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
