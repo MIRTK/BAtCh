@@ -606,7 +606,7 @@ dofaverage_node()
   local doflst=
   local dofins=
   local dofdir=
-  local options=''
+  local options='-v -all'
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -647,7 +647,7 @@ dofaverage_node()
     fi
 
     # create generic dofaverage submission script
-    local sub="arguments = \"'$dofdir/\$(id).dof.gz' -all$options -add-identity-for-dofname '\$(id)'"
+    local sub="arguments = \"'$dofdir/\$(id).dof.gz' $options -add-identity-for-dofname '\$(id)'"
     sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
     sub="$sub\""
     sub="$sub\noutput    = $_dagdir/dofavg_\$(id).out"
