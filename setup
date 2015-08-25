@@ -199,16 +199,23 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir   "$dofdir/1.5_average" \
           -noshearing
 
-      # after construction of intermediate affine reference image,
-      # this reference is aligned with the user supplied reference
-      [ -z "$refid" ] || hdrdofs="$dofdir/1.6_affine"
-
       # compose average dofs
-      dofcombine_node 'finalize' -parent 'avgdofs2' \
+      dofcombine_node 'catdofs' -parent 'avgdofs2' \
           -subjects "${subids[@]}" \
           -dofdir1  "$dofdir/1.3_average" \
           -dofdir2  "$dofdir/1.5_average" \
-          -dofdir3  "$hdrdofs"
+          -dofdir3  "$dofdir/1.6_composite"
+
+      # after construction of intermediate affine reference image,
+      # this reference is aligned with the user supplied reference
+      [ -z "$refid" ] || hdrdofs="$dofdir/1.7_hdrdofs"
+
+      # remove shearing from composite transformations
+      dofinit_node 'rmshears' -parent 'catdofs' \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.6_composite" \
+          -dofdir   "$hdrdofs" \
+          -noshearing
 
     fi
 
@@ -245,12 +252,19 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofid   "ref"
 
       # compose affine transformations: image -> auto-ref -> user-ref
-      dofcombine_node 'alignimgs' -parent 'regrefs' \
+      dofcombine_node 'catdofs' -parent 'regrefs' \
           -subjects "${subids[@]}" \
           -dofdir1  "$hdrdofs" \
           -dofdir2  "$refdir" \
-          -dofdir3  "$dofdir/1___affine" \
+          -dofdir3  "$dofdir/1.8_userref" \
           -dofid2   "ref"
+
+      # remove shearing from composite transformations
+      dofinit_node 'rmshears' -parent 'catdofs' \
+          -dofins   "$dofdir/1.8_userref" \
+          -dofdir   "$dofdir/1___affine" \
+          -dofid    "ref" \
+          -noshearing
 
       # use user supplied reference space for non-rigid atlas construction
       hdrdofs="$dofdir/1___affine"
