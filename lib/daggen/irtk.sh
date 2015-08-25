@@ -805,12 +805,12 @@ dofinit_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    # create generic dofcreate submission script
+    # create generic dofinit submission script
     local sub="arguments = \""
     if [ -n "$dofid" ]; then sub="$sub '$dofdir/$dofid$dofsuf'"
     else                     sub="$sub '$dofdir/\$(id)$dofsuf'"; fi
-    if [ -n "$dofid" ]; then sub="$sub -disp '$dofins/$dofid$dofsuf'"
-    else                     sub="$sub -disp '$dofins/\$(id)$dofsuf'"; fi
+    if [ -n "$dofid" ]; then sub="$sub -approximate '$dofins/$dofid$dofsuf'"
+    else                     sub="$sub -approximate '$dofins/\$(id)$dofsuf'"; fi
     sub="$sub $options\""
     if [ -n "$dofid" ]; then
       sub="$sub\noutput    = $_dagdir/dofini_$dofid.out"
@@ -820,7 +820,7 @@ dofinit_node()
       sub="$sub\nerror     = $_dagdir/dofini_\$(id).out"
     fi
     sub="$sub\nqueue"
-    make_sub_script "dofini.sub" "$sub" -executable dofcreate
+    make_sub_script "dofini.sub" "$sub" -executable dofinit
 
     # node to create output directories
     make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
