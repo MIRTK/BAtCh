@@ -610,16 +610,20 @@ dofaverage_node()
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
-      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
-      -doflst)   optarg  doflst $1 "$2"; shift; ;;
-      -dofins)   optarg  dofins $1 "$2"; shift; ;;
-      -dofdir)   optarg  dofdir $1 "$2"; shift; ;;
-      -norigid)  options="$options -norigid";  ;;
-      -dofs)     options="$options -dofs"; ;;
-      -*)        error "dofaverage_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "dofaverage_node: too many arguments"
-                 node=$1; ;;
+      -parent)        optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects)      optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -doflst)        optarg  doflst $1 "$2"; shift; ;;
+      -dofins)        optarg  dofins $1 "$2"; shift; ;;
+      -dofdir)        optarg  dofdir $1 "$2"; shift; ;;
+      -norigid)       options="$options -norigid";  ;;
+      -notranslation) options="$options -notranslation";  ;;
+      -norotation)    options="$options -norotation";  ;;
+      -noscaling)     options="$options -noscaling";  ;;
+      -noshearing)    options="$options -noshearing";  ;;
+      -dofs)          options="$options -dofs"; ;;
+      -*)             error "dofaverage_node: invalid option: $1"; ;;
+      *)              [ -z "$node" ] || error "dofaverage_node: too many arguments"
+                      node=$1; ;;
     esac
     shift
   done

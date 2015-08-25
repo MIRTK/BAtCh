@@ -175,7 +175,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       dofaverage_node 'avgdofs1' -parent 'affinereg' \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_affine" \
-          -dofdir   "$dofdir/1.3_average"
+          -dofdir   "$dofdir/1.3_average" \
+          -noshearing
 
       # affine refinement
       ireg_node 'refine' -parent 'avgdofs1' \
@@ -195,7 +196,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       dofaverage_node 'avgdofs2' -parent 'refine' \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.4_refined" \
-          -dofdir   "$dofdir/1.5_average"
+          -dofdir   "$dofdir/1.5_average" \
+          -noshearing
 
       # after construction of intermediate affine reference image,
       # this reference is aligned with the user supplied reference
