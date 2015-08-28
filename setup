@@ -212,8 +212,15 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # generate reference image/mask
+  maskref=
+  [[ ! $interimref == false ]] || maskref="$refid"
+
   average_node 'reference' -parent 'alignment' \
       -subjects  "${subids[@]}" \
+      -refdir    "$refdir" \
+      -refpre    "$refpre" \
+      -refid     "$maskref" \
+      -refsuf    "$refsuf" \
       -imgdir    "$imgdir" \
       -imgpre    "$imgpre" \
       -imgsuf    "$imgsuf" \
@@ -313,6 +320,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
       average_node "template_$t" -voxelwise \
           -sublst "$kernel/weights_t=$t.csv" \
+          -refdir "$refdir" \
+          -refid  "ref" \
+          -refsuf ".nii.gz" \
           -imgdir "$imgdir" \
           -imgpre "$imgpre" \
           -imgsuf "$imgsuf" \
@@ -333,6 +343,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
           average_node "tissue_${l}_${t}" -voxelwise -label $l \
               -sublst "$kernel/weights_t=$t.csv" \
+              -refdir "$refdir" \
+              -refid  "ref" \
+              -refsuf ".nii.gz" \
               -imgdir "$lbldir" \
               -imgpre "$lblpre" \
               -imgsuf "$lblsuf" \
@@ -355,6 +368,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
           average_node "structure_${l}_${t}" -voxelwise -label $l \
               -sublst "$kernel/weights_t=$t.csv" \
+              -refdir "$refdir" \
+              -refid  "ref" \
+              -refsuf ".nii.gz" \
               -imgdir "$segdir" \
               -imgpre "$segpre" \
               -imgsuf "$segsuf" \
