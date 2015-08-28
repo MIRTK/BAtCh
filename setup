@@ -294,18 +294,25 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     # for each atlas time point...
     for t in ${timepoints[@]}; do
 
-      # average deformations
+      # average global scaling
+      dofaverage_node "avgaff_$t" \
+          -doflst "$kernel/weights_t=$t.csv" \
+          -dofins "$dofdir/$hdrdofs" \
+          -dofdir "$dofdir/2.2_avgaff/t=$t" \
+          -inverse-dofs -norigid
+
+      # average local deformations
       dofaverage_node "avgffd_$t" -parent 'computeffds' \
           -doflst "$kernel/weights_t=$t.csv" \
           -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2.2_avgffd/t=$t" \
+          -dofdir "$dofdir/2.3_avgffd/t=$t" \
           -dofs
 
-      # compose final average dofs
-      ffdcompose_node "avgdof_$t" -parent "avgffd_$t" \
+      # compose average transformations
+      ffdcompose_node "avgdof_$t" -parent "avgaff_$t" "avgffd_$t" \
           -sublst  "$kernel/weights_t=$t.csv" \
-          -dofdir1 "$dofdir/1___affine" \
-          -dofdir2 "$dofdir/2.2_avgffd/t=$t" \
+          -dofdir1 "$dofdir/2.2_avgaff/t=$t" \
+          -dofdir2 "$dofdir/2.3_avgffd/t=$t" \
           -dofdir3 "$dofdir/2___fluid/t=$t"
 
     done

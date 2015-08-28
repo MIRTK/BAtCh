@@ -615,6 +615,9 @@ dofaverage_node()
       -doflst)        optarg  doflst $1 "$2"; shift; ;;
       -dofins)        optarg  dofins $1 "$2"; shift; ;;
       -dofdir)        optarg  dofdir $1 "$2"; shift; ;;
+      -invert)        options="$options -invert";  ;;
+      -inverse)       options="$options -inverse";  ;;
+      -inverse-dofs)  options="$options -inverse-dofs";  ;;
       -norigid)       options="$options -norigid";  ;;
       -notranslation) options="$options -notranslation";  ;;
       -norotation)    options="$options -norotation";  ;;
