@@ -60,7 +60,7 @@ ireg_node()
       -tgtid|-refid)       tgtid="$2";  shift; ;;
       -srcid)              srcid="$2";  shift; ;;
       -tgtdir|-refdir)     tgtdir="$2"; shift; ;;
-      -srcdir)             tgtdir="$2"; shift; ;;
+      -srcdir)             srcdir="$2"; shift; ;;
       -tgtpre|-refpre)     tgtpre="$2"; shift; ;;
       -srcpre)             srcpre="$2"; shift; ;;
       -imgpre)             imgpre="$2"; shift; ;;
