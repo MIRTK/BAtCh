@@ -914,6 +914,10 @@ average_node()
   local parent=()
   local ids=()
   local idlst=()
+  local refdir=
+  local refpre=
+  local refid=
+  local refsuf=
   local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
@@ -929,6 +933,10 @@ average_node()
       -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
       -sublst)   optarg  idlst   $1 "$2"; shift; ;;
+      -refdir)   optarg  refdir  $1 "$2"; shift; ;;
+      -refpre)   refpre="$2"; shift; ;;
+      -refid)    refid="$2"; shift; ;;
+      -refsuf)   refsuf="$2"; shift; ;;
       -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
       -imgpre)   imgpre="$2"; shift; ;;
       -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
@@ -950,6 +958,12 @@ average_node()
   [ -n "$average" ] || error "average_node: missing -output argument"
   [ -z "$imgdir"  ] || imgpre="$imgdir/$imgpre"
   [ -z "$dofdir"  ] || dofpre="$dofdir/$dofpre"
+  [ -n "$refdir"  ] || refdir="$imgdir"
+  [ -n "$refsuf"  ] || refsuf="$imgsuf"
+
+  if [ -n "$refid" ]; then
+    options="$options -reference '$refdir/$refpre$refid$refsuf'"
+  fi
 
   info "Adding node $node..."
   begin_dag $node -splice || {
