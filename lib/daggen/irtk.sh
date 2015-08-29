@@ -606,6 +606,9 @@ dofaverage_node()
   local doflst=
   local dofins=
   local dofdir=
+  local dofid=
+  local dofpre=
+  local dofsuf='.dof.gz'
   local options='-v -all'
 
   while [ $# -gt 0 ]; do
@@ -615,6 +618,9 @@ dofaverage_node()
       -doflst)        optarg  doflst $1 "$2"; shift; ;;
       -dofins)        optarg  dofins $1 "$2"; shift; ;;
       -dofdir)        optarg  dofdir $1 "$2"; shift; ;;
+      -dofsuf)        optarg  dofsuf $1 "$2"; shift; ;;
+      -dofpre)        dofpre="$2"; shift; ;;
+      -dofid)         dofid="$2"; shift; ;;
       -invert)        options="$options -invert";  ;;
       -inverse)       options="$options -inverse";  ;;
       -inverse-dofs)  options="$options -inverse-dofs";  ;;
@@ -645,16 +651,24 @@ dofaverage_node()
       done
       doflst="$_dagdir/dofavg.par"
       write "$doflst" "$dofnames"
-    elif [ ${#ids[@]} -eq 0 ]; then
-      read_sublst ids "$doflst"
     fi
 
     # create generic dofaverage submission script
-    local sub="arguments = \"'$dofdir/\$(id).dof.gz' $options -add-identity-for-dofname '\$(id)'"
-    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
-    sub="$sub\""
-    sub="$sub\noutput    = $_dagdir/dofavg_\$(id).out"
-    sub="$sub\nerror     = $_dagdir/dofavg_\$(id).out"
+    local sub="arguments = \""
+    if [ -n "$dofid" ]; then
+      sub="$sub'$dofdir/$dofid$dofsuf' $options"
+      sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
+      sub="$sub\""
+      sub="$sub\noutput    = $_dagdir/dofavg_$dofid.out"
+      sub="$sub\nerror     = $_dagdir/dofavg_$dofid.out"
+    else
+      [ -n "$dofpre" ] || dofpre='$(id)/'
+      sub="$sub'$dofdir/\$(id)$dofsuf' $options -add-identity-for-dofname '\$(id)'"
+      sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
+      sub="$sub\""
+      sub="$sub\noutput    = $_dagdir/dofavg_\$(id).out"
+      sub="$sub\nerror     = $_dagdir/dofavg_\$(id).out"
+    fi
     sub="$sub\nqueue"
     make_sub_script "dofavg.sub" "$sub" -executable dofaverage
 
@@ -666,11 +680,20 @@ dofaverage_node()
     fi
 
     # add dofaverage nodes to DAG
-    for id in "${ids[@]}"; do
-      add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
-      add_edge "dofavg_$id" 'mkdirs'
-      [ ! -f "$dofdir/$id.dof.gz" ] || node_done "dofavg_$id"
-    done
+    if [ -n "$dofid" ]; then
+      add_node "dofavg_$dofid" -subfile "dofavg.sub"
+      add_edge "dofavg_$dofid" 'mkdirs'
+      [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofavg_$dofid"
+    else
+      if [ ${#ids[@]} -eq 0 ]; then
+        read_sublst ids "$doflst"
+      fi
+      for id in "${ids[@]}"; do
+        add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
+        add_edge "dofavg_$id" 'mkdirs'
+        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofavg_$id"
+      done
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -885,7 +908,7 @@ ffdcompose_node()
     # read IDs from specified text file
     [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
 
-    # create generic dofaverage submission script
+    # create generic ffdcompose submission script
     local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'\""
     sub="$sub\noutput    = $_dagdir/dofcat_\$(id).out"
     sub="$sub\nerror     = $_dagdir/dofcat_\$(id).out"
@@ -897,12 +920,94 @@ ffdcompose_node()
     add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                       -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
-    # add dofaverage nodes to DAG
+    # add ffdcompose nodes to DAG
     for id in "${ids[@]}"; do
       add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
       add_edge "dofcat_$id" 'mkdirs'
       [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
     done
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# add node for composition of transformations
+dofcompose_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local idlst=()
+  local dofdir1=
+  local dofdir2=
+  local dofdir3=
+  local dofid3=
+  local dofpre=
+  local dofsuf='.dof.gz'
+  local dofdir=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -sublst)   optarg  idlst   $1 "$2"; shift; ;;
+      -dofpre)   dofpre="$2"; shift; ;;
+      -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
+      -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
+      -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
+      -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
+      -dofid1)   optarg  dofid1  $1 "$2"; shift; ;;
+      -dofid2)   optarg  dofid2  $1 "$2"; shift; ;;
+      -dofid3)   optarg  dofid3  $1 "$2"; shift; ;;
+      -dofid)    optarg  dofid   $1 "$2"; shift; ;;
+      -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
+      -*)        error "dofcompose_node: invalid option: $1"; ;;
+      *)         [ -z "$node" ] || error "dofcompose_node: too many arguments"
+                 node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"    ] || error "dofcompose_node: missing name argument"
+  [ -n "$dofdir1" ] || error "dofcompose_node: missing -dofdir1 argument"
+  [ -n "$dofdir2" ] || error "dofcompose_node: missing -dofdir2 argument"
+  [ -n "$dofdir"  ] || error "dofcompose_node: missing -dofdir argument"
+  [ -n "$dofid1" ] || dofid1='$(id)'
+  [ -n "$dofid2" ] || dofid2='$(id)'
+  [ -n "$dofid3" ] || dofid3='$(id)'
+  [ -n "$dofid"  ] || dofid='$(id)'
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create generic dofcompose submission script
+    local sub="arguments = \"'$dofdir1/$dofpre$dofid1$dofsuf' '$dofdir2/$dofpre$dofid2$dofsuf'"
+    [ -z "$dofdir3" ] || sub="$sub '$dofdir3/$dofid3$dofsuf'"
+    sub="$sub '$dofdir/$dofpre$dofid$dofsuf'\""
+    sub="$sub\noutput    = $_dagdir/dofcat_$dofid.out"
+    sub="$sub\nerror     = $_dagdir/dofcat_$dofid.out"
+    sub="$sub\nqueue"
+    make_sub_script "dofcat.sub" "$sub" -executable dofcompose
+
+    # node to create output directories
+    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                      -sub        "error = $_dagdir/mkdirs.out\nqueue"
+
+    # add dofcompose nodes to DAG
+    if [ -n "$dofid" ]; then
+      add_node "dofcat_$dofid" -subfile "dofcat.sub"
+      add_edge "dofcat_$dofid" 'mkdirs'
+      [ ! -f "$dofdir/$dofpre$dofid$dofsuf" ] || node_done "dofcat_$dofid"
+    else
+      [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+      for id in "${ids[@]}"; do
+        add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
+        add_edge "dofcat_$id" 'mkdirs'
+        [ ! -f "$dofdir/$dofpre$id$dofsuf" ] || node_done "dofcat_$id"
+      done
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
