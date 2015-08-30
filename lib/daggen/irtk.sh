@@ -973,10 +973,9 @@ dofcompose_node()
   [ -n "$dofdir1" ] || error "dofcompose_node: missing -dofdir1 argument"
   [ -n "$dofdir2" ] || error "dofcompose_node: missing -dofdir2 argument"
   [ -n "$dofdir"  ] || error "dofcompose_node: missing -dofdir argument"
-  [ -n "$dofid1" ] || dofid1='$(id)'
-  [ -n "$dofid2" ] || dofid2='$(id)'
-  [ -n "$dofid3" ] || dofid3='$(id)'
-  [ -n "$dofid"  ] || dofid='$(id)'
+  [ -n "$dofid1"  ] || dofid1='$(id)'
+  [ -n "$dofid2"  ] || dofid2='$(id)'
+  [ -n "$dofid3"  ] || dofid3='$(id)'
 
   info "Adding node $node..."
   begin_dag $node -splice || {
