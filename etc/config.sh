@@ -3,18 +3,18 @@ OPT="/vol/biomedic/users/$USER"
 PATH="$OPT/bin:$PATH"
 LD_LIBRARY_PATH="$OPT/lib:$OPT/mcr/v83/runtime/glnxa64:$OPT/mcr/v83/bin/glnxa64:$OPT/mcr/v83/sys/os/glnxa64"
 
-# input settings
+# input settings -- directory structure of Emma's dHCP NeoSeg working directory
 topdir="$appdir"                 # top-level/working directory
 pardir='etc'                     # directory containing configuration files
-imgdir='../images'               # anatomical brain images
+imgdir='../brain'                # anatomical brain images
 imgpre=''                        # image file name prefix
 imgsuf='_brain.nii.gz'           # image file name suffix
-lbldir='../labels'               # input tissue segmentations
+lbldir='../segmentations'        # input tissue segmentations
 lblpre=''                        # tissue segmentation file name prefix
-lblsuf='-tissues.nii.gz'         # tissue segmentation file name suffix
-segdir='../labels'               # input structural segmentations
+lblsuf='_tissue_labels.nii.gz'   # tissue segmentation file name suffix
+segdir='../segmentations'        # input structural segmentations
 segpre=''                        # structural segmentation file name prefix
-segsuf='-all.nii.gz'             # structural segmentation file name suffix
+segsuf='_all_labels.nii.gz'      # structural segmentation file name suffix
 bgvalue=0                        # background value of skull-stripped images
 
 # reference for global normalization
