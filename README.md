@@ -69,6 +69,19 @@ can be found in the configured **dagdir**.
 ./setup
 ```
 
+Different variants of the spatio-temporal brain atlas construction workflow
+are included. To use these, call either one of the **workflow_v?** scripts
+instead of **setup**. For example,
+
+```shell
+./workflow_v3 -x dag/v3 -d ../v3/dofs -o ../v3
+```
+
+This will write the HTCondor DAGMan scripts to *dag/v3*. The computed
+transformation files will be stored in *../v3/dofs* and the generated
+atlas files in *../v3/templates* and *../v3/pbmaps*, respectively.
+
+
 Workflow Execution
 ==================
 
