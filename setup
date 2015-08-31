@@ -343,7 +343,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  if [ -d "$lbldir" ] && [ $(find "$lbldir" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
+  if [ -d "$lbldir" ] && [ $(find "$lbldir/" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
     begin_dag 'tissues' -parent 'avgffds' -splice
 
       for t in ${timepoints[@]}; do
@@ -368,7 +368,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  if [ -d "$segdir" ] && [ $(find "$segdir" -name "$segpre*$segsuf" | wc -l) -gt 0 ]; then
+  if [ -d "$segdir" ] && [ $(find "$segdir/" -name "$segpre*$segsuf" | wc -l) -gt 0 ]; then
     begin_dag 'structures' -parent 'avgffds' -splice
 
       for t in ${timepoints[@]}; do
