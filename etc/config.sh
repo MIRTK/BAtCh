@@ -32,7 +32,12 @@ epsilon=0.001                    # kernel weight threshold
 [ -n "$sigma" ] || sigma=1       # (default) standard deviation of Gaussian
 kernel="$pardir/kernel_sigma=$sigma" # directory containing temporal kernel files
 
+# deformable registration
+bending=0.005                    # weight of bending energy term
+jacobian=0                       # weigth of Jacobian-based penalty term
+
 # output settings
+voxelsize=(.5 .5 .5)             # voxel size of output images
 bindir='bin'                     # job executable files
 libdir='lib'                     # dependencies of job executables
 dagdir='dag'                     # DAG files for HTCondor DAGMan job

@@ -19,6 +19,15 @@ This script generates the DAGMan application for the generation of a
 consistent brain atlas and growth model for submission to the batch
 queuing system HTCondor for distributed parallel execution.
 
+This workflow first rigidly aligns all images with the supplied reference
+image. It then performs all pairwise affine and non-rigid registrations,
+where the global and local transformations are composed using the multi-level
+stationary velocity (SV) free-form deformation (FFD). This transformation
+model avoids the need for extrapolating the affine transformation when
+approximating by a single-level SV FFD and still enables the computation of
+the Log-Euclidean mean of multiple such transformations. These average
+transformations deform each input image into the atlas space at a certain age.
+
 Options:
   -s -sublst <sub.lst>     Text file listing the IDs of the images
                            to use for the atlas construction. If not
@@ -103,7 +112,7 @@ if [ ${#timepoints} -eq 0 ]; then
   error "No regression kernels found matching \"$kernel/weights_t=*.csv\""
 fi
 
-[ -n "$refid" ] || error "Reference image required for affine normalization"
+[ -n "$refid" ] || error "Reference image required for rigid normalization"
 
 # ==============================================================================
 # workflow
@@ -112,44 +121,22 @@ fi
 begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
-  # global normalization (translation, rotation, and scale)
+  # rigid normalization
   begin_dag 'alignment' -splice
 
-      # initialize transformations
-      ireg_node 'rigidreg' \
-          -model    "Rigid" \
-          -subjects "${subids[@]}" \
-          -tgtdir   "$refdir" \
-          -tgtpre   "$refpre" \
-          -tgtid    "$refid" \
-          -tgtsuf   "$refsuf" \
-          -imgdir   "$imgdir" \
-          -imgpre   "$imgpre" \
-          -imgsuf   "$imgsuf" \
-          -bgvalue  "$bgvalue" \
-          -dofdir   "$dofdir/1.1_rigid"
-
-      # affine registration
-      ireg_node 'affinereg' -parent 'rigidreg' \
-          -model    "Affine" -par "Allow shearing = No" \
-          -subjects "${subids[@]}" \
-          -tgtdir   "$refdir" \
-          -tgtpre   "$refpre" \
-          -tgtid    "$refid" \
-          -tgtsuf   "$refsuf" \
-          -imgdir   "$imgdir" \
-          -imgpre   "$imgpre" \
-          -imgsuf   "$imgsuf" \
-          -bgvalue  "$bgvalue" \
-          -padding  "$bgvalue" \
-          -dofins   "$dofdir/1.1_rigid" \
-          -dofdir   "$dofdir/1.2_affine"
-
-      # invert transformations
-      dofinvert_node 'invdofs' -parent 'affinereg' \
-          -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_affine" \
-          -dofdir   "$dofdir/1___hdrdof"
+    # rigid template registration
+    ireg_node 'rigidreg' \
+        -model    "Rigid" \
+        -subjects "${subids[@]}" \
+        -srcdir   "$refdir" \
+        -srcpre   "$refpre" \
+        -srcid    "$refid" \
+        -srcsuf   "$refsuf" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -bgvalue  "$bgvalue" \
+        -dofdir   "$dofdir/1___rigid"
 
   end_dag
 
@@ -164,7 +151,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       -imgdir    "$imgdir" \
       -imgpre    "$imgpre" \
       -imgsuf    "$imgsuf" \
-      -dofdir    "$dofdir/1___hdrdof" \
+      -dofdir    "$dofdir/1___affine" \
       -output    "$refdir/${ref}.nii.gz" \
       -voxelwise -bgvalue "$bgvalue" -margin 5 -size ${voxelsize[@]}
 
@@ -172,10 +159,22 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # compute cross-sectional FFDs for each time point
   begin_dag 'atlasdofs' -parent 'reference' -splice
 
+    # affine registration
+    ireg_node 'affinereg' \
+        -model     "Affine" \
+        -subjects  "${subids[@]}" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -bgvalue   "$bgvalue" \
+        -padding   "$bgvalue" \
+        -hdrdofs   "$dofdir/1___rigid" \
+        -dofdir    "$dofdir/2.1_affine"
+
     # deformable registration
     ireg_node 'ffdreg' \
         -model     "SVFFD" \
-        -par       "Multi-level transformation       = None" \
+        -par       "Multi-level transformation       = LogSum" \
         -par       "Control point spacing            = 2.5" \
         -par       "No. of resolution levels         = 4" \
         -par       "Bending energy weight            = $bending" \
@@ -187,36 +186,21 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -imgsuf    "$imgsuf" \
         -bgvalue   "$bgvalue" \
         -padding   "$bgvalue" \
-        -hdrdofs   "$dofdir/1___hdrdof" \
-        -dofins    "Id" \
-        -dofdir    "$dofdir/2.1_ffd" \
+        -hdrdofs   "$dofdir/1___rigid" \
+        -dofins    "$dofdir/2.1_affine" \
+        -dofdir    "$dofdir/2.2_ffd" \
         -mask      "$refdir/${ref}.nii.gz" \
         -symmetric
 
     # for each atlas time point...
     for t in ${timepoints[@]}; do
 
-      # average local deformations
+      # ...average pairwise FFDs
       dofaverage_node "avgffd_$t" -parent 'ffdreg' \
           -doflst "$kernel/weights_t=$t.csv" \
-          -dofins "$dofdir/2.1_ffd" \
-          -dofdir "$dofdir/2.2_avgffd/t=$t" \
+          -dofins "$dofdir/2.2_ffd" \
+          -dofdir "$dofdir/2___atlas/t=$t" \
           -dofs
-
-      # average global scaling
-      dofaverage_node "avgaff_$t" -parent "avgffd_$t" \
-          -doflst "$kernel/weights_t=$t.csv" \
-          -dofins "$dofdir/1.2_affine" \
-          -dofdir "$dofdir/2.3_avgaff/t=$t" -dofid "$ref" \
-          -norigid
-
-      # compose average transformations
-      dofcompose_node "avgdof_$t" -parent "avgaff_$t" \
-          -sublst  "$kernel/weights_t=$t.csv" \
-          -dofdir1 "$dofdir/1___hdrdof" \
-          -dofdir2 "$dofdir/2.2_avgffd/t=$t" \
-          -dofdir3 "$dofdir/2.3_avgaff/t=$t" -dofid3 "$ref" \
-          -dofdir  "$dofdir/2___atlas/t=$t"
 
     done
 

@@ -74,7 +74,7 @@ are included. To use these, call either one of the **workflow_v?** scripts
 instead of **setup**. For example,
 
 ```shell
-./workflow_v3 -x dag/v3 -d ../v3/dofs -o ../v3
+./workflow_v3 -x dag/v3 -r ref_v3 -d ../v3/dofs -o ../v3
 ```
 
 This will write the HTCondor DAGMan scripts to *dag/v3*. The computed
