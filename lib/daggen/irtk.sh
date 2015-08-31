@@ -1038,6 +1038,7 @@ average_node()
   local dofsuf='.dof.gz'
   local average=
   local options='-v'
+  local voxelsize=
   local label margin bgvalue
 
   while [ $# -gt 0 ]; do
@@ -1057,6 +1058,10 @@ average_node()
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -output)   optarg  average $1 "$2"; shift; ;;
       -voxelwise) options="$options -voxelwise"; ;;
+      -voxelsize|-size)
+        optargs voxelsize "$@"; shift ${#voxelsize[@]}
+        options="$options -size ${voxelsize[@]}"
+        ;;
       -margin)   optarg  margin  $1 "$2"; shift; options="$options -margin $margin";;
       -bgvalue)  optarg  bgvalue $1 "$2"; shift; options="$options -padding $bgvalue";;
       -label)    optarg  label   $1 "$2"; shift; options="$options -label $label";;
