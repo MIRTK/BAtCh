@@ -27,6 +27,11 @@ The atlas construction workflow is configured by mainly three files:
 - **etc/sub.lst**:   An optional subject list containing only the IDs of those images
                      from which the spatio-temporal atlas should be created.
 
+Additionally, some of the workflows require a reference image used for the initial
+global normalization of the images which also defines the coordinate system of the
+generated atlas images. Such reference image can be downloaded from
+[brain-development.org](http://biomedic.doc.ic.ac.uk/brain-development/index.php?n=Main.Neonatal2).
+
 Temporal Regression Kernels
 ===========================
 
