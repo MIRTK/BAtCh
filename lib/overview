@@ -1,0 +1,90 @@
+#! /bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+appname="$(basename "$BASH_SOURCE")"
+. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+This script uses the IRTK display command to produce offscreen renders
+of the generated spatio-temporal brain atlas.
+
+Options:
+  -c -config <config.sh>   Configuration file.
+                           (default: $appdir/etc/config.sh)
+  -f -force                Overwrite existing snapshots. (default: off)
+  -o -outdir <dir>         Root directory of constructed atlas.
+  -h -help                 Print help and exit.
+  -v -verbose              Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# main
+# ==============================================================================
+
+verbose=0
+config="$appdir/etc/config.sh"
+force=0 # 0: create only new snapshots, 1: overwrite existing snapshots
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -sigma)     let a=o+1; optarg sigma  ${!o} "${!a}"; ;;
+  esac
+  let o++
+done
+. "$config"  || error "Failed to load configuration from file: $config"
+
+outdir="$topdir/$outdir"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|-config)      shift; ;; # already loaded
+    -o|-outdir)      optarg outdir $1 "$2"; shift; ;;
+    -p|-pngdir)      optarg pngdir $1 "$2"; shift; ;;
+    -f|-force)       force=1; ;;
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose)     let verbose++; ;;
+    *)               options=("${options[@]}" "$1"); ;;
+  esac
+  shift
+done
+
+[ -n "$pngdir" ] || pngdir="$outdir/overview"
+mkdir -p "$pngdir" || error "Failed to create output directory for snapshot images"
+
+# ------------------------------------------------------------------------------
+# templates
+for template in $(ls "$outdir/templates/t2w_"*".nii.gz"); do
+  fname="$(basename "$template")"
+  fname=${fname/.*/}
+  sshot="$pngdir/$fname.png"
+  [ -f "$sshot" -a $force -eq 0 ] || {
+    echo "Saving snapshot of $fname to $sshot"
+    display $template -xy -res 4 -tmin 150 -tmax 600 -cursor -linear -offscreen $sshot
+  }
+done
+
+# ------------------------------------------------------------------------------
+# tissue probability maps
+for pbmap in $(ls "$outdir/pbmaps/"??"/tissue_"*".nii.gz"); do
+  t=$(dirname "$pbmap" | xargs basename)
+  fname="$(basename "$pbmap")"
+  fname=${fname/.*/}
+  sshot="$pngdir/${fname}_$t.png"
+  [ -f "$sshot" -a $force -eq 0 ] || {
+    echo "Saving snapshot of $fname at age $t to $sshot"
+    display $pbmap -xy -res 4 -cursor -linear -offscreen $sshot
+  }
+done
