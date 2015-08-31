@@ -976,6 +976,7 @@ dofcompose_node()
   [ -n "$dofid1"  ] || dofid1='$(id)'
   [ -n "$dofid2"  ] || dofid2='$(id)'
   [ -n "$dofid3"  ] || dofid3='$(id)'
+  [ -n "$dofid"   ] || dofid='$(id)'
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -983,7 +984,11 @@ dofcompose_node()
     # create generic dofcompose submission script
     local sub="arguments = \"'$dofdir1/$dofpre$dofid1$dofsuf' '$dofdir2/$dofpre$dofid2$dofsuf'"
     [ -z "$dofdir3" ] || sub="$sub '$dofdir3/$dofid3$dofsuf'"
-    sub="$sub '$dofdir/$dofpre$dofid$dofsuf'\""
+    if [ -n "$dofid" ]; then
+      sub="$sub '$dofdir/$dofpre$dofid$dofsuf'\""
+    else
+      sub="$sub '$dofdir/$dofpre$dofid$dofsuf'\""
+    fi
     sub="$sub\noutput    = $_dagdir/dofcat_$dofid.out"
     sub="$sub\nerror     = $_dagdir/dofcat_$dofid.out"
     sub="$sub\nqueue"
@@ -995,17 +1000,17 @@ dofcompose_node()
                       -sub        "error = $_dagdir/mkdirs.out\nqueue"
 
     # add dofcompose nodes to DAG
-    if [ -n "$dofid" ]; then
-      add_node "dofcat_$dofid" -subfile "dofcat.sub"
-      add_edge "dofcat_$dofid" 'mkdirs'
-      [ ! -f "$dofdir/$dofpre$dofid$dofsuf" ] || node_done "dofcat_$dofid"
-    else
+    if [[ "$dofid" == '$(id)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id in "${ids[@]}"; do
         add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
         add_edge "dofcat_$id" 'mkdirs'
         [ ! -f "$dofdir/$dofpre$id$dofsuf" ] || node_done "dofcat_$id"
       done
+    else
+      add_node "dofcat_$dofid" -subfile "dofcat.sub"
+      add_edge "dofcat_$dofid" 'mkdirs'
+      [ ! -f "$dofdir/$dofpre$dofid$dofsuf" ] || node_done "dofcat_$dofid"
     fi
 
   }; end_dag
