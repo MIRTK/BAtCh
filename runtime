@@ -1,2 +1,0 @@
-#!/bin/bash
-condor_history | egrep '9/14 13:.*ireg' | cut -d' ' -f17

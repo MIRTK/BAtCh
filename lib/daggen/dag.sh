@@ -1,5 +1,5 @@
 ################################################################################
-#
+# Utilities for DAG generation
 ################################################################################
 
 [ -z $__daggen_dag_sh ] || return 0
@@ -8,7 +8,10 @@ __daggen_dag_sh=0
 # ------------------------------------------------------------------------------
 # import modules
 _moddir="$(dirname "$BASH_SOURCE")"
-. "$_moddir/utils.sh" || { echo "Failed to import daggen/utils module!" 1>&2; exit 1; }
+source "$_moddir/utils.sh" || {
+  echo "Failed to import daggen/utils module!" 1>&2
+  exit 1
+}
 
 # ==============================================================================
 # auxiliary functions
@@ -16,17 +19,32 @@ _moddir="$(dirname "$BASH_SOURCE")"
 
 # ------------------------------------------------------------------------------
 # copy executable and its dependencies
+#
+# TODO: Copy shared libraries (mainly MIRTK) to ensure libs and executables are
+#       not modified during atlas construction via updated installation.
+#       Mainly an issue for myself (Andreas) because of ongoing development.
 pack_executable()
 {
+  local symlink='true'
+
   if [ ! -f "$bindir/$1" ]; then
     local path="$(which "$1" 2> /dev/null)"
     if [ -n "$path" ]; then
       makedir "$bindir"
-      cp -f "$path" "$bindir/" > /dev/null 2>&1
-      if [ $? -eq 0 ]; then
-        info  "  Copied executable $path"
+      if [ $symlink = 'true' ]; then
+        ln -s "$path" "$bindir/$1" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+          info  "  Linked executable $path"
+        else
+          error "  Failed to link executable $path"
+        fi
       else
-        error "  Failed to copy executable $path"
+        cp -f "$path" "$bindir/" > /dev/null 2>&1
+        if [ $? -eq 0 ]; then
+          info  "  Copied executable $path"
+        else
+          error "  Failed to copy executable $path"
+        fi
       fi
     else
       error "  Could not find executable $1"

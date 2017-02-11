@@ -14,6 +14,13 @@ warn()  { echo -e "$1" 1>&2; }
 error() { warn "$1"; exit 1; }
 
 # ------------------------------------------------------------------------------
+# remove trailing zeros from floating point number (e.g., returned by bc)
+remove_trailing_zeros()
+{
+  echo -n $1 | sed 's/\(\.[0-9]*[1-9]\)0*$/\1/;s/\.0*$//'
+}
+
+# ------------------------------------------------------------------------------
 # usage: foo () { local "$1" && upvar $1 "Hello, World!" }
 upvar()
 {
