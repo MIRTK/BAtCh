@@ -1,8 +1,12 @@
 #! /bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
-appname="$(basename "$BASH_SOURCE")"
-. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/mirtk.sh" || {
+  echo "Failed to import daggen/mirtk module!" 1>&2
+  exit 1
+}
 
 # ==============================================================================
 # help
