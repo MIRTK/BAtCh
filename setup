@@ -1,0 +1,400 @@
+#! /bin/bash
+
+appdir="$(cd $(dirname "$BASH_SOURCE") && pwd)"
+appname="$(basename "$BASH_SOURCE")"
+. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+This script generates the DAGMan application for the generation of a
+consistent brain atlas and growth model for submission to the batch
+queuing system HTCondor for distributed parallel execution.
+
+Options:
+  -s -sublst <sub.lst>     Text file listing the IDs of the images
+                           to use for the atlas construction. If not
+                           specified, the IDs are read from the -agelst.
+                           (default: $appdir/etc/sub.lst)
+
+  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
+                           first column contains the image ID and the
+                           second column the associated age.
+                           (default: $appdir/etc/age.csv)
+
+  -c -config <config.sh>   Configuration file.
+                           (default: $appdir/etc/config.sh)
+
+  -u -update               Overwrite existing DAGMan files.
+  -h -help                 Print help and exit.
+  -v -verbose              Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# configuration
+# ==============================================================================
+
+verbose=0
+sublst=
+agelst="$appdir/etc/age.csv"
+config="$appdir/etc/config.sh"
+sigma=
+interimref='false'
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -sigma)     let a=o+1; optarg sigma  ${!o} "${!a}"; ;;
+  esac
+  let o++
+done
+. "$config"  || error "Failed to load configuration from file: $config"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
+    -u|-update)      update='true'; ;;
+    -c|-config)      shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose)     let verbose++; ;;
+    -*)              error "Unknown option: $1"; ;;
+    *)               if   [ -z "$agelst" ]; then agelst="$1"
+                     elif [ -z "$sublst" ]; then sublst="$1"
+                     else error "Too many arguments: $1"
+                     fi; ;;
+  esac
+  shift
+done
+
+if [ -z "$agelst" ]; then
+  error "Missing CSV file with subject IDs and corresponding ages!"
+fi
+if [ -z "$sublst" ]; then
+  sublst="$appdir/etc/sub.lst"
+  [ -f "$sublst" ] || sublst="$agelst"
+fi
+read_sublst subids "$sublst"
+
+cd "$topdir" || error "Failed to change to top-level directory!"
+
+# atlas time points for which kernel was create either manually,
+# with another tool (e.g. MATLAB), or using the "kernel" shell script
+timepoints=($(ls "$kernel/" | awk '{
+  if ($0 ~ /weights_t=[0-9]+(.[0-9]+)?.csv/) {
+    print gensub(/weights_t=([0-9.]+(.[0-9]+)?).csv/, "\\1", "g")
+  }
+}'))
+if [ ${#timepoints} -eq 0 ]; then
+  error "No regression kernels found matching \"$kernel/weights_t=*.csv\""
+fi
+
+# ==============================================================================
+# workflow
+# ==============================================================================
+
+begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
+
+  hdrdofs="$dofdir/1___affine" # default directory of affine alignment transformations
+
+  # ----------------------------------------------------------------------------
+  # global normalization (translation, rotation, and scale)
+  begin_dag 'alignment' -splice
+
+    if [[ $interimref == false ]] && [ -n "$refid" ]; then
+
+      # initialize transformations
+      ireg_node 'initdofs' \
+          -model    "Similarity" \
+          -subjects "${subids[@]}" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcid    "$refid" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -bgvalue  "$bgvalue" \
+          -dofdir   "$dofdir/1.1_initial"
+
+      # affine registration
+      ireg_node 'affinereg' -parent 'initdofs' \
+          -model    "Affine" -par "Allow shearing = No" \
+          -subjects "${subids[@]}" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcid    "$refid" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
+          -dofins   "$dofdir/1.1_initial" \
+          -dofdir   "$hdrdofs"
+
+    else
+
+      # initialize transformations
+      ireg_node 'initdofs' \
+          -model    "Similarity" \
+          -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -bgvalue  "$bgvalue" \
+          -dofdir   "$dofdir/1.1_initial" \
+          -group    20
+
+      # affine registration
+      ireg_node 'affinereg' -parent 'initdofs' \
+          -model    "Affine" \
+          -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
+          -dofins   "$dofdir/1.1_initial" \
+          -dofdir   "$dofdir/1.2_affine" \
+          -group    20
+
+      # average dofs
+      dofaverage_node 'avgdofs1' -parent 'affinereg' \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.2_affine" \
+          -dofdir   "$dofdir/1.3_average"
+
+      # affine refinement
+      ireg_node 'refine' -parent 'avgdofs1' \
+          -model    "Affine" \
+          -par      "No. of resolution levels = 1" \
+          -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -bgvalue  "$bgvalue" \
+          -padding  "$bgvalue" \
+          -hdrdofs  "$dofdir/1.3_average" \
+          -dofdir   "$dofdir/1.4_refined" \
+          -group    20
+
+      # average dofs
+      dofaverage_node 'avgdofs2' -parent 'refine' \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.4_refined" \
+          -dofdir   "$dofdir/1.5_average"
+
+      # after construction of intermediate affine reference image,
+      # this reference is aligned with the user supplied reference
+      [ -z "$refid" ] || hdrdofs="$dofdir/1.6_hdrdofs"
+
+      # compose average dofs
+      dofcombine_node 'catdofs' -parent 'avgdofs2' \
+          -subjects "${subids[@]}" \
+          -dofdir1  "$dofdir/1.3_average" \
+          -dofdir2  "$dofdir/1.5_average" \
+          -dofdir3  "$hdrdofs"
+
+    fi
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # generate reference image/mask
+  maskref=
+  [[ ! $interimref == false ]] || maskref="$refid"
+
+  average_node 'reference' -parent 'alignment' \
+      -subjects  "${subids[@]}" \
+      -refdir    "$refdir" \
+      -refpre    "$refpre" \
+      -refid     "$maskref" \
+      -refsuf    "$refsuf" \
+      -imgdir    "$imgdir" \
+      -imgpre    "$imgpre" \
+      -imgsuf    "$imgsuf" \
+      -dofdir    "$hdrdofs" \
+      -output    "$refdir/ref.nii.gz" \
+      -voxelwise -bgvalue "$bgvalue" -margin 5
+
+  # ----------------------------------------------------------------------------
+  # align images to user supplied input reference
+  if [[ ! $interimref == false ]] && [ -n "$refid" ]; then
+    begin_dag 'alignref' -parent 'reference' -splice
+
+      # register user reference to constructed affine reference
+      ireg_node 'regrefs' \
+          -model   "Similarity+Affine" \
+          -imgdir  "$refdir" \
+          -tgtid   "ref" \
+          -tgtsuf  ".nii.gz" \
+          -srcid   "$refid" \
+          -srcpre  "$refpre" \
+          -srcsuf  "$refsuf" \
+          -bgvalue "$bgvalue" \
+          -padding "$bgvalue" \
+          -dofdir  "$refdir" \
+          -dofid   "ref"
+
+      # compose affine transformations: image -> auto-ref -> user-ref
+      dofcombine_node 'refdofs' -parent 'regrefs' \
+          -subjects "${subids[@]}" \
+          -dofdir1  "$hdrdofs" \
+          -dofdir2  "$refdir" \
+          -dofdir3  "$dofdir/1___affine" \
+          -dofid2   "ref"
+
+      # use user supplied reference space for non-rigid atlas construction
+      hdrdofs="$dofdir/1___affine"
+
+    end_dag
+    mask="$refdir/$refpre$refid$refsuf"
+    parent='alignref'
+  else
+    mask="$refdir/ref.nii.gz"
+    parent='reference'
+  fi
+
+  # ----------------------------------------------------------------------------
+  # compute cross-sectional FFDs for each time point
+  begin_dag 'avgffds' -parent "$parent" -splice
+
+    # deformable registration
+    ireg_node 'computeffds' \
+        -model     "SVFFD" \
+        -par       "Multi-level transformation       = None" \
+        -par       "Control point spacing            = 2.5" \
+        -par       "No. of resolution levels         = 4" \
+        -par       "Bending energy weight            = 0.005" \
+        -par       "Jacobian penalty weight          = 0" \
+        -par       "Maximum streak of rejected steps = 2" \
+        -subjects  "${subids[@]}" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -bgvalue   "$bgvalue" \
+        -padding   "$bgvalue" \
+        -hdrdofs   "$hdrdofs" \
+        -dofins    "Id" \
+        -dofdir    "$dofdir/2.1_ffd" \
+        -mask      "$mask" \
+        -symmetric
+
+    # for each atlas time point...
+    for t in ${timepoints[@]}; do
+
+      # average local deformations
+      dofaverage_node "avgffd_$t" -parent 'computeffds' \
+          -doflst "$kernel/weights_t=$t.csv" \
+          -dofins "$dofdir/2.1_ffd" \
+          -dofdir "$dofdir/2.2_avgffd/t=$t" \
+          -dofs
+
+      # average global scaling
+      dofaverage_node "avgaff_$t" -parent "avgffd_$t" \
+          -doflst "$kernel/weights_t=$t.csv" \
+          -dofins "$hdrdofs" \
+          -dofdir "$dofdir/2.3_avgaff/t=$t" -dofid "ref" \
+          -norigid
+
+      # compose average transformations
+      dofcompose_node "avgdof_$t" -parent "avgaff_$t" \
+          -sublst  "$kernel/weights_t=$t.csv" \
+          -dofdir1 "$hdrdofs" \
+          -dofdir2 "$dofdir/2.2_avgffd/t=$t" \
+          -dofdir3 "$dofdir/2.3_avgaff/t=$t" -dofid3  "ref" \
+          -dofdir  "$dofdir/2___fluid/t=$t"
+
+    done
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # make intensity templates
+  begin_dag 'templates' -parent 'avgffds' -splice
+
+    for t in ${timepoints[@]}; do
+
+      average_node "template_$t" -voxelwise \
+          -sublst "$kernel/weights_t=$t.csv" \
+          -refdir "$refdir" \
+          -refid  "ref" \
+          -refsuf ".nii.gz" \
+          -imgdir "$imgdir" \
+          -imgpre "$imgpre" \
+          -imgsuf "$imgsuf" \
+          -dofdir "$dofdir/2___fluid/t=$t" \
+          -output "$outdir/templates/t2w_$t.nii.gz" \
+ 
+    done
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # make tissue probability maps
+  if [ -d "$lbldir" ] && [ $(find "$lbldir/" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
+    begin_dag 'tissues' -parent 'avgffds' -splice
+
+      for t in ${timepoints[@]}; do
+        for l in {1..7}; do
+
+          average_node "tissue_${l}_${t}" -voxelwise -label $l \
+              -sublst "$kernel/weights_t=$t.csv" \
+              -refdir "$refdir" \
+              -refid  "ref" \
+              -refsuf ".nii.gz" \
+              -imgdir "$lbldir" \
+              -imgpre "$lblpre" \
+              -imgsuf "$lblsuf" \
+              -dofdir "$dofdir/2___fluid/t=$t" \
+              -output "$outdir/pbmaps/$t/tissue_$l.nii.gz" \
+ 
+        done
+      done
+
+    end_dag
+  fi
+
+  # ----------------------------------------------------------------------------
+  # make structural probability maps
+  if [ -d "$segdir" ] && [ $(find "$segdir/" -name "$segpre*$segsuf" | wc -l) -gt 0 ]; then
+    begin_dag 'structures' -parent 'avgffds' -splice
+
+      for t in ${timepoints[@]}; do
+        for l in {1..87}; do
+
+          average_node "structure_${l}_${t}" -voxelwise -label $l \
+              -sublst "$kernel/weights_t=$t.csv" \
+              -refdir "$refdir" \
+              -refid  "ref" \
+              -refsuf ".nii.gz" \
+              -imgdir "$segdir" \
+              -imgpre "$segpre" \
+              -imgsuf "$segsuf" \
+              -dofdir "$dofdir/2___fluid/t=$t" \
+              -output "$outdir/pbmaps/$t/structure_$l.nii.gz" \
+ 
+        done
+      done
+
+    end_dag
+  fi
+
+  # ----------------------------------------------------------------------------
+  # construct longitudinal growth model
+  #begin_dag 'growth' -parent 'avgffds' -splice
+    # TODO
+  #end_dag
+ 
+end_dag

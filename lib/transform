@@ -31,10 +31,10 @@ Options:
   -c -config <config.sh>   Configuration file.
                            (default: $appdir/etc/config.sh)
 
-  -i -input <dir>          Input directory containing the input label maps.
+  -i -input <dir>          Input directory containing the input images.
                            (default: $indir)
 
-  -o -output <dir>         Output directory where to write the transformed label maps to.
+  -o -output <dir>         Output directory where to write the transformed images to.
                            (default: $outdir)
 
   -prefix <str>            Filename prefix.                               (default: none)
@@ -72,8 +72,6 @@ options=()
 sublst=
 agelst="$appdir/etc/age.csv"
 config="$appdir/etc/config.sh"
-prefix=
-suffix='.nii.gz'
 interp='linear'
 
 o=0
@@ -85,8 +83,10 @@ while [ $o -lt $# ]; do
 done
 . "$config"  || error "Failed to load configuration from file: $config"
 
-indir="$(cd  "$appdir/$imgdir" && pwd)"
-outdir="$(cd "$appdir/../eval/warped-images" && pwd)"
+indir="$appdir/$imgdir"
+outdir="$appdir/../eval/warped-images"
+prefix="$imgpre"
+suffix="$imgsuf"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -95,17 +95,17 @@ while [ $# -gt 0 ]; do
     -suffix)         optarg suffix $1 "$2"; shift; ;;
     -nn)             interp='nn'; ;;
     -bspline)        interp='bspline'; ;;
-    -images)         indir="$(cd "$appdir/$imgdir" && pwd)"
-                     outdir="$(cd "$appdir/../eval/warped-images" && pwd)"
-                     prefix=''; suffix='.nii.gz'
+    -images)         indir="$appdir/$imgdir"
+                     outdir="$appdir/../eval/warped-images"
+                     prefix="$imgpre"; suffix="$imgsuf"
                      interp='linear'; ;;
-    -labels)         indir="$(cd "$appdir/$lbldir" && pwd)"
-                     outdir="$(cd "$appdir/../eval/warped-labels" && pwd)"
-                     prefix=''; suffix='-tissues.nii.gz'
+    -labels)         indir="$appdir/$lbldir"
+                     outdir="$appdir/../eval/warped-labels"
+                     prefix="$lblpre"; suffix="$lblsuf"
                      interp='nn'; ;;
-    -structures)     indir="$(cd "$appdir/$lbldir" && pwd)"
-                     outdir="$(cd "$appdir/../eval/warped-structures" && pwd)"
-                     prefix=''; suffix='-all.nii.gz'
+    -structures)     indir="$appdir/$segdir"
+                     outdir="$appdir/../eval/warped-structures"
+                     prefix="$segpre"; suffix="$segsuf"
                      interp='nn'; ;;
     -o|-output)      optarg outdir $1 "$2"; shift; ;;
     -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
@@ -135,7 +135,7 @@ pid=()
 t=0
 for id1 in ${subids[@]}; do
   let t++
-  [ $verbose -le 1 ] || echo "Transforming images to space of subject $id1... $(printf %3d/%d $t ${#subids[@]})"
+  [ $verbose -eq 0 ] || echo "Transforming images to space of subject $id1... $(printf %3d/%d $t ${#subids[@]})"
   mkdir -p "$outdir/$id1" || exit 1
   if [ ! -f "$outdir/$id1/$prefix$id1$suffix" ]; then
     (
@@ -146,7 +146,7 @@ for id1 in ${subids[@]}; do
                                  -dofin identity \
                                  -matchInputType \
                                  -target "$pardir/ref.nii.gz" \
-                                 -nn > /dev/null
+                                 -$interp > /dev/null
       # transform resampled target back to original target space
       $appdir/bin/headertool "$outdir/$id1/$prefix$id1$suffix" \
                              "$outdir/$id1/$prefix$id1$suffix" \
@@ -171,7 +171,7 @@ for id1 in ${subids[@]}; do
                                    -dofin "$dofdir/2.1_ffd/$id1/$id2.dof.gz" \
                                    -matchInputType \
                                    -target "$pardir/ref.nii.gz" \
-                                   -nn > /dev/null
+                                   -$interp > /dev/null
         # transform warped source to original target space
         $appdir/bin/headertool "$outdir/$id1/$prefix$id2$suffix" \
                                "$outdir/$id1/$prefix$id2$suffix" \
@@ -182,5 +182,5 @@ for id1 in ${subids[@]}; do
     fi
   done
   wait && pid=()
-  [ $verbose -le 1 ] || echo "Transforming images to space of subject $id1... done"
+  [ $verbose -eq 0 ] || echo "Transforming images to space of subject $id1... done"
 done

@@ -15,50 +15,53 @@ export PATH LD_LIBRARY_PATH
 
 
 # input settings
-topdir="$appdir"                   # top-level working directory
-imgdir='../images'                 # directory of anatomical brain images relative to $topdir
-imgpre=''                          # image file name prefix
-imgsuf='.nii.gz'                   # image file name suffix
-lbldir='../labels'                 # directory of segmentations relative to $topdir
-                                   # - $lbldir/tissues/:    Tissue segmentations
-                                   # - $lbldir/structures/: Structural segmentations
-lblpre=''                          # label image file name prefix
-lblsuf='.nii.gz'                   # label image file name suffix
-segdir='../masks'                  # directory with binary segmentation masks
-segpre=''                          # binary segmentation file name prefix
-segsuf='.nii.gz'                   # binary segmentation file name suffix
-tissues=9                          # no. of tissue classes
-structures=87                      # no. of structures
-bgvalue=0                          # background value of skull-stripped images
+topdir="$appdir"                      # top-level working directory
+pardir='etc'                          # directory containing configuration files
+imgdir='../images'                    # directory of anatomical brain images
+imgpre=''                             # brain image file name prefix
+imgsuf='.nii.gz'                      # brain image file name suffix
+lbldir='../labels'                    # base directory of available segmentations
+                                      # - $lbldir/tissues/:    Tissue segmentations
+                                      # - $lbldir/structures/: Structural segmentations
+lblpre=''                             # label image file name prefix
+lblsuf='.nii.gz'                      # label image file name suffix
+segdir='../masks'                     # directory with binary segmentation masks
+segpre=''                             # binary segmentation file name prefix
+segsuf='.nii.gz'                      # binary segmentation file name suffix
+tissues=9                             # no. of tissue classes
+structures=87                         # no. of structures
+bgvalue=0                             # background value of skull-stripped images
 
 # reference for global normalization
-refdir='etc'                       # directory of reference image relative to $topdir
-refpre=''                          # reference image file name prefix
-refsuf='.nii.gz'                   # reference image file name suffix
-refid='serag-40'                   # ID of reference image (optional)
-                                   #
-                                   # Set reference ID to empty string to compute age-
-                                   # specific affine subject-to-template transformations
-                                   # from affine transformations between all image pairs.
+refdir="$pardir"                      # directory of reference image
+refpre=''                             # reference image file name prefix
+refsuf='.nii.gz'                      # reference image file name suffix
+refid='serag-40'                      # ID of reference image (optional)
+                                      #
+                                      # Set reference ID to empty string to compute age-
+                                      # specific affine subject-to-template transformations
+                                      # from affine transformations between all image pairs.
 
-# parameters
-resolution=0.5                     # highest image resolution at final level in mm
-similarity='NCC'                   # image (dis-)similarity measure: SSD, NMI, NCC
-refine=1                           # no. of template refinement steps
-threads=8                          # maximum no. of CPU cores to use
-epsilon=0.054                      # kernel weight threshold
-[ -n "$sigma" ] || sigma=1         # (default) standard deviation of Gaussian
-kernel="etc/kernel_sigma=$sigma"   # directory containing temporal kernel files relative to $topdir
+# workflow parameters
+resolution=0.5                        # highest image resolution at final level in mm
+similarity='NCC'                      # image (dis-)similarity measure: SSD, NMI, NCC
+bending=0.005                         # weight of bending energy term
+jacobian=0                            # weigth of Jacobian-based penalty term
+refine=1                              # no. of template refinement steps
+threads=8                             # maximum no. of CPU cores to use
+epsilon=0.054                         # kernel weight threshold
+[ -n "$sigma" ] || sigma=1            # (default) standard deviation of Gaussian
+kernel="$pardir/kernel_sigma=$sigma"  # directory containing temporal kernel files
 
 # output settings
-bindir='bin'                       # directory of job executable files relative to $topdir
-libdir='lib'                       # directory of shared libraries required by job executables relative to $topdir
-dagdir='dag'                       # directory of DAG files for HTCondor DAGMan jobs relative to $topdir
-logdir='log'                       # directory of log files written by HTCondor jobs relative to $topdir
-dofdir='../dofs'                   # transformations computed during atlas construction relative to $topdir
-evldir='../eval'                   # directory of evaluation output files relative to $topdir
-outdir='../atlas'                  # atlas output directory relative to $topdir
-update='false'                     # enable (true) or disable update of existing DAG files
+bindir='bin'                          # auxiliary scripts and job executable files
+libdir='lib'                          # shared libraries required by job executables
+dagdir='dag'                          # workflow description as DAG files for HTCondor DAGMan
+logdir='log'                          # directory of log files written by workflow jobs
+dofdir='../dofs'                      # transformations computed during atlas construction
+evldir='../eval'                      # directory of evaluation output files
+outdir='../atlas'                     # atlas output directory
+update='false'                        # enable (true) or disable update of existing DAG files
 
 # HTCondor settings
 notify_user="${USER}@imperial.ac.uk"
