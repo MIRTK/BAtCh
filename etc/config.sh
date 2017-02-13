@@ -41,12 +41,11 @@ refid='serag-40'                   # ID of reference image (optional)
                                    # specific affine subject-to-template transformations
                                    # from affine transformations between all image pairs.
 
-# registration parameters
+# parameters
 resolution=0.5                     # highest image resolution at final level in mm
 similarity='NCC'                   # image (dis-)similarity measure: SSD, NMI, NCC
-refine=3                           # no. of template refinement steps
-
-# kernel regression
+refine=1                           # no. of template refinement steps
+threads=8                          # maximum no. of CPU cores to use
 epsilon=0.054                      # kernel weight threshold
 [ -n "$sigma" ] || sigma=1         # (default) standard deviation of Gaussian
 kernel="etc/kernel_sigma=$sigma"   # directory containing temporal kernel files relative to $topdir

@@ -33,6 +33,7 @@ register_node()
   local mask=
   local ids=
   local model=
+  local mffd='Sum'
   local resolution=
   local levels=(4 1)
   local similarity='NMI'
@@ -46,6 +47,7 @@ register_node()
   local segdir=
   local ic='false'
   local sym='false'
+  local w
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -55,6 +57,7 @@ register_node()
       -mask)       optarg  mask     $1 "$2"; shift; ;;
       -subjects)   optargs ids     "$@"; shift ${#ids[@]}; ;;
       -model)      optarg  model    $1 "$2"; shift; ;;
+      -mffd) optarg mffd $1 "$2"; shift; ;;
       -hdrdofs)    optarg  hdrdofs  $1 "$2"; shift; hdrdof_opt='-dof'; ;;
       -invhdrdofs) optarg  hdrdofs  $1 "$2"; shift; hdrdof_opt='-dof_i'; ;;
       -dofins)     optarg  dofins   $1 "$2"; shift; ;;
@@ -80,6 +83,26 @@ register_node()
         fi
         shift 2
         params="$params\n${args[0]} = ${args[1]}"
+        ;;
+      -ds)
+        optarg w $1 "$2"
+        params="$params\nControl point spacing = $w"
+        shift
+        ;;
+      -be)
+        optarg w $1 "$2"
+        params="$params\nBending energy weight = $w"
+        shift
+        ;;
+      -vp)
+        optarg w $1 "$2"
+        params="$params\nVolume preservation weight = $w"
+        shift
+        ;;
+      -jl|-jac)
+        optarg w $1 "$2"
+        params="$params\nJacobian penalty weight = $w"
+        shift
         ;;
       -segdir)
         optarg segdir $1 "$2"
@@ -172,8 +195,9 @@ register_node()
     # registration parameters
     local cfg="[default]"
     cfg="$cfg\nTransformation model             = $model"
+    cfg="$cfg\nMulti-level transformation       = $mffd"
     cfg="$cfg\nImage interpolation mode         = Fast linear with padding"
-    cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy] + 0 JAC[Jacobian penalty]"
+    cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy](T) + 0 VP[Volume preservation](T) + 0 JAC[Jacobian penalty](T)"
     cfg="$cfg\nSimilarity measure               = $similarity"
     cfg="$cfg\nNo. of bins                      = 64"
     cfg="$cfg\nLocal window size [box]          = 5 vox"
@@ -185,14 +209,6 @@ register_node()
       cfg="$cfg\nPadding value of image 1         = $padding"
       cfg="$cfg\nPadding value of image 2         = $padding"
     fi
-    #if [ ${#segments[@]} -ne 0 ]; then
-    #  i=0
-    #  while [ $i -lt ${#segments[@]} ]; do
-    #    let j="$i + 3"
-    #    cfg="$cfg\nPadding value of image $j = -1"
-    #    let i++
-    #  done
-    #fi
     cfg="$cfg\n$params\n"
 
     if [ -n "$resolution" ]; then
@@ -216,7 +232,7 @@ register_node()
         cfg="$cfg\n\n[level $lvl]"
         blr=(2 2) # blurring of binary mask
         if [ -n "$refid" -a -n "$refdir" ]; then
-          blr[0]=1 # reference usually a probabilistic map (i.e., a bit blurry)
+          blr[1]=1 # reference usually a probabilistic map (i.e., a bit blurry)
         fi
         i=0
         while [ $i -lt ${#segments[@]} ]; do
@@ -235,22 +251,22 @@ register_node()
     write "$parin" "$cfg\n"
 
     # create generic registration submission script
-    local sub="arguments    = \""
+    local sub="arguments    = \"-threads $threads"
     if [ -n "$refid" -a -n "$refdir" ]; then
       if [ -n "$hdrdofs" ]; then
-        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
+        sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' -image '$refdir/$refpre\$(target)$refsuf'"
         sub="$sub $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
         i=0
         while [ $i -lt ${#segments[@]} ]; do
-          sub="$sub -image '$refdir/$refpre\$(target)-${segments[i]}$refsuf' -image '$segdir/${segments[i]}/$segpre\$(source)$segsuf'"
+          sub="$sub -image '$segdir/${segments[i]}/$segpre\$(source)$segsuf' -image '$refdir/$refpre\$(target)-${segments[i]}$refsuf'"
           sub="$sub $hdrdof_opt '$hdrdofs/\$(source).dof.gz'"
           let i="$i + 2"
         done
       else
-        sub="$sub -image '$refdir/$refpre\$(target)$refsuf' -image '$imgdir/$imgpre\$(source)$imgsuf'"
+        sub="$sub -image '$imgdir/$imgpre\$(source)$imgsuf' -image '$refdir/$refpre\$(target)$refsuf'"
         i=0
         while [ $i -lt ${#segments[@]} ]; do
-          sub="$sub -image '$refdir/$refpre\$(target)-${segments[i]}$refsuf' -image '$segdir/${segments[i]}/$segpre\$(source)$segsuf'"
+          sub="$sub -image '$segdir/${segments[i]}/$segpre\$(source)$segsuf' -image '$refdir/$refpre\$(target)-${segments[i]}$refsuf'"
           let i="$i + 2"
         done
       fi
@@ -294,7 +310,7 @@ register_node()
     # create generic dofinvert submission script
     if [[ $ic == true ]] && [ -z "$refid" ] ; then
       # command used to invert inverse-consistent transformation
-      local sub="arguments    = \"'$dofdir/\$(target)/\$(source).dof.gz' '$dofdir/\$(source)/\$(target).dof.gz'\""
+      local sub="arguments    = \"'$dofdir/\$(target)/\$(source).dof.gz' '$dofdir/\$(source)/\$(target).dof.gz' -threads $threads\""
       sub="$sub\noutput       = $_dagdir/\$(target)/dofinv_\$(target),\$(source).log"
       sub="$sub\nerror        = $_dagdir/\$(target)/dofinv_\$(target),\$(source).log"
       sub="$sub\nqueue"
@@ -437,7 +453,7 @@ transform_image_node()
     sub="$sub '$prefix\$(source)$suffix'"
     sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
     [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(source).dof.gz'"
-    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -target '$ref' -$interp"
+    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -target '$ref' -$interp -threads $threads"
     sub="$sub\""
     sub="$sub\noutput       = $_dagdir/\$(target)/transform_\$(target),\$(source).log"
     sub="$sub\nerror        = $_dagdir/\$(target)/transform_\$(target),\$(source).log"
@@ -450,7 +466,7 @@ transform_image_node()
       sub="$sub '$prefix\$(id)$suffix'"
       sub="$sub '$outdir/\$(id)/\$(id)$suffix'"
       [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(id).dof.gz'"
-      sub="$sub -dofin identity -target '$ref' -$interp"
+      sub="$sub -dofin identity -target '$ref' -$interp -threads $threads"
       sub="$sub\""
       sub="$sub\noutput       = $_dagdir/\$(id)/resample_\$(id).log"
       sub="$sub\nerror        = $_dagdir/\$(id)/resample_\$(id).log"
@@ -463,7 +479,7 @@ transform_image_node()
       sub="arguments    = \""
       sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
       sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
-      sub="$sub -dofin_i '$hdrdofs/\$(target).dof.gz'"
+      sub="$sub -dofin_i '$hdrdofs/\$(target).dof.gz' -threads $threads"
       sub="$sub\""
       sub="$sub\noutput       = $_dagdir/\$(target)/postalign_\$(target),\$(source).log"
       sub="$sub\nerror        = $_dagdir/\$(target)/postalign_\$(target),\$(source).log"
@@ -567,7 +583,7 @@ dofaverage_node()
 
     # create generic dofaverage submission script
     local sub="arguments = \"'$dofdir/\$(id).dof.gz' -all$options -add-identity-for-dofname '\$(id)'"
-    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz"
+    sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '\$(id)/' -suffix .dof.gz -threads $threads"
     sub="$sub\""
     sub="$sub\noutput    = $_dagdir/dofavg_\$(id).log"
     sub="$sub\nerror     = $_dagdir/dofavg_\$(id).log"
@@ -594,54 +610,58 @@ dofaverage_node()
 }
 
 # ------------------------------------------------------------------------------
-# add node for composition of transformations
-dofcombine_node()
+# add node to invert transformations
+invert_node()
 {
   local node=
   local parent=()
   local ids=()
-  local dofdir1=
-  local dofdir2=
-  local dofdir3=
+  local idlst=()
+  local dofins=
+  local dofdir=
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
-      -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
-      -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
-      -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
-      -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
-      -*)        error "dofcombine_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "dofcombine_node: too many arguments"
-                 node=$1; ;;
+      -parent) optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -sublst) optarg  idlst $1 "$2"; shift; ;;
+      -dofins) optarg  dofins $1 "$2"; shift; ;;
+      -dofdir) optarg  dofdir $1 "$2"; shift; ;;
+      -*) error "invert_node: invalid option: $1"; ;;
+      *)
+        [ -z "$node" ] || error "invert_node: too many arguments"
+        node=$1
+        ;;
     esac
     shift
   done
-  [ -n "$node"    ] || error "dofcombine_node: missing name argument"
-  [ -n "$dofdir1" ] || error "dofcombine_node: missing -dofdir1 argument"
-  [ -n "$dofdir2" ] || error "dofcombine_node: missing -dofdir2 argument"
-  [ -n "$dofdir3" ] || error "dofcombine_node: missing -dofdir3 argument"
+  [ -n "$node"   ] || error "invert_node: missing name argument"
+  [ -n "$dofins" ] || error "invert_node: missing -dofins argument"
+  [ -n "$dofdir" ] || error "invert_node: missing -dofdir argument"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    # create generic dofcombine submission script
-    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'\""
-    sub="$sub\noutput    = $_dagdir/dofcat_\$(id).log"
-    sub="$sub\nerror     = $_dagdir/dofcat_\$(id).log"
+    # read IDs from specified text file
+    [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+
+    # create generic invert-dof submission script
+    local sub="arguments = \"'$dofins/\$(id).dof.gz' '$dofdir/\$(id).dof.gz' -threads $threads\""
+    sub="$sub\noutput    = $_dagdir/invert_\$(id).log"
+    sub="$sub\nerror     = $_dagdir/invert_\$(id).log"
     sub="$sub\nqueue"
-    make_sub_script "dofcat.sub" "$sub" -executable compose-dofs
+    make_sub_script "invert.sub" "$sub" -executable invert-dof
 
     # node to create output directories
-    make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
+    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
     add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                       -sub        "error = $_dagdir/mkdirs.log\nqueue"
 
-    # add dofaverage nodes to DAG
+    # add invert-dof nodes to DAG
     for id in "${ids[@]}"; do
-      add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
-      add_edge "dofcat_$id" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
+      add_node "invert_$id" -subfile "invert.sub" -var "id=\"$id\""
+      add_edge "invert_$id" 'mkdirs'
+      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "invert_$id"
     done
 
   }; end_dag
@@ -650,8 +670,8 @@ dofcombine_node()
 }
 
 # ------------------------------------------------------------------------------
-# add node for composition of linear and global transformations
-ffdcompose_node()
+# add node for composition of transformations
+compose_node()
 {
   local node=
   local parent=()
@@ -669,16 +689,16 @@ ffdcompose_node()
       -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
       -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
       -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
-      -*)        error "ffdcompose_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "ffdcompose_node: too many arguments"
+      -*)        error "compose_node: invalid option: $1"; ;;
+      *)         [ -z "$node" ] || error "compose_node: too many arguments"
                  node=$1; ;;
     esac
     shift
   done
-  [ -n "$node"    ] || error "ffdcompose_node: missing name argument"
-  [ -n "$dofdir1" ] || error "ffdcompose_node: missing -dofdir1 argument"
-  [ -n "$dofdir2" ] || error "ffdcompose_node: missing -dofdir2 argument"
-  [ -n "$dofdir3" ] || error "ffdcompose_node: missing -dofdir3 argument"
+  [ -n "$node"    ] || error "compose_node: missing name argument"
+  [ -n "$dofdir1" ] || error "compose_node: missing -dofdir1 argument"
+  [ -n "$dofdir2" ] || error "compose_node: missing -dofdir2 argument"
+  [ -n "$dofdir3" ] || error "compose_node: missing -dofdir3 argument"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -687,11 +707,11 @@ ffdcompose_node()
     [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
 
     # create generic dofaverage submission script
-    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz'\""
-    sub="$sub\noutput    = $_dagdir/dofcat_\$(id).log"
-    sub="$sub\nerror     = $_dagdir/dofcat_\$(id).log"
+    local sub="arguments = \"'$dofdir1/\$(id).dof.gz' '$dofdir2/\$(id).dof.gz' '$dofdir3/\$(id).dof.gz' -threads $threads\""
+    sub="$sub\noutput    = $_dagdir/compose_\$(id).log"
+    sub="$sub\nerror     = $_dagdir/compose_\$(id).log"
     sub="$sub\nqueue"
-    make_sub_script "dofcat.sub" "$sub" -executable compose-dofs
+    make_sub_script "compose.sub" "$sub" -executable compose-dofs
 
     # node to create output directories
     make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
@@ -700,9 +720,9 @@ ffdcompose_node()
 
     # add dofaverage nodes to DAG
     for id in "${ids[@]}"; do
-      add_node "dofcat_$id" -subfile "dofcat.sub" -var "id=\"$id\""
-      add_edge "dofcat_$id" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "dofcat_$id"
+      add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""
+      add_edge "compose_$id" 'mkdirs'
+      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "compose_$id"
     done
 
   }; end_dag
@@ -722,12 +742,13 @@ average_node()
   local imgpre=
   local imgsuf='.nii.gz'
   local dofdir=
+  local dofinv='false'
   local dofpre=
   local dofsuf='.dof.gz'
   local average=
   local options=
   local reference=
-  local label margin bgvalue
+  local label margin bgvalue resolution
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -737,10 +758,20 @@ average_node()
       -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
       -imgpre)   optarg  imgpre  $1 "$2"; shift; ;;
       -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
-      -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
+      -dofdir|-hdrdofs)
+        optarg dofdir $1 "$2"
+        dofinv='false'
+        shift
+        ;;
+      -invhdrdofs)
+        optarg dofdir $1 "$2"
+        dofinv='true'
+        shift
+        ;;
       -dofpre)   optarg  dofpre  $1 "$2"; shift; ;;
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -reference) optarg reference $1 "$2"; shift; ;;
+      -resolution) optarg resolution $1 "$2"; shift; ;;
       -output)   optarg  average $1 "$2"; shift; ;;
       -voxelwise) options="$options -voxelwise"; ;;
       -margin)   optarg  margin  $1 "$2"; shift; options="$options -margin $margin";;
@@ -756,7 +787,9 @@ average_node()
   [ -n "$average" ] || error "average_node: missing -image argument"
   [ -z "$imgdir"  ] || imgpre="$imgdir/$imgpre"
   [ -z "$dofdir"  ] || dofpre="$dofdir/$dofpre"
+  [ $dofinv = 'false' ] || options="$options -invert"
   [ -z "$reference" ] || options="$options -reference $reference"
+  [ -z "$resolution" ] || options="$options -size $resolution"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -791,7 +824,7 @@ average_node()
                       -sub        "error = $_dagdir/mkdirs.log\nqueue"
 
     # add average node to DAG
-    local sub="arguments = \"$average -images '$imglst'$options\""
+    local sub="arguments = \"$average -images '$imglst'$options -threads $threads\""
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"

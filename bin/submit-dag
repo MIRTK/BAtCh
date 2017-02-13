@@ -1,0 +1,119 @@
+#!/bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+source "$appdir/lib/daggen/utils.sh" || exit 1
+
+# usage
+print_help()
+{
+  cat --<<HELP
+usage: $(basename $0) [options]
+
+Options:
+  -d -dag <file>       Name of DAG file to run. (default: $appdir/dag/main.dag)
+  -l -log <file>       Name of DAGMan log file. (default: $appdir/dagman.log)
+  -p -priority <int>   Priority of HTCondor jobs. (default: 0)
+  -norescue            Remove <dag>.rescueXXX files before running DAGMan. (default: keep files)
+  -nosubmit            Create submit script but do not submit DAGMan job. (default: submit)
+  -h --help            Print help and exit.
+HELP
+}
+
+# parse arguments
+dag=
+log=
+nosubmit=
+rescue=true
+priority=0
+keytab="/homes/$USER/kerb5.keytab"
+[ -f "$keytab" ] || keytab=
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d|-dag)      optarg dag      $1 "$2"; shift; ;;
+    -p|-priority) optarg priority $1 "$2"; shift; ;;
+    -l|-log)      optarg log      $1 "$2"; shift; ;;
+    -norescue) rescue=false; ;;
+    -nosubmit) nosubmit='-no_submit'; ;;
+    -h|-help|--help) print_help; exit 0; ;;
+    *) print_help; error "Invalid argument: $1"; ;;
+  esac
+  shift
+done
+[ -n "$log" ] || log="$appdir/dagman.log"
+[ -n "$dag" ] || dag='main'
+[ -f "$dag" ] || dag="$appdir/dag/$dag.dag"
+[ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
+
+if [ $log = '/' ]; then
+  echo "Critical log argument, rm -rf would be fatal!" 1>&2
+  exit 1
+fi
+
+# required commands
+dagman="$(which condor_dagman)"
+[ -n "$dagman" ] || { echo "Could not find condor_dagman in the PATH!" 1>&2; exit 1; }
+kinit="$(which kinit)"
+[ -n "$kinit" ] || { echo "Could not find kinit in the PATH!" 1>&2; exit 1; }
+
+# write executable script which executes DAGMan in background
+# and periodically re-initializes the Kerberos v5 ticket cache
+if [ -n "$keytab" ]; then
+  principal=$USER@$(klist -k "$keytab" | grep "$USER@" | cut -d@ -f2)
+  kinit -k -t "$keytab" $principal # for condor_submit_dag below
+  executable="$appdir/bin/dagman"
+  rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
+  [ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
+  cat --<<DAGMAN > "$executable"
+#!/bin/bash
+
+# re-initialize Kerberos ticket
+kreinit() { kinit -k -t "$keytab" $principal; }
+
+# kill DAGMan when this script is interrupted
+pid=
+onexit()
+{
+  if [ -n "\$pid" ]; then
+    pkill -KILL -P \$pid
+    exit 1
+  else
+    exit 0
+  fi
+}
+trap onexit EXIT
+
+# start DAGMan in background and then periodically
+# re-initialize Kerberos ticket cache while it runs
+"$dagman" "\$@" &
+pid=\$!
+while [ -n "\$pid" ]; do
+  kreinit
+  for i in {1..60}; do
+    sleep 10
+    jobs 1 1> /dev/null 2> /dev/null
+    if [ \$? -ne 0 ]; then
+      pid=
+      break
+    fi
+  done
+done
+DAGMAN
+  [ $? -eq 0 ] || exit 1
+else
+  executable="$dagman"
+fi
+
+# remove files of previous run
+rm -f "$log"
+[[ $rescue == true ]] || rm -f "$dag.rescue*"
+
+# submit DAGMan job running auxiliary shell script to avoid expiration
+# of Kerberos v5 ticket granting ticket before completion of all jobs
+condor_submit_dag -append "output      = $log" \
+                  -append "error       = $log" \
+                  -append "log         = $log" \
+                  -append "environment = _CONDOR_DAGMAN_LOG=$log;_CONDOR_SCHEDD_ADDRESS_FILE=/var/log/condor/.schedd_address;_CONDOR_MAX_DAGMAN_LOG=0" \
+                  -append "executable  = $executable" \
+                  -update_submit -priority $priority $nosubmit "$dag"

@@ -1,0 +1,37 @@
+#!/usr/bin/python
+
+"""Filter dHCP subjects by age at birth/scan criteria."""
+
+import sys
+import csv
+import argparse
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('table', help="CSV file with image meta-data")
+    parser.add_argument('--min-ga', type=float, help="Minimum gestational age at birth in weeks")
+    parser.add_argument('--max-ga', type=float, help="Maximum gestational age at birth in weeks")
+    parser.add_argument('--min-pma', type=float, help="Minimum post-menstrual age at scan in weeks")
+    parser.add_argument('--max-pma', type=float, help="Maximum post-menstrual age at scan in weeks")
+    parser.add_argument('--min-time-to-scan', type=float, help="Minimum time span between birth and scan in weeks")
+    parser.add_argument('--max-time-to-scan', type=float, help="Maximum time span between birth and scan in weeks")
+    args = parser.parse_args()
+    print('SubjectId,SessionId')
+    with open(args.table) as csvfile:
+        table = csv.DictReader(csvfile)
+        for row in table:
+            ga = float(row['BirthAge'])
+            pma = float(row['ScanAge'])
+            if ((args.min_ga and ga < args.min_ga) or
+                    (args.max_ga and ga > args.max_ga) or
+                    (args.min_pma and pma < args.min_pma) or
+                    (args.max_pma and pma > args.max_pma) or
+                    (args.min_time_to_scan and pma - ga < args.min_time_to_scan) or
+                    (args.max_time_to_scan and pma - ga > args.max_time_to_scan)):
+                continue
+            sys.stdout.write(row['SubjectId'])
+            if 'SessionId' in row:
+                sys.stdout.write(',')
+                sys.stdout.write(row['SessionId'])
+            sys.stdout.write('\n')

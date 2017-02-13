@@ -1,0 +1,378 @@
+#!/usr/bin/python
+
+"""Execute workflow defined by HTCondor DAGMan submission file."""
+
+import re
+import os
+import sys
+import argparse
+import shlex
+import subprocess
+from collections import OrderedDict
+
+
+_try_run = False
+_next_job_id_for_try_run = 1
+
+
+# ==============================================================================
+# Common functions, e.g., to parse HTCondor DAG description
+# ==============================================================================
+
+
+def read_sub(sub_name):
+    jobs = []
+    job = {}
+    re_queue = re.compile(r'\s*queue\s*$')
+    re_kv = re.compile(r'\s*(\w+)\s*=\s*(.*)$')
+    with open(sub_name) as sub_file:
+        for line in sub_file:
+            if re_queue.match(line):
+                jobs.append(job)
+            else:
+                m = re_kv.match(line)
+                if m:
+                    key = m.group(1)
+                    val = m.group(2)
+                    if key == 'arguments':
+                        if len(val) > 1 and val[0] == '"' and val[-1] == '"':
+                            val = val[1:-1]
+                        val = shlex.split(val)
+                    job[key] = val
+    return jobs
+
+
+def replace(job, name, value):
+    for k in job.keys():
+        if isinstance(job[k], (list, tuple)):
+            args = []
+            for arg in job[k]:
+                args.append(arg.replace("$({})".format(name), value))
+            job[k] = args
+        else:
+            job[k] = job[k].replace("$({})".format(name), value)
+
+
+def read_dag(dag_name, prefix=''):
+    """Read jobs from .dag file."""
+    jobs = OrderedDict()
+    deps = {}
+    re_splice = re.compile(r'\s*(SPLICE|SUBDAG\s+EXTERNAL)\s+([^ ]+)\s+([a-zA-Z0-9\//-_ ,.+=]+)\s*$')
+    re_submit = re.compile(r'\s*JOB\s+([^ ]+)\s+([a-zA-Z0-9\//-_ ,.+=]+)\s*$')
+    re_parent = re.compile(r'\s*PARENT\s+([^ ]+)\s+CHILD\s+([^ ]+)\s*$')
+    re_vars = re.compile(r'\s*VARS\s+([^ ]+)\s+(.*)\s*$')
+    re_kv = re.compile(r'\s*([a-zA-Z0-9_]+)="(.+)"\s*$')
+    with open(dag_name) as dag_file:
+        for line in dag_file:
+            line = line.strip()
+            m_splice = re_splice.match(line)
+            m_submit = re_submit.match(line)
+            m_parent = re_parent.match(line)
+            m_vars = re_vars.match(line)
+            if m_splice:
+                name = prefix + m_splice.group(2)
+                subjobs, subdeps = read_dag(m_splice.group(3), prefix='{}+'.format(name))
+                jobs.update(subjobs)
+                deps.update(subdeps)
+            elif m_submit:
+                name = prefix + m_submit.group(1)
+                jobs[name] = read_sub(m_submit.group(2))
+                deps[name] = []
+            elif m_vars:
+                name = prefix + m_vars.group(1)
+                for var in m_vars.group(2).split(' '):
+                    m = re_kv.match(var)
+                    if not m:
+                        raise Exception("Invalid VARS argument '{}'".format(var))
+                    for job in jobs[name]:
+                        replace(job, m.group(1), m.group(2))
+            elif m_parent:
+                parent = prefix + m_parent.group(1)
+                parents = []
+                if parent in jobs:
+                    parents.append(parent)
+                else:
+                    pattern = re.compile((parent + '+').replace('+', '\\+'))
+                    for batch in jobs.keys():
+                        if pattern.match(batch):
+                            parents.append(batch)
+                child = prefix + m_parent.group(2)
+                children = []
+                if child in jobs:
+                    children.append(child)
+                else:
+                    pattern = re.compile((child + '+').replace('+', '\\+'))
+                    for batch in jobs.keys():
+                        if pattern.match(batch):
+                            children.append(batch)
+                if len(children) == 0 and len(parents) == 0:
+                    raise Exception("Could not identify dependencies for: PARENT {} CHILD {}".format(parent, child))
+                for child in children:
+                    for parent in parents:
+                        deps[child].append(parent)
+    return (jobs, deps)
+
+
+def read_rescue_file(fname):
+    done = []
+    if os.path.isfile(fname):
+        re_done = re.compile(r'\s*DONE\s+([^ ]+)\s*$')
+        with open(fname) as f:
+            for line in f:
+                line = line.strip()
+                m_done = re_done.match(line)
+                if m_done:
+                    done.append(m_done.group(1))
+    return done
+
+
+# ==============================================================================
+# Local execution
+# ==============================================================================
+
+
+def run_job_local(job):
+    """Execute single job locally."""
+    argv = [job['executable']]
+    if 'arguments' in job:
+        argv.extend(job['arguments'])
+    if 'output' in job and 'error' in job:
+        if job['output'] == job['error']:
+            with open(os.path.join(job['initialdir'], job['output']), "w") as log:
+                subprocess.check_call(argv, stdout=log, stderr=subprocess.STDOUT)
+        else:
+            out = os.path.join(job['initialdir'], job['output'])
+            err = os.path.join(job['initialdir'], job['error'])
+            with open(out, "w") as fout, open(err, "w") as ferr:
+                subprocess.check_call(argv, stdout=fout, stderr=ferr)
+    elif 'output' in job:
+        with open(os.path.join(job['initialdir'], job['output']), "w") as log:
+            subprocess.check_call(argv, stdout=log)
+    elif 'error' in job:
+        with open(os.path.join(job['initialdir'], job['error']), "w") as log:
+            subprocess.check_call(argv, stderr=log)
+    else:
+        subprocess.check_call(argv)
+
+
+def run_local(jobs, deps, rescue_file=None):
+    """Execute jobs sequentially on local machine."""
+    todo = []
+    done = []
+    if rescue_file:
+        done = read_rescue_file(rescue_file)
+    for batch in jobs.keys():
+        if batch not in done:
+            todo.append(batch)
+    if len(todo) > 0:
+        rescue = None
+        try:
+            if rescue_file:
+                rescue = open(rescue_file, "a", False)
+            while len(todo) > 0:
+                batches = todo
+                todo = []
+                for batch in batches:
+                    ready = True
+                    for dep in deps[batch]:
+                        if dep not in done:
+                            ready = False
+                            break
+                    if ready:
+                        print("\nExecuting job(s) of batch '{}'...".format(batch))
+                        for job in jobs[batch]:
+                            run_job_local(job)
+                        rescue.write('DONE ' + batch + '\n')
+                        done.append(batch)
+                        print("Executing job(s) of batch '{}'... done".format(batch))
+                    else:
+                        todo.append(batch)
+                if len(todo) == len(batches):
+                    raise Exception("There seem to be circular job dependencies!")
+        finally:
+            if rescue:
+                rescue.close()
+
+
+# ==============================================================================
+# SLURM submission
+# ==============================================================================
+
+
+def read_slurm_info(jobs):
+    done = []
+    re_jobid = re.compile(r'\s*SLURM JOB\s+([0-9]+)\s*$')
+    re_done = re.compile(r'\s*SLURM JOB DONE\s*$')
+    for batch in jobs.keys():
+        batch_done = True
+        for job in jobs[batch]:
+            job['id'] = None
+            job['done'] = False
+            if not 'error' in job:
+                raise Exception("No error file path specified for job {} of batch {}".format(os.path.basename(job['executable']), batch))
+            out = os.path.join(job['initialdir'], job['error'])
+            if os.path.exists(out):
+                with open(out, "r") as log:
+                    for line in log:
+                        m_jobid = re_jobid.match(line)
+                        if m_jobid:
+                            job['id'] = int(m_jobid.group(1))
+                            job['done'] = False
+                        elif job['id']:
+                            m_done = re_done.match(line)
+                            if m_done:
+                                job['done'] = True
+            if not job['done']:
+                batch_done = False
+        if batch_done:
+            done.append(batch)
+    return done
+
+
+def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
+    """Submit SLURM job."""
+    sbatch_script = "#!/bin/sh\n"
+    sbatch_script += "cd '{}' || exit 1\n".format(job['initialdir'])
+    command = job['executable']
+    if ' ' in command:
+        command = "'" + command + "'"
+    if 'arguments' in job:
+        for i in range(len(job['arguments'])):
+            arg = job['arguments'][i]
+            if arg == '-threads':
+                threads=int(job['arguments'][i+1])
+            if "'" in arg:
+                arg = arg.replace("'", "\\'")
+            if ' ' in arg or '"' in arg:
+                arg = "'" + arg + "'"
+            command += ' ' + arg
+    sbatch_script += command
+    sbatch_script += "\n[ $? -eq 0 ] && echo 'SLURM JOB DONE' 1>&2"
+    sbatch_argv = [
+        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', name,
+        '--begin=now+10' # delay s.t. 'SLURM JOB <Id>' written before job starts
+    ]
+    if deps:
+        if _try_run:
+            deps = ['$j{}'.format(dep) for dep in deps]
+        else:
+            deps = [str(dep) for dep in deps]
+        sbatch_argv.append('--dependency=afterok:' + ','.join(deps))
+    if 'output' in job:
+        output = os.path.join(job['initialdir'], job['output'])
+        outdir = os.path.dirname(output)
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir)
+        sbatch_argv.extend(['-o', output])
+    error = os.path.join(job['initialdir'], job['error'])
+    errdir = os.path.dirname(error)
+    if not os.path.isdir(errdir):
+        os.makedirs(errdir)
+    sbatch_argv.extend(['-e', error])
+    with open(error, "w", False) as err:
+        if _try_run:
+            global _next_job_id_for_try_run
+            if _try_run:
+                sys.stdout.write('submit_job_{id}() {{\n'.format(id=_next_job_id_for_try_run))
+            sys.stdout.write(' '.join(sbatch_argv) + ' <<EOF_SCRIPT\n' + sbatch_script + '\nEOF_SCRIPT\n')
+            if _try_run:
+                sys.stdout.write('}\n')
+                sys.stdout.write('j{id}=`submit_job_{id}`\n'.format(id=_next_job_id_for_try_run))
+                sys.stdout.write('[ $? -eq 0 ] || exit 1\n')
+                sys.stdout.write('j{id}=${{j{id}/Submitted batch job /}}\n'.format(id=_next_job_id_for_try_run))
+            sys.stdout.write('\n')
+            sbatch_error = ''
+            sbatch_output = 'Submitted batch job {}'.format(_next_job_id_for_try_run)
+            _next_job_id_for_try_run += 1
+        else:
+            sbatch_proc = subprocess.Popen(
+                sbatch_argv,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                stdin=subprocess.PIPE
+            )
+            (sbatch_output, sbatch_error) = sbatch_proc.communicate(input=sbatch_script.encode('utf-8'))
+            if sbatch_proc.returncode != 0:
+                err.write(sbatch_error)
+                raise Exception(sbatch_error)
+        m_jobid = re.match('Submitted batch job ([0-9]+)', sbatch_output)
+        if not m_jobid:
+            raise Exception("Failed to determine job ID from sbatch output:\n" + sbatch_output)
+        err.write("SLURM JOB " + m_jobid.group(1))
+    job['id'] = int(m_jobid.group(1))
+    job['done'] = False
+    if not _try_run:
+        print("  Submitted job {} (JobId={})".format(name, job['id']))
+
+
+def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
+    """Submit workflow as SLURM jobs with inter-job dependencies."""
+    todo = []
+    done = read_slurm_info(jobs)
+    if rescue_file:
+        done.extend(read_rescue_file(rescue_file))
+    for batch in jobs.keys():
+        if batch not in done:
+            todo.append(batch)
+    if _try_run and len(todo) > 0:
+        print("#!/bin/sh\n")
+    while len(todo) > 0:
+        batches = todo
+        todo = []
+        for batch in batches:
+            ready = True
+            jobids = []
+            for dep in deps[batch]:
+                for job in jobs[dep]:
+                    if not job['done']:
+                        if not job['id']:
+                            ready = False
+                            break
+                        jobids.append(job['id'])
+                if not ready:
+                    break
+            if ready:
+                jobids.sort()
+                if not _try_run:
+                    print("Submitting job(s) of batch '{}'...".format(batch))
+                for i in range(len(jobs[batch])):
+                    name = batch
+                    if len(jobs[batch]) > 1:
+                        name += '+job{}'.format(i + 1)
+                    run_job_slurm(name=name, job=jobs[batch][i], deps=jobids,
+                                  threads=threads, queue=queue)
+                if not _try_run:
+                    print("Submitting job(s) of batch '{}'... done".format(batch))
+            else:
+                todo.append(batch)
+        if len(todo) == len(batches):
+            raise Exception("There seem to be circular job dependencies!")
+
+
+# ==============================================================================
+# Main
+# ==============================================================================
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('dag_file',
+                        help="Workflow description HTCondor DAGMan format")
+    parser.add_argument('--rescue-file',
+                        help="HTCondor rescue file with entries of done job")
+    parser.add_argument('--backend', choices=['local', 'condor', 'slurm'], default='local',
+                        help="Backend to use for job execution")
+    parser.add_argument('--queue', default='long',
+                        help="Queue of batch processing backend")
+    parser.add_argument('--print', dest='try_run', action='store_true',
+                        help="Print job submission commands without execution")
+    args = parser.parse_args()
+    _try_run = args.try_run
+    if args.backend == 'condor':
+        raise Exception("Use submit-dag command instead")
+    jobs, deps = read_dag(args.dag_file)
+    if args.backend == 'slurm':
+        run_slurm(jobs, deps, rescue_file=args.rescue_file, queue=args.queue)
+    else:
+        run_local(jobs, deps, rescue_file=args.rescue_file)
+
