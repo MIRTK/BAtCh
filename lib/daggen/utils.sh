@@ -1,5 +1,5 @@
 ################################################################################
-#
+# Auxiliary functions for Bash scripting
 ################################################################################
 
 [ -z $__daggen_utils_sh ] || return 0
@@ -95,4 +95,13 @@ append()
 {
   makedir "$(dirname "$1")"
   echo -ne "$2" >> "$1"
+}
+
+# ------------------------------------------------------------------------------
+# read subject IDs from text file (first column)
+read_sublst()
+{
+  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
+  [ ${#ids[@]} -gt 0 ] || error "Failed to read subject IDs from file $2"
+  local "$1" && upvar $1 ${ids[@]}
 }

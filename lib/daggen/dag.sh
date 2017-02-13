@@ -25,13 +25,11 @@ source "$_moddir/utils.sh" || {
 #       Mainly an issue for myself (Andreas) because of ongoing development.
 pack_executable()
 {
-  local symlink='true'
-
   if [ ! -f "$bindir/$1" ]; then
     local path="$(which "$1" 2> /dev/null)"
     if [ -n "$path" ]; then
       makedir "$bindir"
-      if [ $symlink = 'true' ]; then
+      if [ $binlnk = 'true' ]; then
         ln -s "$path" "$bindir/$1" > /dev/null 2>&1
         if [ $? -eq 0 ]; then
           info  "  Linked executable $path"
