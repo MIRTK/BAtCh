@@ -7,3 +7,8 @@
 *.log
 .*.swo
 .*.swp
+/lib/tools/register
+/lib/tools/invert-dof
+/lib/tools/compose-dofs
+/lib/tools/average-images
+/lib/tools/average-dofs
