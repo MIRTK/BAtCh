@@ -42,7 +42,7 @@ segpre=''                             # binary segmentation file name prefix
 segsuf='.nii.gz'                      # binary segmentation file name suffix
 
 # default reference for global normalization
-refdir="$pardir/reference"            # directory of reference image
+refdir="etc/reference"                # directory of reference image
 refpre=''                             # reference image file name prefix
 refsuf='.nii.gz'                      # reference image file name suffix
 refid=''                              # ID of reference image (optional)
