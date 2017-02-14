@@ -368,7 +368,7 @@ register_node()
     cfg="$cfg\nSimilarity measure               = $similarity"
     cfg="$cfg\nNo. of bins                      = 64"
     cfg="$cfg\nLocal window size [box]          = 5 vox"
-    cfg="$cfg\nMaximum streak of rejected steps = 1"
+    cfg="$cfg\nMaximum streak of rejected steps = 2"
     cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of resolution levels         = $nlevels"
     cfg="$cfg\nFinal resolution level           = ${levels[1]}"

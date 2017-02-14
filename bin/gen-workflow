@@ -321,7 +321,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -bending  $bending \
         -jacobian $jacobian \
         -sim      "$similarity" \
-        -par      "Maximum streak of rejected steps" 2 \
         -padding  "$bgvalue" \
         -hdrdofs  "$nrmdofs" \
         -dofins   "identity" \
@@ -408,7 +407,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -bending  $bending \
                 -jacobian $jacobian \
                 -sim      "$similarity" \
-                -par      "Maximum streak of rejected steps" 2 \
                 -padding  "$bgvalue" \
                 -hdrdofs  "$nrmdofs" \
                 -dofins   "$defdofs" \
