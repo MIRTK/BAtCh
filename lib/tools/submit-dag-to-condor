@@ -1,7 +1,7 @@
 #!/bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
-appdir="$(cd "$appdir/.." && pwd)"
+bindir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$bindir/.." && pwd)"
 source "$appdir/lib/daggen/utils.sh" || exit 1
 
 # usage
@@ -41,9 +41,9 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-[ -n "$log" ] || log="$appdir/dagman.log"
+[ -n "$log" ] || log="dagman.log"
 [ -n "$dag" ] || dag='main'
-[ -f "$dag" ] || dag="$appdir/dag/$dag.dag"
+[ -f "$dag" ] || dag="dag/$dag.dag"
 [ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
 
 if [ $log = '/' ]; then
@@ -53,16 +53,16 @@ fi
 
 # required commands
 dagman="$(which condor_dagman)"
-[ -n "$dagman" ] || { echo "Could not find condor_dagman in the PATH!" 1>&2; exit 1; }
+[ -n "$dagman" ] || error "Could not find condor_dagman in the PATH!"
 kinit="$(which kinit)"
-[ -n "$kinit" ] || { echo "Could not find kinit in the PATH!" 1>&2; exit 1; }
+[ -n "$kinit" ] || error "Could not find kinit in the PATH!"
 
 # write executable script which executes DAGMan in background
 # and periodically re-initializes the Kerberos v5 ticket cache
 if [ -n "$keytab" ]; then
   principal=$USER@$(klist -k "$keytab" | grep "$USER@" | cut -d@ -f2)
   kinit -k -t "$keytab" $principal # for condor_submit_dag below
-  executable="$appdir/bin/dagman"
+  executable="$bindir/run-dagman"
   rm -f "$executable" && touch "$executable" && chmod 'u+x,og-rx' "$executable"
   [ $? -eq 0 ] || error "Failed to create empty executable file with access only granted to $USER"
   cat --<<DAGMAN > "$executable"
