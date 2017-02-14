@@ -1,8 +1,16 @@
 #! /bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
-appname="$(basename "$BASH_SOURCE")"
-. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/utils.sh" || {
+  echo "Failed to import daggen/utils module!" 1>&2
+  exit 1
+}
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
 
 # ==============================================================================
 # help
@@ -18,9 +26,10 @@ usage: $(basename "$0") [options]
 This script uses the IRTK display command to produce offscreen renders
 of the generated spatio-temporal brain atlas.
 
+TODO: Write new Python script which uses the MIRTK screenshots Python module.
+
 Options:
-  -c -config <config.sh>   Configuration file.
-                           (default: $appdir/etc/config.sh)
+  -c -config <config.sh>   Custom configuration file. (default: none)
   -f -force                Overwrite existing snapshots. (default: off)
   -o -outdir <dir>         Root directory of constructed atlas.
   -h -help                 Print help and exit.
@@ -32,20 +41,20 @@ HELP
 # main
 # ==============================================================================
 
-verbose=0
-config="$appdir/etc/config.sh"
-force=0 # 0: create only new snapshots, 1: overwrite existing snapshots
-
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
-    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
-    -sigma)     let a=o+1; optarg sigma  ${!o} "${!a}"; ;;
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
   esac
   let o++
 done
-. "$config"  || error "Failed to load configuration from file: $config"
 
+force=0 # 0: create only new snapshots, 1: overwrite existing snapshots
 outdir="$topdir/$outdir"
 
 while [ $# -gt 0 ]; do
@@ -66,7 +75,7 @@ mkdir -p "$pngdir" || error "Failed to create output directory for snapshot imag
 
 # ------------------------------------------------------------------------------
 # templates
-for template in $(ls "$outdir/templates/t2w_"*".nii.gz"); do
+for template in $(ls "$outdir/templates/t2w_"??".nii.gz"); do
   fname="$(basename "$template")"
   fname=${fname/.*/}
   sshot="$pngdir/$fname.png"
@@ -78,7 +87,7 @@ done
 
 # ------------------------------------------------------------------------------
 # tissue probability maps
-for pbmap in $(ls "$outdir/pbmaps/"??"/tissue_"*".nii.gz"); do
+for pbmap in $(ls "$outdir/pbmaps/t"??"/tissue_"?".nii.gz"); do
   t=$(dirname "$pbmap" | xargs basename)
   fname="$(basename "$pbmap")"
   fname=${fname/.*/}
