@@ -1,8 +1,11 @@
 #!/bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
-appname="$(basename "$BASH_SOURCE")"
-. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+
+source "$topdir/lib/daggen/utils.sh" || {
+  echo "Failed to import daggen/utils module!" 1>&2
+  exit 1
+}
 
 # ==============================================================================
 # help
@@ -35,7 +38,7 @@ outlst="$1"; shift
 rm -f "$outlst" || error "Failed to remove existing output file!"
 outlsts=()
 for kernel in "$@"; do
-  tmplst="pairs${kernel/weights}"
+  tmplst="pairs_$(basename "$kernel")"
   #(
     read_sublst ids "$kernel"
     echo "Number of subjects in $kernel = ${#ids[@]}"
