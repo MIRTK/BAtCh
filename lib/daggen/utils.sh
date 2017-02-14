@@ -9,9 +9,25 @@ __daggen_utils_sh=0
 
 # ------------------------------------------------------------------------------
 # print message
-info()  { [ $verbose -lt 1 ] || echo -e "$1"; }
-warn()  { echo -e "$1" 1>&2; }
-error() { warn "$1"; exit 1; }
+info()
+{
+  [ $verbose -lt 1 ] || echo -e "$1"
+}
+
+warn()
+{
+  echo -e "$1" 1>&2
+}
+
+error()
+{
+  local frame=0
+  while caller $frame; do
+    ((frame++));
+  done
+  warn "$*"
+  exit 1
+}
 
 # ------------------------------------------------------------------------------
 # remove trailing zeros from floating point number (e.g., returned by bc)
