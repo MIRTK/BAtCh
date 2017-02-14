@@ -1,8 +1,8 @@
 #! /bin/bash
 
-appid="`basename "$0"`"
-appdir="`cd "`dirname "$BASH_SOURCE"`" && pwd`"
-appdir="`cd "$appdir/.." && pwd`"
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
 
 source "$appdir/lib/daggen/mirtk.sh" || {
   echo "Failed to import daggen/mirtk module!" 1>&2
@@ -66,6 +66,9 @@ while [ $o -lt $# ]; do
   let o++
 done
 
+[ -z "$agelst" ] || agelst="$topdir/$agelst"
+[ -z "$sublst" ] || sublst="$topdir/$sublst"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     -s|-sublst) optarg sublst $1 "$2"; shift; ;;
@@ -79,7 +82,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ -z "$agelst" -o ! -f "$agelst" ]; then
+if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
   error "Missing CSV file with subject IDs and corresponding ages!"
 fi
 [ -n "$sublst" ] || sublst="$agelst"
@@ -314,8 +317,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -imgsuf   "$imgsuf" \
         -model    "SVFFD" \
         -mffd     "None" \
-        -spacing  $spacing
-        -bending  $bending
+        -spacing  $spacing \
+        -bending  $bending \
         -jacobian $jacobian \
         -sim      "$similarity" \
         -par      "Maximum streak of rejected steps" 2 \
@@ -392,7 +395,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           for t in ${timepoints[@]}; do
 
             register_node "refine_$t" \
-                -subjects "$kernel/t$t.csv"
+                -subjects "$kernel/t$t.csv" \
                 -imgdir   "$imgdir" \
                 -imgpre   "$imgpre" \
                 -imgsuf   "$imgsuf" \

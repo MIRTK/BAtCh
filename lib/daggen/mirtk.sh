@@ -285,7 +285,7 @@ register_node()
   [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || {
     error "register_node: not enough -subjects specified"
   }
-  if [ $dofins = 'identity' ] || [ $dofins = 'id' ]; then
+  if [[ $dofins == 'identity' ]] || [[ $dofins == 'id' ]]; then
     dofins='Id'
   fi
   [ -n "$dofdir" ] || error "register_node: missing output -dofdir argument"
@@ -321,9 +321,9 @@ register_node()
   fi
 
   local fidelity
-  if [ $sym = 'true' ]; then
+  if [[ $sym == true ]]; then
     fidelity='SIM[Image similarity](I(1) o T^-.5, I(2) o T^.5)'
-  elif [ $ic = 'true' ]; then
+  elif [[ $ic == true ]]; then
     fidelity='SIM[Fwd image similarity](I(1), I(2) o T) + SIM[Bwd image similarity](I(1) o T^-1, I(2))'
   else
     fidelity='SIM[Image similarity](I(1), I(2) o T)'
@@ -333,9 +333,9 @@ register_node()
     let j="$i + 1"
     let t="$i + 3"
     let s="$i + 4"
-    if [ $sym = 'true' ]; then
+    if [[ $sym == true ]]; then
       fidelity="$fidelity + ${segments[j]} SSD[${segments[i]} difference](I($t) o T^-.5, I($s) o T^.5)"
-    elif [ $ic = 'true' ]; then
+    elif [[ $ic == true ]]; then
       fidelity="$fidelity + ${segments[j]} SSD[Fwd ${segments[i]} difference](I($t), I($s) o T)"
       fidelity="$fidelity + ${segments[j]} SSD[Bwd ${segments[i]} difference](I($t) o T^-1, I($s))"
     else
@@ -352,7 +352,7 @@ register_node()
     N=${#ids[@]}
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
-    [ $ic = false ] || let N="$N / 2"
+    [[ $ic == false ]] || let N="$N / 2"
   fi
 
   # add SUBDAG node
@@ -434,7 +434,7 @@ register_node()
         [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/$srcid$dofsuf'"
         let i="$i + 2"
       done
-      if [ "$dofins" = Id ]; then
+      if [[ "$dofins" == 'Id' ]]; then
         sub="$sub -dofin Id"
       elif [ -n "$dofins" ]; then
         sub="$sub -dofin '$dofins/$dofid$dofsuf'"
@@ -460,7 +460,7 @@ register_node()
         [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
         let i="$i + 2"
       done
-      if [ "$dofins" = Id ]; then
+      if [[ "$dofins" == 'Id' ]]; then
         sub="$sub -dofin Id"
       elif [ -n "$dofins" ]; then
         sub="$sub -dofin '$dofins/\$(source)$dofsuf'"
@@ -486,7 +486,7 @@ register_node()
         [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/$srcid$dofsuf'"
         let i="$i + 2"
       done
-      if [ "$dofins" = Id ]; then
+      if [[ "$dofins" == 'Id' ]]; then
         sub="$sub -dofin Id"
       elif [ -n "$dofins" ]; then
         sub="$sub -dofin '$dofins/\$(target)$dofsuf'"
@@ -509,7 +509,7 @@ register_node()
         [ -z "$hdrdofs" ] || sub="$sub $hdrdof_opt '$hdrdofs/\$(source)$dofsuf'"
         let i="$i + 2"
       done
-      if [ "$dofins" = Id ]; then
+      if [[ "$dofins" == 'Id' ]]; then
         sub="$sub -dofin Id"
       elif [ -n "$dofins" ]; then
         sub="$sub -dofin '$dofins/\$(target)/\$(source)$dofsuf'"
@@ -523,7 +523,7 @@ register_node()
     make_sub_script "register.sub" "$sub" -executable register
 
     # create generic dofinvert submission script
-    if [ $ic = true ] && [ -z "$tgtid" -a -z "$srcid" ] ; then
+    if [[ $ic == true ]] && [ -z "$tgtid" -a -z "$srcid" ] ; then
       # command used to invert inverse-consistent transformation
       local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
       sub="$sub\noutput       = $_dagdir/\$(target)/inv_\$(target),\$(source).log"
@@ -578,7 +578,7 @@ register_node()
               break
             fi
           done
-          [ $is_done = false ] || node_done "reg_$i-$j"
+          [[ $is_done == false ]] || node_done "reg_$i-$j"
           let i="$j+1"
         done
       else
@@ -605,7 +605,7 @@ register_node()
               break
             fi
           done
-          [ $is_done = false ] || node_done "reg_$i-$j"
+          [[ $is_done == false ]] || node_done "reg_$i-$j"
           let i="$j+1"
         done
       else
@@ -627,7 +627,7 @@ register_node()
         # register all other images to image of subject id1
         if [ $group -gt 1 ]; then
           s1=1
-          if [ $ic = true ]; then
+          if [[ $ic == true ]]; then
             let S="$t-1"
           else
             let S=${#ids[@]}
@@ -637,7 +637,7 @@ register_node()
             s=$s1
             srcids=()
             let s2="$s1+$group-1"
-            if [ $ic = true ]; then
+            if [[ $ic == true ]]; then
               while [ $s -le $s2 ]; do
                 [ $s -ge $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
                 let s++
@@ -664,9 +664,9 @@ register_node()
                   break
                 fi
               done
-              [ $is_done = false ] || node_done "reg_$id1-$i"
+              [[ $is_done == false ]] || node_done "reg_$id1-$i"
               # node to invert inverse-consistent transformation
-              if [ $ic = true ] && [ -n "$dofdir" ]; then
+              if [[ $ic == true ]] && [ -n "$dofdir" ]; then
                 add_node "inv_$id1-$i" -subfile "invert.sub" \
                                        -var     "target=\"$id1\"" \
                                        -grpvar  "source" \
@@ -679,7 +679,7 @@ register_node()
                     break
                   fi
                 done
-                [ $is_done = false ] || node_done "inv_$id1-$i"
+                [[ $is_done == false ]] || node_done "inv_$id1-$i"
               fi
             fi
             let s1="$s2+1"
@@ -688,7 +688,7 @@ register_node()
           s=0
           for id2 in "${ids[@]}"; do
             let s++
-            if [ $ic = true ]; then
+            if [[ $ic == true ]]; then
               [ $t -lt $s ] || continue
             else
               [ $t -ne $s ] || continue
@@ -701,7 +701,7 @@ register_node()
             add_edge "reg_$id1,$id2" 'mkdirs'
             [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "reg_$id1,$id2"
             # node to invert inverse-consistent transformation
-            if [ $ic = true ] && [ -n "$dofdir" ]; then
+            if [[ $ic == true ]] && [ -n "$dofdir" ]; then
               add_node "inv_$id1,$id2" -subfile "invert.sub" \
                                        -var     "target=\"$id1\"" \
                                        -var     "source=\"$id2\""
@@ -783,7 +783,7 @@ transform_image_node()
     make_sub_script "transform.sub" "$sub" -executable transform-image
 
     # create generic resample submission script
-    if [ $resample = true ]; then
+    if [[ $resample == true ]]; then
       sub="arguments    = \""
       sub="$sub '$prefix\$(id)$suffix'"
       sub="$sub '$outdir/\$(id)/\$(id)$suffix'"
@@ -1094,7 +1094,7 @@ compose_dofs_node()
                       -sub        "error = $_dagdir/mkdirs.log\nqueue"
 
     # add dofcombine nodes to DAG
-    if [ "$dofid" = '$(id)' ]; then
+    if [[ "$dofid" == '$(id)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id in "${ids[@]}"; do
         add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""
