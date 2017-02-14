@@ -57,6 +57,7 @@ refini='false'                        # - false: use reference for global normal
 verbose=0                             # verbosity of output messages
 resolution=1                          # highest image resolution at final level in mm
 similarity='NCC'                      # image (dis-)similarity measure: SSD, NMI, NCC
+spacing=2.5                           # control point spacing on finest level
 bending=0.001                         # weight of bending energy term
 jacobian=0.01                         # weigth of Jacobian-based penalty term
 refine=1                              # no. of template refinement steps

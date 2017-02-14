@@ -204,7 +204,7 @@ register_node()
       -dofsuf)
         optarg dofsuf $1 "$2"
         shift; ;;
-      -mskdir)
+      -segdir)
         optarg segdir $1 "$2"
         shift; ;;
       -segmsk)
@@ -253,19 +253,19 @@ register_node()
         ic='true'; ;;
       -symmetric)
         ic='true'; sym='true'; ;;
-      -ds)
+      -ds|-spacing)
         optarg w $1 "$2"
         params="$params\nControl point spacing = $w"
         shift; ;;
-      -be)
+      -be|-bending)
         optarg w $1 "$2"
         params="$params\nBending energy weight = $w"
         shift; ;;
-      -vp)
+      -vp|-volume)
         optarg w $1 "$2"
         params="$params\nVolume preservation weight = $w"
         shift; ;;
-      -jl|-jac)
+      -jl|-jac|-jacobian)
         optarg w $1 "$2"
         params="$params\nJacobian penalty weight = $w"
         shift; ;;
@@ -285,6 +285,9 @@ register_node()
   [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || {
     error "register_node: not enough -subjects specified"
   }
+  if [ $dofins = 'identity' ] || [ $dofins = 'id' ]; then
+    dofins='Id'
+  fi
   [ -n "$dofdir" ] || error "register_node: missing output -dofdir argument"
   [ -n "$tgtdir"                ] || tgtdir="$imgdir"
   [ -n "$tgtpre" -o -n "$tgtid" ] || tgtpre="$imgpre"
