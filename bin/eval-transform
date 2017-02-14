@@ -145,7 +145,7 @@ for id1 in ${subids[@]}; do
                                  -dof "$dofdir/1___affine/$id1.dof.gz" \
                                  -dofin identity \
                                  -matchInputType \
-                                 -target "$pardir/ref.nii.gz" \
+                                 -target "$refdir/$refpre$refid$refsuf" \
                                  -$interp > /dev/null
       # transform resampled target back to original target space
       $appdir/bin/headertool "$outdir/$id1/$prefix$id1$suffix" \
@@ -170,7 +170,7 @@ for id1 in ${subids[@]}; do
                                    -dof   "$dofdir/1___affine/$id2.dof.gz" \
                                    -dofin "$dofdir/2.1_ffd/$id1/$id2.dof.gz" \
                                    -matchInputType \
-                                   -target "$pardir/ref.nii.gz" \
+                                   -target "$refdir/$refpre$refid$refsuf" \
                                    -$interp > /dev/null
         # transform warped source to original target space
         $appdir/bin/headertool "$outdir/$id1/$prefix$id2$suffix" \
