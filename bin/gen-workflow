@@ -246,13 +246,18 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       -imgpre     "$imgpre" \
       -imgsuf     "$imgsuf" \
       -dofdir     "$nrmdofs" \
-      -output     "$outdir/linavg.nii.gz" \
+      -output     "$outdir/templates/t2w_lin.nii.gz" \
       -bgvalue    "$bgvalue" \
       -resolution $resolution \
       -margin     5 \
       -voxelwise
 
   prev_node='make_linavg'
+
+  nrmdir="$outdir/templates"
+  nrmref="t2w_lin"
+  nrmpre=""
+  nrmsuf=".nii.gz"
 
   # ----------------------------------------------------------------------------
   # align images to user supplied input reference
@@ -263,22 +268,23 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # register user reference to constructed affine reference
       register_node 'reg_refs' \
           -model   "Similarity+Affine" \
-          -tgtdir  "$outdir" \
-          -tgtid   "linavg" \
-          -tgtsuf  ".nii.gz" \
+          -tgtdir  "$nrmdir" \
+          -tgtid   "$nrmref" \
+          -tgtpre  "$nrmpre" \
+          -tgtsuf  "$nrmsuf" \
           -srcdir  "$refdir" \
           -srcid   "$refid" \
           -srcpre  "$refpre" \
           -srcsuf  "$refsuf" \
           -padding "$bgvalue" \
           -dofdir  "$dofdir/1.7_ref" \
-          -dofid   "linavg"
+          -dofid   "$nrmref"
 
       # compose affine transformations: image --> auto-ref --> user-ref
       compose_dofs_node 'ref_dofs' -parent 'reg_refs' \
           -subjects "${subids[@]}" \
           -dofdir1  "$nrmdofs" \
-          -dofdir2  "$dofdir/1.7_ref" -dofid2 "linavg" \
+          -dofdir2  "$dofdir/1.7_ref" -dofid2 "$nrmref" \
           -dofdir   "$dofdir/1.7_ref"
 
     end_dag
@@ -294,11 +300,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     nrmref="$refid"
     nrmpre="$refpre"
     nrmsuf="$refsuf"
-  else
-    nrmdir="$outdir"
-    nrmref="linavg"
-    nrmpre=""
-    nrmsuf=".nii.gz"
   fi
 
   # ----------------------------------------------------------------------------
@@ -326,6 +327,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -dofins   "identity" \
         -dofdir   "$dofdir/2.1_def" \
         -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+        -maxres   $resolution \
         -levels   4 \
         -symmetric
 
@@ -411,7 +413,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -hdrdofs  "$nrmdofs" \
                 -dofins   "$defdofs" \
                 -dofdir   "$nxtdofs" \
-                -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf"
+                -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+                -maxres   $resolution
 
           done
         end_dag
@@ -467,7 +470,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refsuf "$nrmsuf" \
           -dofdir "$imgdofs/t$t" \
           -output "$outdir/templates/t2w_$t.nii.gz" \
-          -voxelwise
+          -resolution $resolution -voxelwise
 
     done
 
@@ -491,7 +494,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
               -imgsuf "$lblsuf" \
               -refid  "t2w_$t" \
               -refdir "$outdir/templates" \
-              -refpre "" \
               -refsuf ".nii.gz" \
               -dofdir "$imgdofs/t$t" \
               -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
@@ -520,7 +522,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
               -imgsuf "$lblsuf" \
               -refid  "t2w_$t" \
               -refdir "$outdir/templates" \
-              -refpre "" \
               -refsuf ".nii.gz" \
               -dofdir "$imgdofs/t$t" \
               -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
