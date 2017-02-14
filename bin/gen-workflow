@@ -21,7 +21,7 @@ print_help()
 {
   cat <<HELP
 
-usage: $(basename "$0") [options]
+usage: $appid [options]
 
 This script generates the DAGMan worflow description for the generation
 of a consistent brain atlas and growth model for submission to the batch
@@ -30,21 +30,21 @@ the workflow can be executed sequentially on the local machine or submitted
 to another supported batch queuing system (e.g., SLURM).
 
 Options:
-  -c -config <config.sh>
+  -c, -config <config.sh>
       Custom configuration file. (default: none)
-  -a -agelst <age.csv>
+  -a, -agelst <age.csv>
       Comma/space-separated CSV file, where the first column contains
       the image ID and the second column the associated age.
       (default: $agelst)
-  -s -sublst <sub.lst>
+  -s, -sublst <sub.lst>
       Text file listing the IDs of the images to use for the atlas construction.
       If not specified, the IDs are read from the -agelst.
       (default: $sublst)
-  -u -update
+  -u, -update
       Overwrite existing DAGMan files.
-  -h -help
+  -h, -help
       Print help and exit.
-  -v -verbose
+  -v, -verbose
       Enable verbose output messages.
 HELP
 }
@@ -111,7 +111,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # global normalization (translation, rotation, and scale)
   begin_dag 'pre_alignment' -splice
 
-    if [ $refini = false ] && [ -n "$refid" ]; then
+    if [[ $refini == false ]] && [ -n "$refid" ]; then
 
       # initialize transformations
       register_node 'align' \
@@ -234,7 +234,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # generate population specific reference image/mask
   nrmref=
-  [ ! $refini = false ] || nrmref="$refid"
+  [[ ! $refini == false ]] || nrmref="$refid"
 
   average_images_node 'make_linavg' -parent 'pre_alignment' \
       -subjects   "${subids[@]}" \
@@ -261,7 +261,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # align images to user supplied input reference
-  if [ ! $refini = false ] && [ -n "$refid" ]; then
+  if [[ ! $refini == false ]] && [ -n "$refid" ]; then
 
     begin_dag 'ref_alignment' -parent "$prev_node" -splice
 
@@ -480,58 +480,68 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
-  if [ -n "$lbldir" ] && [ -d "$lbldir/tissues" ] && [ $(find "$lbldir/tissues" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
-    begin_dag 'make_tissue_pbmaps' -parent 'make_templates' -splice
+  if [ -n "$lbldir" ]; then
+    inpdir="$(dirname  "$lbldir/${clspre}id")"
+    prefix="$(basename "$lbldir/${clspre}id")"
+    prefix="${prefix:0:${#prefix}-2}"
+    if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+      begin_dag 'make_tissue_pbmaps' -parent 'make_templates' -splice
 
-      for t in ${timepoints[@]}; do
-        l=1
-        while [ $l -le $tissues ]; do
+        for t in ${timepoints[@]}; do
+          l=1
+          while [ $l -le $tissues ]; do
 
-          average_images_node "make_tissue_pbmaps_${l}_${t}" \
-              -sublst "$kernel/t$t.csv" \
-              -imgdir "$lbldir/tissues" \
-              -imgpre "$lblpre" \
-              -imgsuf "$lblsuf" \
-              -refid  "t2w_$t" \
-              -refdir "$outdir/templates" \
-              -refsuf ".nii.gz" \
-              -dofdir "$imgdofs/t$t" \
-              -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-              -label $l -voxelwise
-   
-          let l++
+            average_images_node "make_tissue_pbmaps_${l}_${t}" \
+                -sublst "$kernel/t$t.csv" \
+                -imgdir "$inpdir" \
+                -imgpre "$prefix" \
+                -imgsuf "$clssuf" \
+                -refid  "t2w_$t" \
+                -refdir "$outdir/templates" \
+                -refsuf ".nii.gz" \
+                -dofdir "$imgdofs/t$t" \
+                -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
+                -label $l -voxelwise
+     
+            let l++
+          done
         done
-      done
 
-    end_dag
+      end_dag
+    fi
   fi
 
   # ----------------------------------------------------------------------------
   # make structural probability maps
-  if [ -n "$lbldir" ] && [ -d "$lbldir/structures" ] && [ $(find "$lbldir/structures" -name "$lblpre*$lblsuf" | wc -l) -gt 0 ]; then
-    begin_dag 'make_structural_pbmaps' -parent 'make_templates' -splice
+  if [ -n "$lbldir" ]; then
+    inpdir="$(dirname  "$lbldir/${lblpre}id")"
+    prefix="$(basename "$lbldir/${lblpre}id")"
+    prefix="${prefix:0:${#prefix}-2}"
+    if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+      begin_dag 'make_structural_pbmaps' -parent 'make_templates' -splice
 
-      for t in ${timepoints[@]}; do
-        l=1
-        while [ $l -le $structures ]; do
+        for t in ${timepoints[@]}; do
+          l=1
+          while [ $l -le $structures ]; do
 
-          average_images_node "make_structural_pbmaps_${l}_${t}" \
-              -sublst "$kernel/t$t.csv" \
-              -imgdir "$lbldir/structures" \
-              -imgpre "$lblpre" \
-              -imgsuf "$lblsuf" \
-              -refid  "t2w_$t" \
-              -refdir "$outdir/templates" \
-              -refsuf ".nii.gz" \
-              -dofdir "$imgdofs/t$t" \
-              -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-              -label $l -voxelwise
-   
-          let l++
+            average_images_node "make_structural_pbmaps_${l}_${t}" \
+                -sublst "$kernel/t$t.csv" \
+                -imgdir "$inpdir" \
+                -imgpre "$prefix" \
+                -imgsuf "$lblsuf" \
+                -refid  "t2w_$t" \
+                -refdir "$outdir/templates" \
+                -refsuf ".nii.gz" \
+                -dofdir "$imgdofs/t$t" \
+                -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
+                -label $l -voxelwise
+     
+            let l++
+          done
         done
-      done
 
-    end_dag
+      end_dag
+    fi
   fi
 
   # ----------------------------------------------------------------------------

@@ -30,16 +30,16 @@ imgsuf='.nii.gz'                      # brain image file name suffix
 bgvalue=0                             # background value of skull-stripped images
 
 lbldir='../labels'                    # base directory of available segmentations
-                                      # - $lbldir/tissues/:    Tissue segmentations
-                                      # - $lbldir/structures/: Structural segmentations
-lblpre=''                             # label image file name prefix
-lblsuf='.nii.gz'                      # label image file name suffix
+lblpre='structures/'                  # file name prefix of structural segmentation label image
+lblsuf='.nii.gz'                      # file name suffix of structural segmentation label image
+clspre='tissues/'                     # file name prefix of tissue segmentations
+clssuf='.nii.gz'                      # file name suffix of tissue segmentations
 tissues=9                             # no. of tissue classes
 structures=87                         # no. of structures
 
 segdir='../masks'                     # directory with binary segmentation masks
-segpre=''                             # binary segmentation file name prefix
-segsuf='.nii.gz'                      # binary segmentation file name suffix
+segpre=''                             # file name prefix of binary segmentation masks
+segsuf='.nii.gz'                      # file name suffix of binary segmentation masks
 
 # default reference for global normalization
 refdir="etc/reference"                # directory of reference image
@@ -56,6 +56,7 @@ refini='false'                        # - false: use reference for global normal
 # default workflow parameters
 verbose=0                             # verbosity of output messages
 resolution=1                          # highest image resolution at final level in mm
+interpolation='Linear'                # image interpolation mode
 similarity='NCC'                      # image (dis-)similarity measure: SSD, NMI, NCC
 spacing=2.5                           # control point spacing on finest level
 bending=0.001                         # weight of bending energy term

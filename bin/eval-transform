@@ -1,8 +1,16 @@
 #!/bin/bash
 
-appdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
-appname="$(basename "$BASH_SOURCE")"
-. "$appdir/lib/daggen/irtk.sh" || { echo "Failed to import daggen/irtk module!" 1>&2; exit 1; }
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/mirtk.sh" || {
+  echo "Failed to import daggen/mirtk module!" 1>&2
+  exit 1
+}
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
 
 # ==============================================================================
 # help
@@ -13,39 +21,46 @@ print_help()
 {
   cat <<HELP
 
-usage: $(basename "$0") [options]
+usage: $appid [options]
 
 Warp (label) images using the computed pairwise transformations.
 
 Options:
-  -s -sublst <sub.lst>     Text file listing the IDs of the images
-                           to use for the atlas construction. If not
-                           specified, the IDs are read from the -agelst.
-                           (default: $appdir/etc/sub.lst)
-
-  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
-                           first column contains the image ID and the
-                           second column the associated age.
-                           (default: $appdir/etc/age.csv)
-
-  -c -config <config.sh>   Configuration file.
-                           (default: $appdir/etc/config.sh)
-
-  -i -input <dir>          Input directory containing the input images.
-                           (default: $indir)
-
-  -o -output <dir>         Output directory where to write the transformed images to.
-                           (default: $outdir)
-
-  -prefix <str>            Filename prefix.                               (default: none)
-  -suffix <str>            Filename suffix including file name extension. (default: .nii.gz)
-  -nn                      Use nearest-neighbor interpolation.            (default: linear)
-  -images                  Default settings for intensity images.
-  -labels                  Default settings for tissue label maps.
-  -structures              Default settings for structure label maps.
-
-  -h -help                 Print help and exit.
-  -v -verbose              Enable verbose output messages.
+  -c, -config <config.sh>
+      Custom configuration file. (default: none)
+  -a, -agelst <age.csv>
+      Comma/space-separated CSV file, where the first column contains
+      the image ID and the second column the associated age.
+      (default: $agelst)
+  -s, -sublst <sub.lst>
+      Text file listing the IDs of the images to use for the atlas construction.
+      If not specified, the IDs are read from the -agelst.
+      (default: $sublst)
+  -i, -input <dir>
+      Input directory containing the input images.
+      (default: $inpdir)
+  -o, -output <dir>
+      Output directory where to write the transformed images to.
+      (default: $outdir)
+  -prefix <str>
+      Filename prefix. (default: $prefix)
+  -suffix <str>
+      Filename suffix including file name extension. (default: $suffix)
+  -interp, -interpolation <mode>
+      Interpolation mode. (default: $interpolation)
+  -putdof
+      Set sform matrix of resample NIfTI image to include inverse global
+      normalization from native image space to linear average space. (default: off)
+  -images
+      Default settings for intensity images.
+  -labels
+      Default settings for tissue label maps.
+  -structures
+      Default settings for structure label maps.
+  -h, -help
+      Print help and exit.
+  -v, -verbose
+      Enable verbose output messages.
 HELP
 }
 
@@ -67,91 +82,151 @@ trap finalize EXIT
 # main
 # ==============================================================================
 
-verbose=0
-options=()
-sublst=
-agelst="$appdir/etc/age.csv"
-config="$appdir/etc/config.sh"
-interp='linear'
-
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
-    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
   esac
   let o++
 done
-. "$config"  || error "Failed to load configuration from file: $config"
 
-indir="$appdir/$imgdir"
-outdir="$appdir/../eval/warped-images"
+[ -z "$agelst" ] || agelst="$topdir/$agelst"
+[ -z "$sublst" ] || sublst="$topdir/$sublst"
+
+evldir="$(cd "$topdir/.." && pwd)/eval"
+inpdir="$topdir/$imgdir"
+resdir="$evldir/warped-images"
 prefix="$imgpre"
 suffix="$imgsuf"
+interp="$interpolation"
+putdof='false'
+options=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    -i|-input)       optarg indir  $1 "$2"; shift; ;;
-    -prefix)         optarg prefix $1 "$2"; shift; ;;
-    -suffix)         optarg suffix $1 "$2"; shift; ;;
-    -nn)             interp='nn'; ;;
-    -bspline)        interp='bspline'; ;;
-    -images)         indir="$appdir/$imgdir"
-                     outdir="$appdir/../eval/warped-images"
-                     prefix="$imgpre"; suffix="$imgsuf"
-                     interp='linear'; ;;
-    -labels)         indir="$appdir/$lbldir"
-                     outdir="$appdir/../eval/warped-labels"
-                     prefix="$lblpre"; suffix="$lblsuf"
-                     interp='nn'; ;;
-    -structures)     indir="$appdir/$segdir"
-                     outdir="$appdir/../eval/warped-structures"
-                     prefix="$segpre"; suffix="$segsuf"
-                     interp='nn'; ;;
-    -o|-output)      optarg outdir $1 "$2"; shift; ;;
-    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
-    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
-    -c|-config)      shift; ;; # already loaded
-    -l|-label)       label=(); optargs label "$@"; shift ${#label[@]}; ;;
-    -m|-metric)      optarg $1 "$2"; shift; ;;
-    -h|-help|--help) print_help; exit 0; ;;
-    -v|-verbose)     let verbose++; ;;
-    *)               options=("${options[@]}" "$1"); ;;
+    -i|-input)
+      optarg inpdir $1 "$2"; shift; ;;
+    -prefix)
+      optarg prefix $1 "$2"; shift; ;;
+    -suffix)
+      optarg suffix $1 "$2"; shift; ;;
+    -interp|-interpolation)
+      optarg interp $1 "$2"; shift; ;;
+    -putdof)
+      putdof='true'; ;;
+    -images)
+      inpdir="$topdir/$imgdir"
+      resdir="$evldir/warped-images"
+      prefix="$imgpre"
+      suffix="$imgsuf"
+      interp="$interpolation"
+      ;;
+    -tissues)
+      inpdir="$topdir/$lbldir"
+      resdir="$evldir/warped-tissues"
+      prefix="$clspre"
+      suffix="$clssuf"
+      interp='nn'
+      ;;
+    -structures)
+      inpdir="$topdir/$lbldir"
+      resdir="$evldir/warped-structures"
+      prefix="$lblpre"
+      suffix="$lblsuf"
+      interp='nn'
+      ;;
+    -o|-output)
+      optarg resdir $1 "$2"; shift; ;;
+    -s|-sublst)
+      optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst)
+      optarg agelst $1 "$2"; shift; ;;
+    -c|-config)
+      shift; ;; # already loaded
+    -l|-label)
+      label=()
+      optargs label "$@"
+      shift ${#label[@]}
+      ;;
+    -m|-metric)
+      optarg $1 "$2"; shift; ;;
+    -h|-help|--help)
+      print_help; exit 0; ;;
+    -v|-verbose)
+      let verbose++; ;;
+    *)
+      options=("${options[@]}" "$1"); ;;
   esac
   shift
 done
 
-if [ -z "$agelst" ]; then
+_dir="$(dirname  "$inpdir/${prefix}id")"
+_pre="$(basename "$inpdir/${prefix}id")"
+inpdir="${_dir}"
+prefix="${_pre:0:${#_pre}-2}"
+unset -v _dir _pre
+
+if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
   error "Missing CSV file with subject IDs and corresponding ages!"
 fi
-if [ -z "$sublst" ]; then
-  sublst="$appdir/etc/sub.lst"
-  [ -f "$sublst" ] || sublst="$agelst"
-fi
+[ -n "$sublst" ] || sublst="$agelst"
 read_sublst subids "$sublst"
 
-mkdir -p "$outdir" || exit 1
+target="$outdir/templates/t2w_lin.nii.gz"
+[ -f "$target" ] || {
+  error "Missing linear template: $target"
+}
+
+if [ -n "$refid" ]; then
+  if [[ $refini == false ]]; then
+    nrmdofs="$dofdir/1.2_ref"
+  else
+    nrmdofs="$dofdir/1.7_ref"
+  fi
+else
+  nrmdofs="$dofdir/1.6_aff"
+fi
+[ -d "$nrmdofs" ] || {
+  error "Missing global normalization transformations in $nrmdofs"
+}
+
+defdofs="$dofdir/2.1_def"
+[ -d "$defdofs" ] || {
+  error "Missing local free-form deformations in $defdofs"
+}
+
+mkdir -p "$resdir" || error "Failed to create output directory"
 
 pid=()
 t=0
 for id1 in ${subids[@]}; do
   let t++
-  [ $verbose -eq 0 ] || echo "Transforming images to space of subject $id1... $(printf %3d/%d $t ${#subids[@]})"
-  mkdir -p "$outdir/$id1" || exit 1
-  if [ ! -f "$outdir/$id1/$prefix$id1$suffix" ]; then
+  [ $verbose -eq 0 ] || {
+    echo "Transforming images to space of subject $id1... $(printf %3d/%d $t ${#subids[@]})"
+  }
+  mkdir -p "$resdir/$id1" || error "Failed to create output directory"
+  if [ ! -f "$resdir/$id1/$prefix$id1$suffix" ]; then
     (
       # resample target in affine reference space
-      $appdir/bin/transformation "$indir/$prefix$id1$suffix" \
-                                 "$outdir/$id1/$prefix$id1$suffix" \
-                                 -dof "$dofdir/1___affine/$id1.dof.gz" \
-                                 -dofin identity \
-                                 -matchInputType \
-                                 -target "$refdir/$refpre$refid$refsuf" \
-                                 -$interp > /dev/null
+      mirtk transform-image \
+          "$inpdir/$prefix$id1$suffix" \
+          "$resdir/$id1/$prefix$id1$suffix" \
+          -dof "$nrmdofs/$id1.dof.gz" \
+          -dofin identity \
+          -target "$target" \
+          -interp "$interp"
       # transform resampled target back to original target space
-      $appdir/bin/headertool "$outdir/$id1/$prefix$id1$suffix" \
-                             "$outdir/$id1/$prefix$id1$suffix" \
-                             -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
-                             > /dev/null
+      if [[ ! $putdof == false ]] && [ $? -eq 0 ]; then
+        mirtk edit-image \
+            "$resdir/$id1/$prefix$id1$suffix" \
+            "$resdir/$id1/$prefix$id1$suffix" \
+            -putdof_i "$nrmdofs/$id1.dof.gz"
+      fi
     ) &
     pid=(${pid[@]} $!)
   fi
@@ -162,21 +237,23 @@ for id1 in ${subids[@]}; do
       unset pid[0]
       pid=(${pid[@]})
     fi
-    if [ ! -f "$outdir/$id1/$prefix$id2$suffix" ]; then
+    if [ ! -f "$resdir/$id1/$prefix$id2$suffix" ]; then
       (
         # deform and resample source in affine reference space
-        $appdir/bin/transformation "$indir/$prefix$id2$suffix" \
-                                   "$outdir/$id1/$prefix$id2$suffix" \
-                                   -dof   "$dofdir/1___affine/$id2.dof.gz" \
-                                   -dofin "$dofdir/2.1_ffd/$id1/$id2.dof.gz" \
-                                   -matchInputType \
-                                   -target "$refdir/$refpre$refid$refsuf" \
-                                   -$interp > /dev/null
+        mirtk transform-image \
+            "$inpdir/$prefix$id2$suffix" \
+            "$resdir/$id1/$prefix$id2$suffix" \
+            -dof "$nrmdofs/$id2.dof.gz" \
+            -dofin "$defdofs/$id1/$id2.dof.gz" \
+            -target "$target" \
+            -interp "$interp"
         # transform warped source to original target space
-        $appdir/bin/headertool "$outdir/$id1/$prefix$id2$suffix" \
-                               "$outdir/$id1/$prefix$id2$suffix" \
-                               -dofin_i "$dofdir/1___affine/$id1.dof.gz" \
-                               > /dev/null
+        if [[ ! $putdof == false ]] && [ $? -eq 0 ]; then
+          mirtk edit-image \
+              "$resdir/$id1/$prefix$id2$suffix" \
+              "$resdir/$id1/$prefix$id2$suffix" \
+              -putdof_i "$nrmdofs/$id1.dof.gz"
+        fi
       ) &
       pid=(${pid[@]} $!)
     fi
