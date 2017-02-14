@@ -21,7 +21,7 @@ pardir="`dirname "$BASH_SOURCE"`"     # directory containing configuration files
 pardir="`cd $pardir && pwd`"          # - make path absolute
 pardir="${pardir/$topdir\//}"         # - make path relative to working directory
 
-agelst="$pardir/ages.lst"             # CSV table of image IDs and associated ages
+agelst="$pardir/ages.csv"             # CSV table of image IDs and associated ages
 sublst="$pardir/subjects.lst"         # List of image IDs, one per line
 
 imgdir='../images'                    # directory of anatomical brain images
@@ -63,7 +63,8 @@ jacobian=0.01                         # weigth of Jacobian-based penalty term
 refine=1                              # no. of template refinement steps
 threads=8                             # maximum no. of CPU cores to use
 epsilon=0.001                         # kernel weight threshold
-sigma=1                               # (default) standard deviation of temporal kernel
+means=()                              # default list of atlas time points
+sigma=1                               # default standard deviation of temporal kernel
 kernel="$pardir/weights"              # directory containing temporal kernel files
 update='false'                        # enable (true) or disable update of existing DAG files
 binlnk='true'                         # link (true) or copy (false) job executables
@@ -82,3 +83,21 @@ notify_user="${USER}@ic.ac.uk"
 notification='Error'
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer == 14'
 log='condor.log'
+
+# utility function to set pardir in custom configuration
+set_pardir_from_file_path()
+{
+  pardir="`dirname "$1"`"
+  if [ -L "$1" ]; then
+    pardir="$pardir/`readlink "$1"`"
+    pardir="`dirname "$pardir"`"
+  fi
+  pardir="`cd $pardir && pwd`"
+  pardir="${pardir/$topdir\//}"
+}
+
+# load default custom configuration
+# (e.g., link to configuration otherwise specified with -config option of commands)
+if [ -f "$topdir/$pardir/custom.sh" ]; then
+  source "$topdir/$pardir/custom.sh"
+fi

@@ -1,22 +1,23 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 
-# reference for global normalization
+# normalization
 refid='serag-40'
 
-# input settings
-pardir="`dirname "$BASH_SOURCE"`"
-pardir="`cd $pardir && pwd`"
-pardir="${pardir/$topdir\//}"
-
-agelst="$pardir/ages.lst"
+# input
+set_pardir_from_file_path "$BASH_SOURCE"
+agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
+sublst="$pardir/test.lst" # TODO: Remove this line
 
-# workflow parameters
+# registration
 resolution=0.5
 similarity='NCC'
 bending=1e-3
 jacobian=1e-5
 refine=1
-epsilon=0.054
+
+# regression
+means=(40)
 sigma=1
-kernel="$pardir/kernels"
+epsilon=0.054
+kernel="$pardir/weights"
