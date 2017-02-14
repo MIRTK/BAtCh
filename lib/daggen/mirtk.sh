@@ -98,7 +98,7 @@ init_dofs_node()
 # add node for pairwise image registration
 register_node()
 {
-  local args w i j t s n lvl res blr is_done
+  local args w i j t s n lvl res blr is_done segment
 
   local node=
   local parent=()
@@ -208,7 +208,7 @@ register_node()
         optarg segdir $1 "$2"
         shift; ;;
       -segmsk)
-        local segment
+        unset -v segment
         optargs segment "$@"
         if [ ${#segment[@]} -gt 2 ]; then
           error "register_node: too many arguments for option: $1"
@@ -241,6 +241,7 @@ register_node()
         optarg resolution $1 "$2"
         shift; ;;
       -levels)
+        unset -v levels
         optargs levels "$@"
         if [ ${#levels[@]} -gt 2 ]; then
           error "register_node: too many arguments for option: $1"
@@ -389,6 +390,9 @@ register_node()
         res=$('/usr/bin/bc' -l <<< "2^($lvl-1) * $resolution")
         res=$(remove_trailing_zeros $res)
         cfg="$cfg\nResolution = $res"
+        if [ $lvl -eq 1 ]; then
+          cfg="$cfg\nBlurring = 0"
+        fi
         let lvl++
       done
     fi
@@ -1132,7 +1136,7 @@ average_images_node()
   local dofsuf='.dof.gz'
   local dofinv='false'
   local average=
-  local options='-v'
+  local options=''
   local label margin bgvalue
 
   while [ $# -gt 0 ]; do
@@ -1212,7 +1216,7 @@ average_images_node()
                       -sub        "error = $_dagdir/mkdirs.log\nqueue"
 
     # add average node to DAG
-    local sub="arguments = \"$average -images '$imglst'$options -threads $threads\""
+    local sub="arguments = \"$average -v -images '$imglst' -threads $threads $options\""
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
