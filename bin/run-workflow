@@ -179,15 +179,18 @@ def run_local(jobs, deps, rescue_file=None):
                             ready = False
                             break
                     if ready:
-                        print("\nExecuting job(s) of batch '{}'...".format(batch))
+                        sys.stdout.write("Executing {}...".format(batch))
+                        sys.stdout.flush()
                         for job in jobs[batch]:
                             run_job_local(job)
                         rescue.write('DONE ' + batch + '\n')
                         done.append(batch)
-                        print("Executing job(s) of batch '{}'... done".format(batch))
+                        sys.stdout.write(" done\n")
+                        sys.stdout.flush()
                     else:
                         todo.append(batch)
                 if len(todo) == len(batches):
+                    sys.stderr.write("batches = {}\n".format(batches))
                     raise Exception("There seem to be circular job dependencies!")
         finally:
             if rescue:
@@ -208,7 +211,7 @@ def read_slurm_info(jobs):
         for job in jobs[batch]:
             job['id'] = None
             job['done'] = False
-            if not 'error' in job:
+            if 'error' not in job:
                 raise Exception("No error file path specified for job {} of batch {}".format(os.path.basename(job['executable']), batch))
             out = os.path.join(job['initialdir'], job['error'])
             if os.path.exists(out):
@@ -240,7 +243,7 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
         for i in range(len(job['arguments'])):
             arg = job['arguments'][i]
             if arg == '-threads':
-                threads=int(job['arguments'][i+1])
+                threads = int(job['arguments'][i + 1])
             if "'" in arg:
                 arg = arg.replace("'", "\\'")
             if ' ' in arg or '"' in arg:
@@ -250,7 +253,7 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
     sbatch_script += "\n[ $? -eq 0 ] && echo 'SLURM JOB DONE' 1>&2"
     sbatch_argv = [
         'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', name,
-        '--begin=now+10' # delay s.t. 'SLURM JOB <Id>' written before job starts
+        '--begin=now+10'  # delay s.t. 'SLURM JOB <Id>' written before job starts
     ]
     if deps:
         if _try_run:
@@ -310,7 +313,10 @@ def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
     todo = []
     done = read_slurm_info(jobs)
     if rescue_file:
-        done.extend(read_rescue_file(rescue_file))
+        for batch in read_rescue_file(rescue_file):
+            done.append(batch)
+            for job in jobs[batch]:
+                job['done'] = True
     for batch in jobs.keys():
         if batch not in done:
             todo.append(batch)
@@ -334,7 +340,8 @@ def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
             if ready:
                 jobids.sort()
                 if not _try_run:
-                    print("Submitting job(s) of batch '{}'...".format(batch))
+                    sys.stdout.write("Submitting {}...".format(batch))
+                    sys.stdout.flush()
                 for i in range(len(jobs[batch])):
                     name = batch
                     if len(jobs[batch]) > 1:
@@ -342,10 +349,13 @@ def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
                     run_job_slurm(name=name, job=jobs[batch][i], deps=jobids,
                                   threads=threads, queue=queue)
                 if not _try_run:
-                    print("Submitting job(s) of batch '{}'... done".format(batch))
+                    sys.stdout.write(" done\n")
+                    sys.stdout.flush()
             else:
                 todo.append(batch)
         if len(todo) == len(batches):
+            for batch in batches:
+                sys.stderr.write("batch {} deps: {}\n".format(batch, deps[batch]))
             raise Exception("There seem to be circular job dependencies!")
 
 
@@ -369,7 +379,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     _try_run = args.try_run
     if args.backend == 'condor':
-        raise Exception("Use submit-dag command instead")
+        sys.stderr.write("Call lib/tools/submit-dag-to-condor instead")
+        sys.exit(1)
     jobs, deps = read_dag(args.dag_file)
     if args.backend == 'slurm':
         run_slurm(jobs, deps, rescue_file=args.rescue_file, queue=args.queue)
