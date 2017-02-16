@@ -28,7 +28,7 @@ def read_sub(sub_name):
     with open(sub_name) as sub_file:
         for line in sub_file:
             if re_queue.match(line):
-                jobs.append(job)
+                jobs.append(dict(job))
             else:
                 m = re_kv.match(line)
                 if m:
@@ -61,7 +61,7 @@ def read_dag(dag_name, prefix=''):
     re_submit = re.compile(r'\s*JOB\s+([^ ]+)\s+([a-zA-Z0-9\//-_ ,.+=]+)\s*$')
     re_parent = re.compile(r'\s*PARENT\s+([^ ]+)\s+CHILD\s+([^ ]+)\s*$')
     re_vars = re.compile(r'\s*VARS\s+([^ ]+)\s+(.*)\s*$')
-    re_kv = re.compile(r'\s*([a-zA-Z0-9_]+)="(.+)"\s*$')
+    re_kv = re.compile(r'\s*([a-zA-Z0-9_]+)="(.*)"\s*$')
     with open(dag_name) as dag_file:
         for line in dag_file:
             line = line.strip()
@@ -136,23 +136,29 @@ def run_job_local(job):
     argv = [job['executable']]
     if 'arguments' in job:
         argv.extend(job['arguments'])
-    if 'output' in job and 'error' in job:
-        if job['output'] == job['error']:
-            with open(os.path.join(job['initialdir'], job['output']), "w") as log:
-                subprocess.check_call(argv, stdout=log, stderr=subprocess.STDOUT)
-        else:
-            out = os.path.join(job['initialdir'], job['output'])
-            err = os.path.join(job['initialdir'], job['error'])
-            with open(out, "w") as fout, open(err, "w") as ferr:
-                subprocess.check_call(argv, stdout=fout, stderr=ferr)
-    elif 'output' in job:
-        with open(os.path.join(job['initialdir'], job['output']), "w") as log:
-            subprocess.check_call(argv, stdout=log)
-    elif 'error' in job:
-        with open(os.path.join(job['initialdir'], job['error']), "w") as log:
-            subprocess.check_call(argv, stderr=log)
+    if _try_run:
+        for i in range(len(argv)):
+            if ' ' in argv[i]:
+                argv[i] = '"' + argv[i].replace('"', '\\"') + '"'
+        sys.stdout.write('\n' + ' '.join(argv) + '\n')
     else:
-        subprocess.check_call(argv)
+        if 'output' in job and 'error' in job:
+            if job['output'] == job['error']:
+                with open(os.path.join(job['initialdir'], job['output']), "w") as log:
+                    subprocess.check_call(argv, stdout=log, stderr=subprocess.STDOUT)
+            else:
+                out = os.path.join(job['initialdir'], job['output'])
+                err = os.path.join(job['initialdir'], job['error'])
+                with open(out, "w") as fout, open(err, "w") as ferr:
+                    subprocess.check_call(argv, stdout=fout, stderr=ferr)
+        elif 'output' in job:
+            with open(os.path.join(job['initialdir'], job['output']), "w") as log:
+                subprocess.check_call(argv, stdout=log)
+        elif 'error' in job:
+            with open(os.path.join(job['initialdir'], job['error']), "w") as log:
+                subprocess.check_call(argv, stderr=log)
+        else:
+            subprocess.check_call(argv)
 
 
 def run_local(jobs, deps, rescue_file=None):
@@ -167,7 +173,7 @@ def run_local(jobs, deps, rescue_file=None):
     if len(todo) > 0:
         rescue = None
         try:
-            if rescue_file:
+            if rescue_file and not _try_run:
                 rescue = open(rescue_file, "a", False)
             while len(todo) > 0:
                 batches = todo
@@ -179,11 +185,12 @@ def run_local(jobs, deps, rescue_file=None):
                             ready = False
                             break
                     if ready:
-                        sys.stdout.write("Executing {}...".format(batch))
+                        sys.stdout.write("Executing {} (#tasks={})...".format(batch, len(jobs[batch])))
                         sys.stdout.flush()
                         for job in jobs[batch]:
                             run_job_local(job)
-                        rescue.write('DONE ' + batch + '\n')
+                        if rescue is not None:
+                            rescue.write('DONE ' + batch + '\n')
                         done.append(batch)
                         sys.stdout.write(" done\n")
                         sys.stdout.flush()

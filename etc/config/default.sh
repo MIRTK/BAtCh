@@ -78,6 +78,7 @@ logdir='log'                          # directory of log files written by workfl
 dofdir='../dofs'                      # transformations computed during atlas construction
 evldir='../eval'                      # directory of evaluation output files
 outdir='../atlas'                     # atlas output directory
+tmpdir='../temp'                      # directory of intermediate atlas templates
 
 # default HTCondor settings
 notify_user="${USER}@ic.ac.uk"

@@ -109,7 +109,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
-  begin_dag 'pre_alignment' -splice
+  begin_dag 'aff_alignment' -splice
 
     if [[ $refini == false ]] && [ -n "$refid" ]; then
 
@@ -220,8 +220,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # compose average transformations
       compose_dofs_node 'compose' -parent 'avgres' \
           -subjects "${subids[@]}" \
-          -dofdir1  "$dofdir/1.3_avg" \
-          -dofdir2  "$dofdir/1.5_avg" \
+          -dofin1   "$dofdir/1.3_avg" \
+          -dofin2   "$dofdir/1.5_avg" \
           -dofdir   "$dofdir/1.6_aff"
 
       # global normalization output
@@ -234,26 +234,26 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # generate population specific reference image/mask
   nrmref=
-  [[ ! $refini == false ]] || nrmref="$refid"
+  if [[ $refini == false ]]; then
+    nrmref="$refid"
+  fi
 
-  average_images_node 'make_linavg' -parent 'pre_alignment' \
-      -subjects   "${subids[@]}" \
-      -refdir     "$refdir" \
-      -refpre     "$refpre" \
-      -refid      "$nrmref" \
-      -refsuf     "$refsuf" \
-      -imgdir     "$imgdir" \
-      -imgpre     "$imgpre" \
-      -imgsuf     "$imgsuf" \
-      -dofdir     "$nrmdofs" \
-      -output     "$outdir/templates/t2w_lin.nii.gz" \
-      -bgvalue    "$bgvalue" \
-      -resolution $resolution \
-      -margin     5 \
-      -voxelwise
+  average_images_node 'make_linavg' -parent 'aff_alignment' \
+      -subjects "${subids[@]}" \
+      -refdir   "$refdir" \
+      -refpre   "$refpre" \
+      -refid    "$nrmref" \
+      -refsuf   "$refsuf" \
+      -imgdir   "$imgdir" \
+      -imgpre   "$imgpre" \
+      -imgsuf   "$imgsuf" \
+      -dofdir   "$nrmdofs" \
+      -output   "$outdir/templates/t2w_lin.nii.gz" \
+      -spacing  $resolution \
+      -padding  "$bgvalue" \
+      -margin   5
 
   prev_node='make_linavg'
-
   nrmdir="$outdir/templates"
   nrmref="t2w_lin"
   nrmpre=""
@@ -280,11 +280,27 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir  "$dofdir/1.7_ref" \
           -dofid   "$nrmref"
 
+      # transform linear average image to user reference space
+      transform_image_node 'map_linavg' -parent 'reg_refs' \
+          -srcid    "$nrmref" \
+          -srcdir   "$nrmdir" \
+          -srcpre   "$nrmpre" \
+          -srcsuf   "$nrmsuf" \
+          -tgtdir   "$refdir" \
+          -tgtid    "$refid" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
+          -spacing  $resolution \
+          -padding  "$bgvalue" \
+          -dofins   "$dofdir/1.7_ref" -invert \
+          -outdir   "$nrmdir" \
+          -outsuf   "_ref.nii.gz"
+
       # compose affine transformations: image --> auto-ref --> user-ref
       compose_dofs_node 'ref_dofs' -parent 'reg_refs' \
           -subjects "${subids[@]}" \
-          -dofdir1  "$nrmdofs" \
-          -dofdir2  "$dofdir/1.7_ref" -dofid2 "$nrmref" \
+          -dofin1   "$nrmdofs" \
+          -dofin2   "$dofdir/1.7_ref" -dofid2 "$nrmref" \
           -dofdir   "$dofdir/1.7_ref"
 
     end_dag
@@ -292,14 +308,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     # use user supplied reference space for non-rigid atlas construction
     prev_node='ref_alignment'
     nrmdofs="$dofdir/1.7_ref"
+    nrmref="t2w_lin_ref"
 
-  fi
-
-  if [ -n "$refid" ]; then
-    nrmdir="$refdir"
-    nrmref="$refid"
-    nrmpre="$refpre"
-    nrmsuf="$refsuf"
   fi
 
   # ----------------------------------------------------------------------------
@@ -362,18 +372,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       i=1
       while [ $i -le $refine ]; do
 
-        curdofs="$dofdir/3.${i}_cur"
-        nxtdofs="$dofdir/3.${i}_def"
+        let j="2*$i + 1"
+        nxtdofs="$dofdir/2.${j}_def"
 
         # update average images
         begin_dag "make_templates_$i" -parent "$prev_node" -splice
           for t in ${timepoints[@]}; do
-
-            compose_dofs_node "compose_$t" \
-                -sublst  "$kernel/t$t.csv" \
-                -dofdir1 "$nrmdofs" \
-                -dofdir2 "$defdofs/t$t" \
-                -dofdir  "$curdofs/t$t"
 
             average_images_node "average_$t" -parent "compose_$t" \
                 -sublst "$kernel/t$t.csv" \
@@ -384,9 +388,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refdir "$nrmdir" \
                 -refpre "$nrmpre" \
                 -refsuf "$nrmsuf" \
-                -dofdir "$curdofs/t$t" \
-                -output "$outdir/templates/t2w_$t-$i.nii.gz" \
-                -voxelwise
+                -dofin1 "$nrmdofs" \
+                -dofin2 "$defdofs/t$t" \
+                -output "$tmpdir/t2w_$t-$i.nii.gz"
 
           done
         end_dag       
@@ -396,11 +400,11 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           for t in ${timepoints[@]}; do
 
             register_node "refine_$t" \
-                -subjects "$kernel/t$t.csv" \
+                -sublst   "$kernel/t$t.csv" \
                 -imgdir   "$imgdir" \
                 -imgpre   "$imgpre" \
                 -imgsuf   "$imgsuf" \
-                -srcdir   "$outdir/templates" \
+                -srcdir   "$tmpdir" \
                 -srcid    "t2w_$t-$i" \
                 -srcsuf   ".nii.gz" \
                 -model    "SVFFD" \
@@ -411,8 +415,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -sim      "$similarity" \
                 -padding  "$bgvalue" \
                 -hdrdofs  "$nrmdofs" \
-                -dofins   "$defdofs" \
-                -dofdir   "$nxtdofs" \
+                -dofins   "identity" \
+                -dofdir   "$nxtdofs/t$t" \
                 -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
                 -maxres   $resolution
 
@@ -427,7 +431,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
     end_dag
 
-    unset -v i curdofs nxtdofs
+    unset -v i nxtdofs
     prev_node='def_refinement'
   fi
 
@@ -435,7 +439,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # make template images
 
   affdofs="$dofdir/3_scale"
-  imgdofs="$dofdir/"
+  imgdofs="$dofdir/4_atlas"
 
   begin_dag 'make_templates' -parent "$prev_node" -splice
 
@@ -452,11 +456,11 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # compose transformations from native space to atlas time point
       # with age-specific global scaling to adjust brain size
       compose_dofs_node "compose_$t" -parent "avg_scales_$t" \
-          -sublst  "$kernel/t$t.csv" \
-          -dofdir1 "$nrmdofs" \
-          -dofdir2 "$defdofs/t$t" \
-          -dofdir3 "$affdofs/t$t" -dofid3 "$nrmref" \
-          -dofdir  "$imgdofs/t$t"
+          -sublst "$kernel/t$t.csv" \
+          -dofin1 "$nrmdofs" \
+          -dofin2 "$defdofs/t$t" \
+          -dofin3 "$affdofs/t$t" -dofid3 "$nrmref" \
+          -dofdir "$imgdofs/t$t"
 
       # transform and average images
       average_images_node "average_$t" -parent "compose_$t" \
@@ -470,7 +474,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refsuf "$nrmsuf" \
           -dofdir "$imgdofs/t$t" \
           -output "$outdir/templates/t2w_$t.nii.gz" \
-          -resolution $resolution -voxelwise
+          -resolution $resolution
 
     done
 
@@ -501,7 +505,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf ".nii.gz" \
                 -dofdir "$imgdofs/t$t" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-                -label $l -voxelwise
+                -label $l
      
             let l++
           done
@@ -534,7 +538,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf ".nii.gz" \
                 -dofdir "$imgdofs/t$t" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-                -label $l -voxelwise
+                -label $l
      
             let l++
           done

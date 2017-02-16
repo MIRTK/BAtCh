@@ -110,7 +110,8 @@ register_node()
   local srcid=
   local srcpre=
   local srcsuf='.nii.gz'
-  local ids=
+  local ids=()
+  local idlst=
   local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
@@ -177,9 +178,12 @@ register_node()
       -domain)
         optarg domain $1 "$2"
         shift; ;;
-      -subjects)
+      -subjects|-ids)
+        unset -v ids
         optargs ids "$@"
         shift ${#ids[@]}; ;;
+      -sublst|-idlst)
+        optarg idlst $1 "$2"; shift; ;;
       -model)
         optarg model $1 "$2"
         shift; ;;
@@ -283,9 +287,18 @@ register_node()
   done
   [ -n "$node" ] || error "register_node: missing name argument"
   [ -n "$model" ] || error "register_node: missing -model argument"
-  [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || {
+  if [ -n "$idlst" ]; then
+    [ ${#ids[@]} -eq 0 ] || error "register_node: options -subjects and -sublst are mutually exclusive"
+    read_sublst ids "$idlst"
+  fi
+  [ ${#ids[@]} -ge 2 ] || [ ${#ids[@]} -gt 0 -a -n "$tgtid$srcid" ] || [ -n "$tgtid" -a -n "$srcid" ] || {
     error "register_node: not enough -subjects specified"
   }
+  if [ -n "$tgtid" -a -n "$srcid" ]; then
+    [ ${#ids[@]} -eq 0 ] || {
+      error "register_node: option -subjects / -sublst cannot be used when both -tgtid and -srcid given"
+    }
+  fi
   if [[ $dofins == 'identity' ]] || [[ $dofins == 'id' ]]; then
     dofins='Id'
   fi
@@ -642,12 +655,12 @@ register_node()
             srcids=()
             let s2="$s1+$group-1"
             if [[ $ic == true ]]; then
-              while [ $s -le $s2 ]; do
+              while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
                 [ $s -ge $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
                 let s++
               done
             else
-              while [ $s -le $s2 ]; do
+              while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
                 [ $s -eq $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
                 let s++
               done
@@ -726,47 +739,129 @@ register_node()
 # add node for application of pairwise image transformations
 transform_image_node()
 {
+  local id1 id2
+
   local node=
   local parent=()
-  local ids=
+  local ids=()
+  local imgdir=
+  local imgpre=
+  local imgsuf='.nii.gz'
+  local srcid=
+  local srcdir=
+  local srcpre='$imgpre'
+  local srcsuf='$imgsuf'
+  local tgtid=
+  local tgtdir=
+  local tgtpre='$imgpre'
+  local tgtsuf='$imgsuf'
   local outdir=
+  local outpre='$imgpre'
+  local outsuf='$imgsuf'
   local ref=
+  local refid=
+  local refdir=
+  local refpre=
+  local refsuf='.nii.gz'
   local hdrdofs=
   local dofins=
+  local dofpre=
+  local dofsuf='.dof.gz'
   local padding=0
-  local prefix=
-  local suffix='.nii.gz'
   local interp='linear'
   local resample='false'
+  local invert='false'
+  local spacing=()
 
   while [ $# -gt 0 ]; do
     case "$1" in
-      -parent)             optargs parent    "$@"; shift ${#parent[@]}; ;;
-      -subjects)           optargs ids       "$@"; shift ${#ids[@]}; ;;
-      -outdir)             optarg  outdir     $1 "$2"; shift; ;;
-      -ref)                optarg  ref        $1 "$2"; shift; ;;
-      -prefix)             optarg  prefix     $1 "$2"; shift; ;;
-      -suffix)             optarg  suffix     $1 "$2"; shift; ;;
-      -hdrdofs)            optarg  hdrdofs    $1 "$2"; shift; ;;
-      -dofins)             optarg  dofins     $1 "$2"; shift; ;;
-      -bgvalue|-padding)   optarg  padding    $1 "$2"; shift; ;;
-      -interp)             optarg  interp     $1 "$2"; shift; ;;
+      -parent)             optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects)           optargs ids    "$@"; shift ${#ids[@]}; ;;
+      -srcid)              optarg  srcid  $1 "$2"; shift; ;;
+      -imgdir|-srcdir)     optarg  imgdir $1 "$2"; shift; ;;
+      -outdir)             optarg  outdir $1 "$2"; shift; ;;
+      -ref|-target)        optarg  ref    $1 "$2"; shift; ;;
+      -refdir|-tgtdir)     optarg  refdir $1 "$2"; shift; ;;
+      -refid|-tgtid)       refid="$2";  shift; ;;
+      -refpre|-tgtpre)     refpre="$2"; shift; ;;
+      -refsuf|-tgtsuf)     refsuf="$2"; shift; ;;
+      -imgpre|-srcpre)     imgpre="$2"; shift; ;;
+      -imgsuf|-srcsuf)     imgsuf="$2"; shift; ;;
+      -outpre)             outpre="$2"; shift; ;;
+      -outsuf)             outsuf="$2"; shift; ;;
+      -hdrdofs)            optarg  hdrdofs $1 "$2"; shift; ;;
+      -dofins)             optarg  dofins  $1 "$2"; shift; ;;
+      -dofsuf)             optarg  dofsuf  $1 "$2"; shift; ;;
+      -bgvalue|-padding)   optarg  padding $1 "$2"; shift; ;;
+      -interp)             optarg  interp  $1 "$2"; shift; ;;
+      -dofinv|-invert) invert='true'; ;;
       -include_identity)   resample='true'; ;;
+      -spacing|-voxelsize|-resolution)
+        spacing=()
+        optargs spacing "$@"
+        if [ ${#spacing[@]} -gt 3 ]; then
+          error "transform_image_node: too many -spacing, -voxelsize, -resolution arguments"
+        fi
+        shift ${#spacing[@]}
+        ;;
       -*)                  error "transform_image_node: invalid option: $1"; ;;
       *)                   [ -z "$node" ] || error "transform_image_node: too many arguments"
                            node=$1; ;;
     esac
     shift
   done
-  [ -n "$node"       ] || error "transform_image_node: missing name argument"
-  [ -n "$dofins"     ] || error "transform_image_node: missing -dofins argument"
-  [ -n "$outdir"     ] || error "transform_image_node: missing -outdir argument"
-  [ -n "$ref"        ] || error "transform_image_node: missing -ref argument"
-  [ ${#ids[@]} -ge 2 ] || error "transform_image_node: not enough -subjects specified"
+  [ -n "$node"   ] || error "transform_image_node: missing name argument"
+  [ -n "$dofins" ] || error "transform_image_node: missing -dofins argument"
+  [ -n "$outdir" ] || error "transform_image_node: missing -outdir argument"
+  if [ -n "$srcid" ]; then
+    [ ${#ids[@]} -eq 0 ] || error "transform_image_node: options -srcid and -subjects are mutually exclusive"
+  else
+    [ ${#ids[@]} -ge 2 ] || error "transform_image_node: not enough -subjects specified"
+  fi
+  [ -n "$tgtdir" ] || tgtdir="$imgdir"
+  [ -n "$srcdir" ] || srcdir="$imgdir"
+  [[ $tgtpre != '$imgpre' ]] || tgtpre="$tgtpre"
+  [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$tgtsuf"
+  [[ $srcpre != '$imgpre' ]] || srcpre="$srcpre"
+  [[ $srcsuf != '$imgsuf' ]] || srcsuf="$srcsuf"
+  [[ $outpre != '$imgpre' ]] || outpre="$imgpre"
+  [[ $outsuf != '$imgsuf' ]] || outsuf="$imgsuf"
+  if [ -z "$ref" ]; then
+    if [ -n "$refid" ]; then
+      ref="$refdir/$refpre$refid$refsuf"
+    else
+      error "transform_image_node: no reference image specified"
+    fi
+  fi
 
-  # number of pairwise transformations
-  local N
-  let N="${#ids[@]} * (${#ids[@]} - 1)"
+  # number of transform-image jobs
+  local N=1
+  if [ -n "$tgtid" -a -n "$srcid" ]; then
+    N=1
+  elif [ -n "$tgtid" -o -n "$srcid" ]; then
+    N=${#ids[@]}
+    if [[ $resample != true ]]; then
+      id2="$tgtid"
+      [ -n "$id2" ] || id2="$srcid"
+      for id1 in ${ids[@]}; do
+        if [[ "$id1" == "$id2" ]]; then
+          let N--
+        fi
+      done
+    fi
+  elif [[ $resample == true ]]; then
+    let N="${#ids[@]} * ${#ids[@]}"
+  else
+    let N="${#ids[@]} * (${#ids[@]} - 1)"
+  fi
+  if [ -z "$srcid" ]; then
+    outpre="\$(target)/$outpre"
+    dofpre="\$(target)/$dofpre"
+  fi
+  local subdir=
+  if [ -z "$tgtid$srcid" ]; then
+    subdir="\$(target)/"
+  fi
 
   # add SUBDAG node
   info "Adding node $node..."
@@ -776,85 +871,121 @@ transform_image_node()
 
     # create generic transformation submission script
     sub="arguments    = \""
-    sub="$sub '$prefix\$(source)$suffix'"
-    sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
-    [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(source).dof.gz'"
-    sub="$sub -dofin '$dofins/\$(target)/\$(source).dof.gz' -matchInputType -target '$ref' -$interp -threads $threads"
+    sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
+    sub="$sub '$outdir/${subdir}$outpre\$(source)$outsuf'"
+    [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
+    sub="$sub -threads $threads -interp $interp"
+    sub="$sub -dofin '$dofins/${subdir}\$(source)$dofsuf'"
+    [[ $invert == false ]] || sub="$sub -invert"
+    [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
+    if [ -n "$ref" ]; then
+      sub="$sub -target '$ref'"
+    else
+      sub="$sub -target '$tgtdir/$tgtpre\$(target)$tgtsuf'"
+      [ -z "$hdrdofs" ] || sub="$sub -target-affdof '$hdrdofs/\$(target)$dofsuf'"
+    fi
     sub="$sub\""
-    sub="$sub\noutput       = $_dagdir/\$(target)/transform_\$(source).log"
-    sub="$sub\nerror        = $_dagdir/\$(target)/transform_\$(source).log"
+    sub="$sub\noutput       = $_dagdir/${subdir}transform_\$(source).log"
+    sub="$sub\nerror        = $_dagdir/${subdir}transform_\$(source).log"
     sub="$sub\nqueue"
     make_sub_script "transform.sub" "$sub" -executable transform-image
 
     # create generic resample submission script
     if [[ $resample == true ]]; then
       sub="arguments    = \""
-      sub="$sub '$prefix\$(id)$suffix'"
-      sub="$sub '$outdir/\$(id)/\$(id)$suffix'"
-      [ -z "$hdrdofs" ] || sub="$sub -dof '$hdrdofs/\$(id).dof.gz'"
-      sub="$sub -dofin identity -matchInputType -target '$ref' -$interp -threads $threads"
+      sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
+      sub="$sub '$outdir/${subdir}$outpre\$(source)$outsuf'"
+      [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
+      sub="$sub -threads $threads -interp $interp -dofin identity"
+      [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
+      [ -z "$ref" ] || sub="$sub -target '$ref'"
       sub="$sub\""
-      sub="$sub\noutput       = $_dagdir/\$(id)/resample.log"
-      sub="$sub\nerror        = $_dagdir/\$(id)/resample.log"
+      sub="$sub\noutput       = $_dagdir/${subdir}resample_\$(source).log"
+      sub="$sub\nerror        = $_dagdir/${subdir}resample_\$(source).log"
       sub="$sub\nqueue"
       make_sub_script "resample.sub" "$sub" -executable transform-image
     fi
 
-    # create generic header transformation submission script
-    if [ -n "$hdrdofs" ]; then
-      sub="arguments    = \""
-      sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
-      sub="$sub '$outdir/\$(target)/\$(source)$suffix'"
-      sub="$sub -dofin_i '$hdrdofs/\$(target).dof.gz'"
-      sub="$sub\""
-      sub="$sub\noutput       = $_dagdir/\$(target)/postalign_\$(source).log"
-      sub="$sub\nerror        = $_dagdir/\$(target)/postalign_\$(source).log"
-      sub="$sub\nqueue"
-      make_sub_script "postalign.sub" "$sub" -executable edit-image
-    fi
-
     # job to create output directories
     local pre=''
-    for id in "${ids[@]}"; do
-      pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
-    done
-    pre="$pre\n"
-    for id in "${ids[@]}"; do
-      pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
-    done
-    make_script "mkdirs.sh" "$pre"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    if [ -z "$tgtid$srcid" ]; then
+      for id in "${ids[@]}"; do
+        pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
+      done
+      pre="$pre\n"
+      for id in "${ids[@]}"; do
+        pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
+      done
+    elif [ -n "$outdir" ] && [[ $outdir != '.' ]]; then
+      pre="$pre\nmkdir -p '$outdir' || exit 1"
+    fi
+    if [ -n "$pre" ]; then
+      make_script "mkdirs.sh" "$pre"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    fi
 
     # add job nodes
-    local n t s
-    n=0
-    t=0
-    for id1 in "${ids[@]}"; do
-      let t++
-      s=0
-      for id2 in "${ids[@]}"; do
-        let s++
-        if [ $t -eq $s ]; then
-          [ $resample == true ] || continue
-          let n++
-          add_node "transform_$id1,$id2" -subfile "resample.sub" -var "id=\"$id1\""
+    local n=0 job_node
+    if [ -n "$tgtid" -a -n "$srcid" ]; then
+      id1="$tgtid"
+      id2="$srcid"
+      if [[ "$id1" == "$id2" ]]; then
+        job_node="resample_$id1"
+        add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+      else
+        job_node="transform_$id1,$id2"
+        add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+      fi
+      [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
+      [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+      n=1 && info "  Added job `printf '%3d of %d' $n $N`"
+    elif [ -n "$srcid" ]; then
+      id2="$srcid"
+      for id1 in "${ids[@]}"; do
+        if [[ "$id1" == "$id2" ]]; then
+          [[ $resample == true ]] || continue
+          job_node="resample_$id1"
+          add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         else
-          let n++
-          add_node "transform_$id1,$id2" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+          job_node="transform_$id1,$id2"
+          add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
-        add_edge "transform_$id1,$id2" 'mkdirs'
-        if [ -n "$hdrdofs" ]; then
-          add_node "postalign_$id1,$id2" -subfile "postalign.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
-          add_edge "postalign_$id1,$id2" "transform_$id1,$id2"
-        fi
-        [ ! -f "$outdir/$id1/$id2$suffix" ] || {
-          node_done "transform_$id1,$id2"
-          [ -z "$hdrdofs" ] || node_done "postalign_$id1,$id2"
-        }
-        info "  Added job `printf '%3d of %d' $n $N`"
+        [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
+        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done
-    done
+    elif [ -n "$tgtid" ]; then
+      id1="$tgtid"
+      for id2 in "${ids[@]}"; do
+        if [[ "$id1" == "$id2" ]]; then
+          [[ $resample == true ]] || continue
+          job_node="resample_$id1"
+          add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        else
+          job_node="transform_$id1,$id2"
+          add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        fi
+        [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
+        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        let n++ && info "  Added job `printf '%3d of %d' $n $N`"
+      done
+    else
+      for id1 in "${ids[@]}"; do
+      for id2 in "${ids[@]}"; do
+        if [[ "$id1" == "$id2" ]]; then
+          [[ $resample == true ]] || continue
+          job_node="resample_$id1"
+          add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        else
+          job_node="transform_$id1,$id2"
+          add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+        fi
+        [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
+        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        let n++ && info "  Added job `printf '%3d of %d' $n $N`"
+      done; done
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -906,9 +1037,11 @@ invert_dof_node()
     make_sub_script "invert.sub" "$sub" -executable invert-dof
 
     # node to create output directories
-    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    if [[ "$dofdir" != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    fi
 
     # add invert-dof nodes to DAG
     for id in "${ids[@]}"; do
@@ -999,7 +1132,7 @@ average_dofs_node()
     make_sub_script "dofavg.sub" "$sub" -executable average-dofs
 
     # node to create output directories
-    if [ -n "$dofdir" ]; then
+    if [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
@@ -1039,9 +1172,9 @@ compose_dofs_node()
   local dofid2=
   local dofid3=
   local dofdir=
-  local dofdir1=
-  local dofdir2=
-  local dofdir3=
+  local dofin1=
+  local dofin2=
+  local dofin3=
   local dofsuf='.dof.gz'
 
   while [ $# -gt 0 ]; do
@@ -1054,9 +1187,9 @@ compose_dofs_node()
       -dofid2)   optarg  dofid2  $1 "$2"; shift; ;;
       -dofid3)   optarg  dofid3  $1 "$2"; shift; ;;
       -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
-      -dofdir1)  optarg  dofdir1 $1 "$2"; shift; ;;
-      -dofdir2)  optarg  dofdir2 $1 "$2"; shift; ;;
-      -dofdir3)  optarg  dofdir3 $1 "$2"; shift; ;;
+      -dofin1)   optarg  dofin1  $1 "$2"; shift; ;;
+      -dofin2)   optarg  dofin2  $1 "$2"; shift; ;;
+      -dofin3)   optarg  dofin3  $1 "$2"; shift; ;;
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -*)        error "compose_dofs_node: invalid option: $1"; ;;
       *)         [ -z "$node" ] || error "compose_dofs_node: too many arguments"
@@ -1066,8 +1199,8 @@ compose_dofs_node()
   done
   [ -n "$node" ] || error "compose_dofs_node: missing name argument"
   [ -n "$dofdir" ] || error "compose_dofs_node: missing output -dofdir argument"
-  [ -n "$dofdir1" ] || error "compose_dofs_node: missing input -dofdir1 argument"
-  [ -n "$dofdir2" ] || error "compose_dofs_node: missing input -dofdir2 argument"
+  [ -n "$dofin1" ] || error "compose_dofs_node: missing input -dofin1 argument"
+  [ -n "$dofin2" ] || error "compose_dofs_node: missing input -dofin2 argument"
   if [ -z "$dofid" ]; then
     dofid='$(id)'
     if [ ${#ids[@]} -eq 0 -a -z "$idlst" ]; then
@@ -1084,8 +1217,8 @@ compose_dofs_node()
   begin_dag $node -splice || {
 
     # create generic dofcombine submission script
-    local sub="arguments = \"'$dofdir1/$dofid1$dofsuf' '$dofdir2/$dofid2$dofsuf'"
-    [ -z "$dofdir3" ] || sub="$sub '$dofdir3/$dofid3$dofsuf'"
+    local sub="arguments = \"'$dofin1/$dofid1$dofsuf' '$dofin2/$dofid2$dofsuf'"
+    [ -z "$dofin3" ] || sub="$sub '$dofin3/$dofid3$dofsuf'"
     sub="$sub '$dofdir/$dofid$dofsuf' -threads $threads\""
     sub="$sub\noutput    = $_dagdir/compose_$dofid3.log"
     sub="$sub\nerror     = $_dagdir/compose_$dofid3.log"
@@ -1093,9 +1226,11 @@ compose_dofs_node()
     make_sub_script "compose.sub" "$sub" -executable compose-dofs
 
     # node to create output directories
-    make_script "mkdirs.sh" "mkdir -p '$dofdir3' || exit 1"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    if [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    fi
 
     # add dofcombine nodes to DAG
     if [[ "$dofid" == '$(id)' ]]; then
@@ -1124,14 +1259,15 @@ average_images_node()
   local parent=()
   local ids=()
   local idlst=()
+  local refid=
   local refdir=
   local refpre=
-  local refid=
   local refsuf=
   local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
-  local dofdir=
+  local dofin1=
+  local dofin2=
   local dofpre=
   local dofsuf='.dof.gz'
   local dofinv='false'
@@ -1144,31 +1280,37 @@ average_images_node()
       -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
       -sublst)   optarg  idlst   $1 "$2"; shift; ;;
+      -refid)    refid="$2"; shift; ;;
       -refdir)   optarg  refdir  $1 "$2"; shift; ;;
       -refpre)   refpre="$2"; shift; ;;
-      -refid)    refid="$2"; shift; ;;
       -refsuf)   refsuf="$2"; shift; ;;
       -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
       -imgpre)   imgpre="$2"; shift; ;;
       -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
-      -dofdir)   optarg  dofdir  $1 "$2"; shift; ;;
+      -dofin1|-dofdir) optarg  dofin1  $1 "$2"; shift; ;;
+      -dofin2)   optarg  dofin2  $1 "$2"; shift; ;;
       -dofpre)   optarg  dofpre  $1 "$2"; shift; ;;
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
       -dofinv) options="$options -invert"; ;;
       -output)   optarg  average $1 "$2"; shift; ;;
-      -voxelwise) options="$options -voxelwise"; ;;
-      -voxelsize|-resolution)
+      -spacing|-voxelsize|-resolution)
         local voxelsize
         optargs voxelsize "$@"
         if [ ${#voxelsize[@]} -gt 3 ]; then
-          error "average_images_node: too many -voxelsize, -resolution arguments"
+          error "average_images_node: too many -spacing, -voxelsize, -resolution arguments"
         fi
         shift ${#voxelsize[@]}
         options="$options -size ${voxelsize[@]}"
         ;;
-      -margin)   optarg  margin  $1 "$2"; shift; options="$options -margin $margin";;
-      -bgvalue)  optarg  bgvalue $1 "$2"; shift; options="$options -padding $bgvalue";;
-      -label)    optarg  label   $1 "$2"; shift; options="$options -label $label";;
+      -margin)
+        optarg margin $1 "$2"; shift
+        options="$options -margin $margin";;
+      -bgvalue|-padding)
+        optarg bgvalue $1 "$2"; shift
+        options="$options -padding $bgvalue";;
+      -label)
+        optarg label $1 "$2"; shift
+        options="$options -label $label";;
       -*)        error "average_images_node: invalid option: $1"; ;;
       *)         [ -z "$node" ] || error "average_images_node: too many arguments"
                  node="$1"; ;;
@@ -1178,7 +1320,6 @@ average_images_node()
   [ -n "$node" ] || error "average_images_node: missing name argument"
   [ -n "$average" ] || error "average_images_node: missing -output argument"
   [ -z "$imgdir" ] || imgpre="$imgdir/$imgpre"
-  [ -z "$dofdir" ] || dofpre="$dofdir/$dofpre"
   [ -n "$refdir" ] || refdir="$imgdir"
   [ -n "$refsuf" ] || refsuf="$imgsuf"
   [ -z "$refid" ] || options="$options -reference '$refdir/$refpre$refid$refsuf'"
@@ -1196,27 +1337,32 @@ average_images_node()
         pair=($line)
         id=${pair[0]}
         weight=${pair[1]}
-        images="$images$imgpre$id$imgsuf"
-        [ -z "$dofdir" ] || images="$images $dofpre$id$dofsuf"
-        [ -z "$weight" ] || images="$images $weight"
+        images="\"$images$imgpre$id$imgsuf\""
+        [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
+        [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
+        [ -z "$weight" ] || images="$images,$weight"
         images="$images\n"
       done < "$idlst"
     else
       for id in "${ids[@]}"; do
-        images="$images$imgpre$id$imgsuf"
-        [ -z "$dofdir" ] || images="$images $dofpre$id$dofsuf"
-        images="$images\n"
+        images="\"$images$imgpre$id$imgsuf\""
+        [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
+        [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
+        images="$images,1\n"
       done
     fi
     write "$imglst" "$images"
 
     # node to create output directories
-    make_script "mkdirs.sh" "mkdir -p '$(dirname "$average")' || exit 1"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    local avgdir="$(dirname "$average")"
+    if [[ "$avgdir" != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$avgdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    fi
 
     # add average node to DAG
-    local sub="arguments = \"$average -v -images '$imglst' -threads $threads $options\""
+    local sub="arguments = \"$average -v -images '$imglst' -delim , -threads $threads $options\""
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
