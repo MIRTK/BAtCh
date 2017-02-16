@@ -243,6 +243,7 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
     """Submit SLURM job."""
     sbatch_script = "#!/bin/sh\n"
     sbatch_script += "cd '{}' || exit 1\n".format(job['initialdir'])
+    sbatch_script += "echo \"SLURM JOB $SLURM_JOB_ID\" 1>&2\n"
     command = job['executable']
     if ' ' in command:
         command = "'" + command + "'"
@@ -257,17 +258,16 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
                 arg = "'" + arg + "'"
             command += ' ' + arg
     sbatch_script += command
-    sbatch_script += "\n[ $? -eq 0 ] && echo 'SLURM JOB DONE' 1>&2"
+    sbatch_script += "\n[ $? -eq 0 ] && echo 'SLURM JOB DONE' 1>&2\n"
     sbatch_argv = [
-        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', name,
-        '--begin=now+10'  # delay s.t. 'SLURM JOB <Id>' written before job starts
+        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', name
     ]
     if deps:
         if _try_run:
             deps = ['$j{}'.format(dep) for dep in deps]
         else:
             deps = [str(dep) for dep in deps]
-        sbatch_argv.append('--dependency=afterok:' + ','.join(deps))
+        sbatch_argv.append('--dependency=afterok:' + ',afterok:'.join(deps))
     if 'output' in job:
         output = os.path.join(job['initialdir'], job['output'])
         outdir = os.path.dirname(output)
@@ -308,7 +308,6 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
         m_jobid = re.match('Submitted batch job ([0-9]+)', sbatch_output)
         if not m_jobid:
             raise Exception("Failed to determine job ID from sbatch output:\n" + sbatch_output)
-        err.write("SLURM JOB " + m_jobid.group(1))
     job['id'] = int(m_jobid.group(1))
     job['done'] = False
     if not _try_run:
@@ -347,7 +346,7 @@ def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
             if ready:
                 jobids.sort()
                 if not _try_run:
-                    sys.stdout.write("Submitting {}...".format(batch))
+                    sys.stdout.write("Submitting {} (#tasks={})...\n".format(batch, len(jobs[batch])))
                     sys.stdout.flush()
                 for i in range(len(jobs[batch])):
                     name = batch
@@ -356,7 +355,7 @@ def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
                     run_job_slurm(name=name, job=jobs[batch][i], deps=jobids,
                                   threads=threads, queue=queue)
                 if not _try_run:
-                    sys.stdout.write(" done\n")
+                    sys.stdout.write("Submitting {}... done\n".format(batch))
                     sys.stdout.flush()
             else:
                 todo.append(batch)
