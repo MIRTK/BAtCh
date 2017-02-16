@@ -376,7 +376,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       i=1
       while [ $i -le $refine ]; do
 
-        let j="2*$i + 1"
+        let j="$i + 1"
         nxtdofs="$dofdir/2.${j}_def"
 
         # update average images

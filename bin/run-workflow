@@ -254,7 +254,7 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
                 threads = int(job['arguments'][i + 1])
             if "'" in arg:
                 arg = arg.replace("'", "\\'")
-            if ' ' in arg or '"' in arg:
+            if arg == '' or ' ' in arg or '"' in arg:
                 arg = "'" + arg + "'"
             command += ' ' + arg
     sbatch_script += command
