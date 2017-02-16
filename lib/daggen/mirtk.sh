@@ -777,16 +777,23 @@ transform_image_node()
     case "$1" in
       -parent)             optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects)           optargs ids    "$@"; shift ${#ids[@]}; ;;
-      -srcid)              optarg  srcid  $1 "$2"; shift; ;;
-      -imgdir|-srcdir)     optarg  imgdir $1 "$2"; shift; ;;
+      -imgdir)             optarg  imgdir $1 "$2"; shift; ;;
+      -imgpre)             imgpre="$2"; shift; ;;
+      -imgsuf)             imgsuf="$2"; shift; ;;
+      -tgtdir)             optarg tgtdir $1 "$2"; shift; ;;
+      -tgtid)              tgtid="$2";  shift; ;;
+      -tgtpre)             tgtpre="$2"; shift; ;;
+      -tgtsuf)             tgtsuf="$2"; shift; ;;
+      -srcdir)             optarg  srcdir $1 "$2"; shift; ;;
+      -srcid)              srcid="$2"; shift; ;;
+      -srcpre)             srcpre="$2"; shift; ;;
+      -srcsuf)             srcsuf="$2"; shift; ;;
       -outdir)             optarg  outdir $1 "$2"; shift; ;;
-      -ref|-target)        optarg  ref    $1 "$2"; shift; ;;
-      -refdir|-tgtdir)     optarg  refdir $1 "$2"; shift; ;;
-      -refid|-tgtid)       refid="$2";  shift; ;;
-      -refpre|-tgtpre)     refpre="$2"; shift; ;;
-      -refsuf|-tgtsuf)     refsuf="$2"; shift; ;;
-      -imgpre|-srcpre)     imgpre="$2"; shift; ;;
-      -imgsuf|-srcsuf)     imgsuf="$2"; shift; ;;
+      -ref)                optarg  ref    $1 "$2"; shift; ;;
+      -refdir)             optarg  refdir $1 "$2"; shift; ;;
+      -refid)              refid="$2";  shift; ;;
+      -refpre)             refpre="$2"; shift; ;;
+      -refsuf)             refsuf="$2"; shift; ;;
       -outpre)             outpre="$2"; shift; ;;
       -outsuf)             outsuf="$2"; shift; ;;
       -hdrdofs)            optarg  hdrdofs $1 "$2"; shift; ;;
@@ -826,12 +833,8 @@ transform_image_node()
   [[ $srcsuf != '$imgsuf' ]] || srcsuf="$srcsuf"
   [[ $outpre != '$imgpre' ]] || outpre="$imgpre"
   [[ $outsuf != '$imgsuf' ]] || outsuf="$imgsuf"
-  if [ -z "$ref" ]; then
-    if [ -n "$refid" ]; then
-      ref="$refdir/$refpre$refid$refsuf"
-    else
-      error "transform_image_node: no reference image specified"
-    fi
+  if [ -z "$ref" -a -n "$refid" ]; then
+    ref="$refdir/$refpre$refid$refsuf"
   fi
 
   # number of transform-image jobs
@@ -1176,6 +1179,7 @@ compose_dofs_node()
   local dofin2=
   local dofin3=
   local dofsuf='.dof.gz'
+  local options=''
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1191,6 +1195,10 @@ compose_dofs_node()
       -dofin2)   optarg  dofin2  $1 "$2"; shift; ;;
       -dofin3)   optarg  dofin3  $1 "$2"; shift; ;;
       -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
+      -notranslation) options="$options -notranslation";  ;;
+      -norotation)    options="$options -norotation";  ;;
+      -noscaling)     options="$options -noscaling";  ;;
+      -noshearing)    options="$options -noshearing";  ;;
       -*)        error "compose_dofs_node: invalid option: $1"; ;;
       *)         [ -z "$node" ] || error "compose_dofs_node: too many arguments"
                  node=$1; ;;
@@ -1219,7 +1227,7 @@ compose_dofs_node()
     # create generic dofcombine submission script
     local sub="arguments = \"'$dofin1/$dofid1$dofsuf' '$dofin2/$dofid2$dofsuf'"
     [ -z "$dofin3" ] || sub="$sub '$dofin3/$dofid3$dofsuf'"
-    sub="$sub '$dofdir/$dofid$dofsuf' -threads $threads\""
+    sub="$sub '$dofdir/$dofid$dofsuf' $options -threads $threads\""
     sub="$sub\noutput    = $_dagdir/compose_$dofid3.log"
     sub="$sub\nerror     = $_dagdir/compose_$dofid3.log"
     sub="$sub\nqueue"

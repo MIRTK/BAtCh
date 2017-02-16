@@ -192,7 +192,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       average_dofs_node 'avgdofs' -parent 'regaff' \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_aff" \
-          -dofdir   "$dofdir/1.3_avg"
+          -dofdir   "$dofdir/1.3_avg" \
+          -noshearing
 
       # pairwise affine refinement
       register_node 'refine' -parent 'avgdofs' \
@@ -215,14 +216,16 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       average_dofs_node 'avgres' -parent 'refine' \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.4_res" \
-          -dofdir   "$dofdir/1.5_avg"
+          -dofdir   "$dofdir/1.5_avg" \
+          -noshearing
 
       # compose average transformations
       compose_dofs_node 'compose' -parent 'avgres' \
           -subjects "${subids[@]}" \
           -dofin1   "$dofdir/1.3_avg" \
           -dofin2   "$dofdir/1.5_avg" \
-          -dofdir   "$dofdir/1.6_aff"
+          -dofdir   "$dofdir/1.6_aff" \
+          -noshearing
 
       # global normalization output
       nrmdofs="$dofdir/1.6_aff"
@@ -267,7 +270,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
       # register user reference to constructed affine reference
       register_node 'reg_refs' \
-          -model   "Similarity+Affine" \
+          -model   "Rigid" \
           -tgtdir  "$nrmdir" \
           -tgtid   "$nrmref" \
           -tgtpre  "$nrmpre" \
@@ -301,7 +304,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -subjects "${subids[@]}" \
           -dofin1   "$nrmdofs" \
           -dofin2   "$dofdir/1.7_ref" -dofid2 "$nrmref" \
-          -dofdir   "$dofdir/1.7_ref"
+          -dofdir   "$dofdir/1.7_ref" \
+          -noshearing
 
     end_dag
 
