@@ -1337,7 +1337,7 @@ average_images_node()
         pair=($line)
         id=${pair[0]}
         weight=${pair[1]}
-        images="\"$images$imgpre$id$imgsuf\""
+        images="$images\"$imgpre$id$imgsuf\""
         [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
         [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
         [ -z "$weight" ] || images="$images,$weight"
@@ -1345,7 +1345,7 @@ average_images_node()
       done < "$idlst"
     else
       for id in "${ids[@]}"; do
-        images="\"$images$imgpre$id$imgsuf\""
+        images="$images\"$imgpre$id$imgsuf\""
         [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
         [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
         images="$images,1\n"
