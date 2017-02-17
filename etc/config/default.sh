@@ -48,7 +48,7 @@ refsuf='.nii.gz'                      # reference image file name suffix
 refid=''                              # ID of reference image (optional)
                                       # - set reference ID to empty string to compute
                                       #   population specific linear average
-refini='false'                        # - false: use reference for global normalization
+refini='true'                         # - false: use reference for global normalization
                                       # - true:  construct linear population reference
                                       #          and, when refid set, align this average
                                       #          image with the specified reference
@@ -78,7 +78,7 @@ logdir='log'                          # directory of log files written by workfl
 dofdir='../dofs'                      # transformations computed during atlas construction
 evldir='../eval'                      # directory of evaluation output files
 outdir='../atlas'                     # atlas output directory
-tmpdir='../temp'                      # directory of intermediate atlas templates
+tmpdir='../temp'                      # directory of intermediate average images
 
 # default HTCondor settings
 notify_user="${USER}@ic.ac.uk"

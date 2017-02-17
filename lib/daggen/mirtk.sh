@@ -15,7 +15,7 @@ source "$_moddir/dag.sh" || {
 
 # ------------------------------------------------------------------------------
 # add node for creation/approximation of (affine) transformations
-init_dofs_node()
+init_dof_node()
 {
   local node=
   local parent=()
@@ -72,19 +72,27 @@ init_dofs_node()
     make_sub_script "dofini.sub" "$sub" -executable init-dof
 
     # node to create output directories
-    make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
-    add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
-                      -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    local deps=()
+    if [[ $dofdir != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
+    fi
 
     # add dofcreate nodes to DAG
     if [ -n "$dofid" ]; then
       add_node "dofini_$dofid" -subfile "dofini.sub"
-      add_edge "dofini_$dofid" 'mkdirs'
+      for dep in ${deps[@]}; do
+        add_edge "dofini_$dofid" "$dep"
+      done
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofini_$dofid"
     else
       for id in "${ids[@]}"; do
         add_node "dofini_$id" -subfile "dofini.sub" -var "id=\"$id\""
-        add_edge "dofini_$id" 'mkdirs'
+        for dep in ${deps[@]}; do
+          add_edge "dofini_$id" "$dep"
+        done
         [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofini_$id"
       done
     fi
@@ -756,6 +764,7 @@ transform_image_node()
   local tgtpre='$imgpre'
   local tgtsuf='$imgsuf'
   local outdir=
+  local outid=
   local outpre='$imgpre'
   local outsuf='$imgsuf'
   local ref=
@@ -794,6 +803,7 @@ transform_image_node()
       -refid)              refid="$2";  shift; ;;
       -refpre)             refpre="$2"; shift; ;;
       -refsuf)             refsuf="$2"; shift; ;;
+      -outid)              outid="$2"; shift; ;;
       -outpre)             outpre="$2"; shift; ;;
       -outsuf)             outsuf="$2"; shift; ;;
       -hdrdofs)            optarg  hdrdofs $1 "$2"; shift; ;;
@@ -836,6 +846,13 @@ transform_image_node()
   if [ -z "$ref" -a -n "$refid" ]; then
     ref="$refdir/$refpre$refid$refsuf"
   fi
+  if [ -n "$outid" ]; then
+    [ -n "$srcid" -a -n "$tgtid" ] || {
+      error "transform_image_node: option -outid only valid when a single -tgtid and -srcid is specified"
+    }
+  else
+    outid='$(source)'
+  fi
 
   # number of transform-image jobs
   local N=1
@@ -875,7 +892,7 @@ transform_image_node()
     # create generic transformation submission script
     sub="arguments    = \""
     sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
-    sub="$sub '$outdir/${subdir}$outpre\$(source)$outsuf'"
+    sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
     [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
     sub="$sub -threads $threads -interp $interp"
     sub="$sub -dofin '$dofins/${subdir}\$(source)$dofsuf'"
@@ -897,7 +914,7 @@ transform_image_node()
     if [[ $resample == true ]]; then
       sub="arguments    = \""
       sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
-      sub="$sub '$outdir/${subdir}$outpre\$(source)$outsuf'"
+      sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
       [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
       sub="$sub -threads $threads -interp $interp -dofin identity"
       [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
@@ -1040,17 +1057,21 @@ invert_dof_node()
     make_sub_script "invert.sub" "$sub" -executable invert-dof
 
     # node to create output directories
+    local deps=()
     if [[ "$dofdir" != '.' ]]; then
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
     fi
 
     # add invert-dof nodes to DAG
     for id in "${ids[@]}"; do
       add_node "invert_$id" -subfile "invert.sub" -var "id=\"$id\""
-      add_edge "invert_$id" 'mkdirs'
-      [ ! -f "$dofdir3/$id.dof.gz" ] || node_done "invert_$id"
+      for dep in ${deps[@]}; do
+        add_edge "invert_$id" "$dep"
+      done
+      [ ! -f "$dofdir/$id.dof.gz" ] || node_done "invert_$id"
     done
 
   }; end_dag
@@ -1071,6 +1092,8 @@ average_dofs_node()
   local dofid=
   local dofpre=
   local dofsuf='.dof.gz'
+  local outpre=
+  local outsuf=
   local options='-v -all'
 
   while [ $# -gt 0 ]; do
@@ -1083,6 +1106,8 @@ average_dofs_node()
       -dofsuf)        optarg  dofsuf $1 "$2"; shift; ;;
       -dofpre)        dofpre="$2"; shift; ;;
       -dofid)         dofid="$2"; shift; ;;
+      -outpre)        outpre="$2"; shift; ;;
+      -outsuf)        outsuf="$2"; shift; ;;
       -invert)        options="$options -invert";  ;;
       -inverse)       options="$options -inverse";  ;;
       -inverse-dofs)  options="$options -inverse-dofs";  ;;
@@ -1100,6 +1125,8 @@ average_dofs_node()
   done
   [ -n "$node"   ] || error "average_dofs_node: missing name argument"
   [ -n "$dofins" ] || error "average_dofs_node: missing -dofins argument"
+  [ -n "$outpre" ] || outpre="$dofpre"
+  [ -n "$outsuf" ] || outsuf="$dofsuf"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -1118,14 +1145,14 @@ average_dofs_node()
     # create generic dofaverage submission script
     local sub="arguments = \""
     if [ -n "$dofid" ]; then
-      sub="$sub'$dofdir/$dofid$dofsuf' $options -threads $threads"
+      sub="$sub'$dofdir/$outpre$dofid$outsuf' $options -threads $threads"
       sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
       sub="$sub\""
       sub="$sub\noutput    = $_dagdir/dofavg_$dofid.log"
       sub="$sub\nerror     = $_dagdir/dofavg_$dofid.log"
     else
       [ -n "$dofpre" ] || dofpre='$(id)/'
-      sub="$sub'$dofdir/\$(id)$dofsuf' $options -threads $threads -add-identity-for-dofname '\$(id)'"
+      sub="$sub'$dofdir/$outpre\$(id)$outsuf' $options -threads $threads -add-identity-for-dofname '\$(id)'"
       sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
       sub="$sub\""
       sub="$sub\noutput    = $_dagdir/dofavg_\$(id).log"
@@ -1135,16 +1162,20 @@ average_dofs_node()
     make_sub_script "dofavg.sub" "$sub" -executable average-dofs
 
     # node to create output directories
+    local deps=()
     if [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
     fi
 
     # add dofaverage nodes to DAG
     if [ -n "$dofid" ]; then
       add_node "dofavg_$dofid" -subfile "dofavg.sub"
-      add_edge "dofavg_$dofid" 'mkdirs'
+      for dep in ${deps[@]}; do
+        add_edge "dofavg_$dofid" "$dep"
+      done
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofavg_$dofid"
     else
       if [ ${#ids[@]} -eq 0 ]; then
@@ -1152,7 +1183,9 @@ average_dofs_node()
       fi
       for id in "${ids[@]}"; do
         add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
-        add_edge "dofavg_$id" 'mkdirs'
+        for dep in ${deps[@]}; do
+          add_edge "dofavg_$id" "$dep"
+        done
         [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofavg_$id"
       done
     fi
@@ -1234,10 +1267,12 @@ compose_dofs_node()
     make_sub_script "compose.sub" "$sub" -executable compose-dofs
 
     # node to create output directories
+    local deps=()
     if [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
     fi
 
     # add dofcombine nodes to DAG
@@ -1245,12 +1280,16 @@ compose_dofs_node()
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id in "${ids[@]}"; do
         add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""
-        add_edge "compose_$id" 'mkdirs'
+        for dep in ${deps[@]}; do
+          add_edge "compose_$id" "$dep"
+        done
         [ ! -f "$dofdir/$id$dofsuf" ] || node_done "compose_$id"
       done
     else
       add_node "compose_$dofid" -subfile "compose.sub"
-      add_edge "compose_$dofid" 'mkdirs'
+      for dep in ${deps[@]}; do
+        add_edge "compose_$dofid" "$dep"
+      done
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "compose_$dofid"
     fi
 
@@ -1363,10 +1402,12 @@ average_images_node()
 
     # node to create output directories
     local avgdir="$(dirname "$average")"
+    local deps=()
     if [[ "$avgdir" != '.' ]]; then
       make_script "mkdirs.sh" "mkdir -p '$avgdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
     fi
 
     # add average node to DAG
@@ -1375,8 +1416,118 @@ average_images_node()
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
     add_node "average" -sub "$sub" -executable average-images
-    add_edge "average" 'mkdirs'
+    for dep in ${deps[@]}; do
+      add_edge "average" "$dep"
+    done
     [ ! -f "$average" ] || node_done average
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# modify image header
+edit_image_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local idlst=
+  local imgid=
+  local imgdir=
+  local imgpre=''
+  local imgsuf='.nii.gz'
+  local outdir=
+  local outpre='$imgpre'
+  local outsuf='$imgsuf'
+  local dofid=
+  local dofins=
+  local dofpre=''
+  local dofsuf='.dof.gz'
+  local sform='false'
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent) optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -sublst) optarg idlst $1 "$2"; shift; ;;
+      -imgdir) optarg imgdir $1 "$2"; shift; ;;
+      -imgid)  optarg imgid $1 "$2"; shift; ;;
+      -imgpre) imgpre="$2"; shift; ;;
+      -imgsuf) imgsuf="$2"; shift; ;;
+      -outdir) optarg outdir $1 "$2"; shift; ;;
+      -outpre) outpre="$2"; shift; ;;
+      -outsuf) outsuf="$2"; shift; ;;
+      -dofins) optarg dofins $1 "$2"; shift; ;;
+      -dofid)  optarg dofin $1 "$2"; shift; ;;
+      -dofpre) dofpre="$2"; shift; ;;
+      -dofsuf) dofsuf="$2"; shift; ;;
+      -qform) sform='false'; ;;
+      -sform) sform='true'; ;;
+      -*) error "edit_image_node: invalid option: $1"; ;;
+      *)
+        [ -z "$node" ] || error "edit_image_node: too many arguments"
+        node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node" ] || error "edit_image_node: missing name argument"
+  [ -n "$imgdir" ] || error "edit_image_node: missing -imgdir argument"
+  [ -n "$outdir" ] || error "edit_image_node: missing -outdir argument"
+  [[ $outpre != '$imgpre' ]] || outpre="$imgpre"
+  [[ $outsuf != '$imgsuf' ]] || outsuf="$imgsuf"
+
+  if [ -n "$imgid" ]; then
+    [ -z "$idlst" -a ${#ids[@]} -eq 0 ] || {
+      error "edit_image_node: options -imgid, -subjects, and -sublst are mutually exclusive"
+    }
+    ids=("$imgid")
+  elif [ -n "$idlst" ]; then
+    [ ${#ids[@]} -eq 0 ] || {
+      error "edit_image_node: options -imgid, -subjects, and -sublst are mutually exclusive"
+    }
+    read_sublst ids "$idlst"
+  fi
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create generic edit-image submission script
+    local sub="arguments = \""
+    sub="$sub'$imgdir/$imgpre\$(id)$imgsuf' '$outdir/$outpre\$(id)$outsuf' -threads $threads"
+    if [ -n "$dofins" ]; then
+      local dofopt='-dofin'
+      [[ $sform == false ]] || dofopt='-putdof'
+      if [ -n "$dofid" ]; then
+        sub="$sub $dofopt $dofins/$dofid$dofsuf"
+      else
+        sub="$sub $dofopt $dofins/\$(id)$dofsuf"
+      fi
+    fi
+    sub="$sub\""
+    sub="$sub\noutput    = $_dagdir/edit_image_\$(id).log"
+    sub="$sub\nerror     = $_dagdir/edit_image_\$(id).log"
+    sub="$sub\nqueue"
+    make_sub_script "edit_image.sub" "$sub" -executable edit-image
+
+    # node to create output directories
+    local deps=()
+    if [[ "$outdir" != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$outdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
+    fi
+
+    # add invert-dof nodes to DAG
+    for id in "${ids[@]}"; do
+      add_node "edit_image_$id" -subfile "edit_image.sub" -var "id=\"$id\""
+      for dep in ${deps[@]}; do
+        add_edge "edit_image_$id" "$dep"
+      done
+      [ ! -f "$outdir/$outpre$id$outsuf" ] || node_done "edit_image_$id"
+    done
 
   }; end_dag
   add_edge $node ${parent[@]}
