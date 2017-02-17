@@ -5,7 +5,7 @@ if [ -z "$MIRTK_DIR" ]; then
     echo "Could not find MIRTK, either set PATH or MIRTK_DIR in $BASH_SOURCE" 1>&2
     exit 1
   fi
-  MIRTK_DIR="`cd "`dirname "$MIRTK_DIR"`"/.. && pwd`"
+  MIRTK_DIR="$(cd "$(dirname "$MIRTK_DIR")"/.. && pwd)"
 fi
 
 PATH="$appdir/bin:$MIRTK_DIR/lib/tools:$MIRTK_DIR/lib/mirtk/tools:$PATH"
