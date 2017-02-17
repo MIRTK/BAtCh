@@ -268,17 +268,19 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
         else:
             deps = [str(dep) for dep in deps]
         sbatch_argv.append('--dependency=afterok:' + ',afterok:'.join(deps))
-    if 'output' in job:
-        output = os.path.join(job['initialdir'], job['output'])
-        outdir = os.path.dirname(output)
-        if not os.path.isdir(outdir):
-            os.makedirs(outdir)
-        sbatch_argv.extend(['-o', output])
     error = os.path.join(job['initialdir'], job['error'])
     errdir = os.path.dirname(error)
     if not os.path.isdir(errdir):
         os.makedirs(errdir)
     sbatch_argv.extend(['-e', error])
+    if 'output' in job:
+        output = os.path.join(job['initialdir'], job['output'])
+        outdir = os.path.dirname(output)
+        if not os.path.isdir(outdir):
+            os.makedirs(outdir)
+    else:
+        output = error
+    sbatch_argv.extend(['-o', output])
     with open(error, "w", False) as err:
         if _try_run:
             global _next_job_id_for_try_run
@@ -392,4 +394,3 @@ if __name__ == '__main__':
         run_slurm(jobs, deps, rescue_file=args.rescue_file, queue=args.queue)
     else:
         run_local(jobs, deps, rescue_file=args.rescue_file)
-
