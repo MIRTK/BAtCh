@@ -258,8 +258,7 @@ class Command(object):
         arguments = list(self.arguments)
         output = self.output
         error = self.error
-        for name in macros.keys():
-            value = macros[name]
+        for name, value in macros.items():
             arguments = [arg.replace("$({})".format(name), value) for arg in arguments]
             output = output.replace("$({})".format(name), value)
             error = error.replace("$({})".format(name), value)
@@ -319,6 +318,33 @@ class JobDesc(object):
         json += ']'
         return json
 
+    def script(self, jobid='(unknown)', taskid=0, macros={}):
+        """Generate shell script for command execution."""
+        cmds = self.commands(macros=macros)
+        script = "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Started job {} (#commands = {})\"\n".format(jobid, len(cmds))
+        for i in range(len(cmds)):
+            cmd = cmds[i]
+            ini = Command.quote(cmd.initialdir)
+            out = Command.quote(cmd.output)
+            err = Command.quote(cmd.error)
+            script += "\n"
+            script += "cd {} || exit 1\n".format(ini)
+            script += "out={}\n".format(out)
+            script += "err={}\n".format(err)
+            script += str(cmd)
+            script += " 1> \"$out\" 2> \"$err\"\n"
+            script += "[ $? -eq 0 ] || {\n"
+            script += "  echo > \"$out\"\n"
+            script += "  echo FAILED > \"$out\"\n"
+            script += "  echo \"`date '+%y/%m/%d %H:%M:%S'`: FAIL Job {} command {} failed\"\n".format(jobid, i + 1)
+            script += "}\n"
+            script += "echo > \"$out\"\n"
+            script += "echo DONE > \"$out\"\n"
+            script += "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Job {} finished commands {} out of {}\"\n".format(jobid, i + 1, len(cmds))
+        script += "\n"
+        script += "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Finished job {}\"\n".format(jobid)
+        return script
+
     @classmethod
     def from_condor_script(cls, path):
         """Parse job description from HTCondor submit script."""
@@ -368,7 +394,7 @@ class Job(TreeNode):
         """Construct new job with given job identifier."""
         TreeNode.__init__(self, name)
         self.desc = desc
-        self.macros = {}
+        self.macros = OrderedDict()
         self.done = False
 
     def append(self, cmd):
@@ -436,6 +462,10 @@ class Job(TreeNode):
         json += indentation + '}'
         return json
 
+    def script(self, jobid='(unknown)', taskid=0):
+        """Generate shell script for job execution."""
+        return self.desc.script(jobid=jobid, taskid=taskid, macros=self.macros)
+
 
 class JobArray(TreeNode):
     """Array of jobs with common job description and no inter-job dependencies."""
@@ -450,6 +480,13 @@ class JobArray(TreeNode):
         if len(self.jobs) == 0:
             return None
         return self.jobs[0].desc
+
+    def commands(self, macros={}):
+        """Get list of commands with macros expanded."""
+        desc = self.desc
+        if not desc:
+            return []
+        return desc.commands(macros=macros)
 
     @property
     def done(self):
@@ -522,6 +559,21 @@ class JobArray(TreeNode):
         json += ']\n'
         json += indentation + '}'
         return json
+
+    def script(self, jobid='(unknown)', taskid='$1'):
+        """Generate shell script for job execution."""
+        script = ''
+        if len(self.jobs) > 0:
+            macros = {}
+            for i in range(len(self.jobs)):
+                if i > 0: script += "el"
+                script += "if [ {} -eq {} ]; then\n".format(taskid, i + 1)
+                for k, v in self.jobs[i].macros.items():
+                    script += "  {}='{}'\n".format(k, v)
+                    macros[k] = '$' + k
+            script += "fi\n\n"
+            script += self.desc.script(jobid=jobid, macros=macros)
+        return script
 
 
 class JobBatch(TreeNode):
@@ -794,35 +846,22 @@ def run_local(jobs, deps):
 
 def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
     """Submit SLURM job."""
-    # sbatch shell script
-    cmds = job.commands()
     sbatch_script = "#!/bin/sh\n"
-    sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Started SLURM job $SLURM_JOB_ID (#tasks = {})\"\n".format(len(cmds))
-    for i in range(len(cmds)):
-        cmd = cmds[i]
-        out = Command.quote(cmd.output)
-        err = Command.quote(cmd.error)
-        for j in range(len(cmd.arguments)):
-            if cmd.arguments[j] == '-threads':
-                n = int(cmd.arguments[j + 1])
-                if n > threads:
-                    threads = n
-        sbatch_script += "\n"
-        sbatch_script += "cd {} || exit 1\n".format(Command.quote(cmd.initialdir))
-        sbatch_script += str(cmd)
-        sbatch_script += " \\\n  1> {} \\\n  2> {}\n".format(out, err)
-        sbatch_script += "[ $? -eq 0 ] || {\n"
-        sbatch_script += "  echo -e '\\nFAILED' > {}\n".format(out) 
-        sbatch_script += "  echo \"`date '+%y/%m/%d %H:%M:%S'` SLURM job $SLURM_JOB_ID task {} failed\"\n".format(i + 1)
-        sbatch_script += "}\n"
-        sbatch_script += "echo -e '\\nDONE' > {}\n".format(out)
-        sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` SLURM job $SLURM_JOB_ID finished tasks {} out of {}\"\n".format(i + 1, len(cmds))
-    sbatch_script += "\n"
-    sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Finished SLURM job $SLURM_JOB_ID\"\n"
-    # sbatch command arguments
+    sbatch_script += job.script(jobid='$SLURM_JOB_ID', taskid='$SLURM_ARRAY_TASK_ID')
+    for cmd in job.commands():
+        for i in range(len(cmd.arguments)):
+            if cmd.arguments[i] == '-threads':
+                threads = max(int(cmd.arguments[i + 1]), threads)
     sbatch_argv = [
-        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', job.fullname
+        'sbatch',
+        '-J', job.fullname,
+        '-n', '1',
+        '-c', str(threads),
+        '-p', queue,
+        '--mem=4G'
     ]
+    if isinstance(job, JobArray):
+        sbatch_argv.append('--array=1-{}'.format(len(job)))
     if deps:
         if _try_run:
             deps = ['$j{}'.format(dep) for dep in deps]
@@ -833,8 +872,8 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
         sbatch_argv.extend(['-o', log, '-e', log])
     if _try_run:
         global _next_job_id
-        sys.stdout.write('submit_job_{uid}()\n{{\n'.format(uid=_next_job_id))
-        sys.stdout.write(' '.join(sbatch_argv))
+        sys.stdout.write('\nsubmit_job_{uid}()\n{{\n'.format(uid=_next_job_id))
+        sys.stdout.write(' '.join([Command.quote(arg) for arg in sbatch_argv]))
         sys.stdout.write(' <<EOF_SCRIPT_{uid}\n'.format(uid=_next_job_id))
         sys.stdout.write(sbatch_script.replace("$", "\\$"))
         sys.stdout.write('EOF_SCRIPT_{uid}\n'.format(uid=_next_job_id))
@@ -842,7 +881,6 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
         sys.stdout.write('j{uid}=`submit_job_{uid}`\n'.format(uid=_next_job_id))
         sys.stdout.write('[ $? -eq 0 ] || exit 1\n')
         sys.stdout.write('j{uid}=${{j{uid}/Submitted batch job /}}\n'.format(uid=_next_job_id))
-        sys.stdout.write('\n')
         sbatch_error = ''
         sbatch_output = 'Submitted batch job {}'.format(_next_job_id)
         _next_job_id += 1
@@ -920,10 +958,12 @@ if __name__ == '__main__':
     if args.rescue_file:
         batch.apply_rescue_file(args.rescue_file)
     batch.mark_finished_jobs()
-    #batch.collapse()
+    batch.collapse()
     jobs, deps = batch.graph()
 
     _try_run = args.try_run
+    if _try_run:
+        sys.stdout.write("#!/bin/bash\n")
     if args.backend == 'condor':
         sys.stderr.write("Use lib/tools/submit-dag-to-condor instead")
         sys.exit(1)
