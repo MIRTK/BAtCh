@@ -335,12 +335,12 @@ class JobDesc(object):
             script += str(cmd)
             script += " 1> \"$out\" 2> \"$err\"\n"
             script += "[ $? -eq 0 ] || {\n"
-            script += "  echo > \"$out\"\n"
-            script += "  echo FAILED > \"$out\"\n"
+            script += "  echo >> \"$out\"\n"
+            script += "  echo FAILED >> \"$out\"\n"
             script += "  echo \"`date '+%y/%m/%d %H:%M:%S'` FAIL Job {} command {} failed\"\n".format(jobid, i + 1)
             script += "}\n"
-            script += "echo > \"$out\"\n"
-            script += "echo DONE > \"$out\"\n"
+            script += "echo >> \"$out\"\n"
+            script += "echo DONE >> \"$out\"\n"
             script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Job {} finished commands {} out of {}\"\n".format(jobid, i + 1, len(cmds))
         script += "\n"
         script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Finished job {}\"\n".format(jobid)
