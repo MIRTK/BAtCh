@@ -800,6 +800,8 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
     sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Started SLURM job $SLURM_JOB_ID (#tasks = {})\"\n".format(len(cmds))
     for i in range(len(cmds)):
         cmd = cmds[i]
+        out = Command.quote(cmd.output)
+        err = Command.quote(cmd.error)
         for j in range(len(cmd.arguments)):
             if cmd.arguments[j] == '-threads':
                 n = int(cmd.arguments[j + 1])
@@ -808,8 +810,12 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
         sbatch_script += "\n"
         sbatch_script += "cd {} || exit 1\n".format(Command.quote(cmd.initialdir))
         sbatch_script += str(cmd)
-        sbatch_script += " 1> {} 2> {}\n".format(Command.quote(cmd.output), Command.quote(cmd.error))
-        sbatch_script += "echo -e '\\nDONE' > {}\n".format(Command.quote(cmd.output))
+        sbatch_script += " \\\n  1> {} \\\n  2> {}\n".format(out, err)
+        sbatch_script += "[ $? -eq 0 ] || {\n"
+        sbatch_script += "  echo -e '\\nFAILED' > {}\n".format(out) 
+        sbatch_script += "  echo \"`date '+%y/%m/%d %H:%M:%S'` SLURM job $SLURM_JOB_ID task {} failed\"\n".format(i + 1)
+        sbatch_script += "}\n"
+        sbatch_script += "echo -e '\\nDONE' > {}\n".format(out)
         sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` SLURM job $SLURM_JOB_ID finished tasks {} out of {}\"\n".format(i + 1, len(cmds))
     sbatch_script += "\n"
     sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Finished SLURM job $SLURM_JOB_ID\"\n"
