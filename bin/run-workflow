@@ -906,7 +906,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
     else:
         if log:
             logdir = os.path.dirname(log)
-            if not os.path.isdir(logidr):
+            if not os.path.isdir(logdir):
                 os.makedirs(logdir)
         sbatch_proc = subprocess.Popen(
             sbatch_argv,
@@ -922,7 +922,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
         raise Exception("Failed to determine job ID from sbatch output:\n" + sbatch_output)
     job.uid = int(m_jobid.group(1))
     if not _try_run:
-        print("  Submitted job {} (JobId={})".format(name, job.uid))
+        print("  Submitted job {} (JobId={})".format(job.fullname, job.uid))
 
 
 def run_slurm(jobs, deps, threads=1, queue='long', log=''):
