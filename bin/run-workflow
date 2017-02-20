@@ -12,118 +12,723 @@ from collections import OrderedDict
 
 
 _try_run = False
-_next_job_id_for_try_run = 1
+_next_job_id = 1
 
 
 # ==============================================================================
-# Common functions, e.g., to parse HTCondor DAG description
+# Parsed HTCondor DAGMan workflow description
 # ==============================================================================
 
 
-def read_sub(sub_name):
-    jobs = []
-    job = {}
-    re_queue = re.compile(r'\s*queue\s*$')
-    re_kv = re.compile(r'\s*(\w+)\s*=\s*(.*)$')
-    with open(sub_name) as sub_file:
-        for line in sub_file:
-            if re_queue.match(line):
-                jobs.append(dict(job))
-            else:
-                m = re_kv.match(line)
-                if m:
-                    key = m.group(1)
-                    val = m.group(2)
-                    if key == 'arguments':
-                        if len(val) > 1 and val[0] == '"' and val[-1] == '"':
-                            val = val[1:-1]
-                        val = shlex.split(val)
-                    job[key] = val
-    return jobs
+class TreeNode(object):
+    """A node in the batch tree.
+    
+    A batch tree consists of intermediate JobBatch nodes which have one or
+    more other TreeNode instances as children. A leave node in this tree
+    is either a Job or a JobArray, i.e., a collection of parallel jobs which
+    perform the same operation on different data. Each Job executes one or
+    more executable commands in series. The order of execution of the children
+    of a JobBatch node is determined by inter-child node dependencies. The list
+    of other child node dependencies are stored in the deps set of each child.
+    A batch (sub-)tree must be executed in a depth-first order, starting with
+    nodes which have no dependencies on other child nodes at the same level.
+    
+    """
+
+    ANY = 0
+    FIRST = 1
+    LAST = 2
+
+    def __init__(self, name=None, parent=None):
+        self.name = name
+        self.parent = parent
+        self.deps = set()
+        self.uid = 0
+
+    @property
+    def fullname(self):
+        """Get fully qualified job name.
+        
+        The names of intermediate JobBatch nodes are prepended to the name of
+        this node with a '+' character as separator. This resembles the
+        job names used by the HTCondor DAGMan application.
+        
+        """
+        if not self.parent or self.parent.isroot:
+            return self.name
+        return '+'.join([self.parent.fullname, self.name])
+
+    @property
+    def children(self):
+        """Get child nodes of this batch tree node."""
+        return []
+
+    @property
+    def names(self):
+        """Get names of child nodes."""
+        return [child.name for child in self.children]
+
+    def __len__(self):
+        """Get number of children."""
+        return len(self.children)
+
+    def __getitem__(self, name_or_index):
+        children = self.children
+        if isinstance(name_or_index, int):
+            return children[name_or_index]
+        node = None
+        names = name_or_index.split('+', 1)
+        for child in children:
+            if child.name == names[0]:
+                node = child
+                break
+            elif isinstance(child, JobArray):
+                for job in child.jobs:
+                    if job.name == names[0]:
+                        node = job
+                        break
+                if node:
+                    break
+        if not node:
+            raise KeyError("Job '{}' not found in '{}'".format(names[0], self.name))
+        if len(names) == 1:
+            return node
+        if node.isleave:
+            raise KeyError("Job '{}' is leave node and has no child named '{}'".format(names[0], names[1]))
+        return node[names[1]]
+
+    def __contains__(self, name):
+        """Check if named node is in this batch (sub-)tree."""
+        try:
+            self[name]
+            return True
+        except KeyError:
+            return False
+
+    @property
+    def isdone(self):
+        """Whether this batch tree is done."""
+        if self.isleave:
+            return self.done
+        for child in self.children:
+            if not child.isdone:
+                return False
+        return True
+
+    @property
+    def isroot(self):
+        """Whether this node is the root of the batch tree."""
+        return not self.parent
+
+    @property
+    def isleave(self):
+        """Whether this node is a leave node."""
+        return not isinstance(self, JobBatch)
+
+    @property
+    def isfirst(self):
+        """Determine if this node has no dependencies among its siblings."""
+        return len(self.deps) == 0
+
+    @property
+    def islast(self):
+        """Determine if no sibling of this node depends on this node."""
+        if self.parent:
+            for sibling in self.parent.children:
+                if sibling != self and self.name in sibling.deps:
+                    return False
+        return True
+
+    def nodes(self, pos=ANY, expand=False):
+        """Get nodes of job graph."""
+        if self.isleave:
+            return [self]
+        nodes = []
+        for child in self.children:
+            if (pos == self.ANY or
+                   (pos == self.FIRST and child.isfirst) or
+                   (pos == self.LAST  and child.islast )):
+                nodes.extend(child.nodes(pos=pos, expand=expand))
+        return nodes
+
+    def graph(self):
+        """Get job graph corresponding to this batch tree.
+
+        The nodes of a job graph are either of type Job or JobArray.
+        Dependencies between these jobs are specified by separate
+        adjacency lists (of type set), with node IDs corresponding
+        to the node array indices in the job nodes list.
+        
+        """
+        if self.isleave:
+            return ([self], [set()])
+        jobs = []  # list of job nodes
+        adjs = []  # list of adjacency lists (sets)
+        children = self.children
+        indices = range(len(children))
+        # merge subgraphs of children
+        for a in indices:
+            n = len(jobs)
+            cjobs, cadjs = children[a].graph()
+            jobs.extend(cjobs)
+            for adj in cadjs:
+                adjs.append(set([n + i for i in adj]))
+        # add edges between subgraphs
+        for a in indices:
+            for dep in children[a].deps:
+                for b in indices:
+                    if children[b].name == dep:
+                        break
+                if b == len(children):
+                    raise Exception("Child node {} not found in {}".format(dep, self.name))
+                consumer_jobs = children[a].nodes(pos=TreeNode.FIRST)
+                producer_jobs = children[b].nodes(pos=TreeNode.LAST)
+                consumer_idxs = [jobs.index(job) for job in consumer_jobs]
+                producer_idxs = [jobs.index(job) for job in producer_jobs]
+                for i in consumer_idxs:
+                    for j in producer_idxs:
+                        if i != j:
+                            adjs[i].add(j)
+        return (jobs, adjs)
+
+    def collapse(self):
+        """Group similar jobs into job arrays."""
+        pass
+
+    def expand(self):
+        """Expand and remove job arrays."""
+        pass
+
+    def write_rescue_file(self, path):
+        """Write DAGMan rescue file of done jobs."""
+        with open(path, "w") as f:
+            f.write("# HTCondor DAGMan rescue file generated by {}\n".format(os.path.basename(__file__)))
+            for job in self.nodes(expand=True):
+                if job.done:
+                    f.write("DONE " + job.fullname + "\n")
 
 
-def replace(job, name, value):
-    for k in job.keys():
-        if isinstance(job[k], (list, tuple)):
-            args = []
-            for arg in job[k]:
-                args.append(arg.replace("$({})".format(name), value))
-            job[k] = args
+class Command(object):
+    """A single command of a job."""
+
+    def __init__(self, executable, arguments=[], output=None, error=None, initialdir=None):
+        """Construct new command to be executed with specified output and error log file paths."""
+        if not initialdir:
+            initialdir = os.getcwd()
+        if not error and output:
+            base, ext = os.path.splitext(output)[1]
+            if ext == '.log':
+                error = output
+            elif ext == '.out':
+                error = base + '.err'
+        if error:
+            error = os.path.join(initialdir, error)
+        if not output and error:
+            base, ext = os.path.splitext(error)
+            if ext == '.log':
+                output = error
+            elif ext == '.err':
+                output = base + '.out'
+        if output:
+            output = os.path.join(initialdir, output)
         else:
-            job[k] = job[k].replace("$({})".format(name), value)
+            raise Exception("Output log required")
+        self.initialdir = initialdir
+        self.executable = executable
+        self.arguments = arguments
+        self.output = output
+        self.error = error
+
+    @staticmethod
+    def quote(arg):
+        """Quote command argument if necessary."""
+        arg = arg.replace('"', '\\"')
+        if ' ' in arg or "'" in arg:
+            arg = '"' + arg + '"'
+        return arg
+
+    def __str__(self):
+        """Get command as shell string."""
+        argv = [self.executable]
+        argv.extend(self.arguments)
+        return ' '.join([self.quote(arg) for arg in argv])
+
+    def copy(self, macros={}):
+        """Make copy of command description with variables substituted with actual values."""
+        arguments = list(self.arguments)
+        output = self.output
+        error = self.error
+        for name in macros.keys():
+            value = macros[name]
+            arguments = [arg.replace("$({})".format(name), value) for arg in arguments]
+            output = output.replace("$({})".format(name), value)
+            error = error.replace("$({})".format(name), value)
+        return Command(self.executable, arguments, output, error, self.initialdir)
+
+    def json(self, indent=0):
+        """Get object description in JSON format."""
+        indentation = indent * ' '
+        json = '{\n'
+        json += indentation + '  "initialdir": "{}",\n'.format(self.initialdir)
+        json += indentation + '  "executable": "{}",\n'.format(self.executable)
+        json += indentation + '  "arguments": {}\n'.format(self.arguments)
+        json += indentation + '}'
+        return json
 
 
-def read_dag(dag_name, prefix=''):
-    """Read jobs from .dag file."""
-    jobs = OrderedDict()
-    deps = {}
-    re_splice = re.compile(r'\s*(SPLICE|SUBDAG\s+EXTERNAL)\s+([^ ]+)\s+([a-zA-Z0-9\//-_ ,.+=]+)\s*$')
-    re_submit = re.compile(r'\s*JOB\s+([^ ]+)\s+([a-zA-Z0-9\//-_ ,.+=]+)\s*$')
-    re_parent = re.compile(r'\s*PARENT\s+([^ ]+)\s+CHILD\s+([^ ]+)\s*$')
-    re_vars = re.compile(r'\s*VARS\s+([^ ]+)\s+(.*)\s*$')
-    re_kv = re.compile(r'\s*([a-zA-Z0-9_]+)="(.*)"\s*$')
-    with open(dag_name) as dag_file:
-        for line in dag_file:
-            line = line.strip()
-            m_splice = re_splice.match(line)
-            m_submit = re_submit.match(line)
-            m_parent = re_parent.match(line)
-            m_vars = re_vars.match(line)
-            if m_splice:
-                name = prefix + m_splice.group(2)
-                subjobs, subdeps = read_dag(m_splice.group(3), prefix='{}+'.format(name))
-                jobs.update(subjobs)
-                deps.update(subdeps)
-            elif m_submit:
-                name = prefix + m_submit.group(1)
-                jobs[name] = read_sub(m_submit.group(2))
-                deps[name] = []
-            elif m_vars:
-                name = prefix + m_vars.group(1)
-                for var in m_vars.group(2).split(' '):
-                    m = re_kv.match(var)
-                    if not m:
-                        raise Exception("Invalid VARS argument '{}'".format(var))
-                    for job in jobs[name]:
-                        replace(job, m.group(1), m.group(2))
-            elif m_parent:
-                parent = prefix + m_parent.group(1)
-                parents = []
-                if parent in jobs:
-                    parents.append(parent)
+class JobDesc(object):
+    """Job description.
+
+    One or more jobs can share a commom job description where the arguments of
+    the job executable contain variables to be substituted by job specific values
+    before command execution.
+    """
+
+    def __init__(self, path=None):
+        self.path = path
+        self.cmds = []
+
+    def append(self, cmd):
+        """Append command."""
+        self.cmds.append(cmd)
+
+    def __len__(self):
+        """Get number of individual commands."""
+        return len(self.cmds)
+
+    def __getitem__(self, index):
+        """Get command."""
+        return self.cmds[index]
+
+    def commands(self, macros={}):
+        """Get commands with macros expanded."""
+        return [cmd.copy(macros) for cmd in self.cmds]
+
+    def json(self, indent=0):
+        """Get object description in JSON format."""
+        indentation = indent * ' '
+        json = indentation + '  "cmds": ['
+        if len(self.cmds):
+            for i in range(len(self.cmds)):
+                if i > 0:
+                    json += ',\n'
+                    json += indentation
+                    json += 11 * ' '
+                cmd = self.cmds[i]
+                json += cmd.json(indent+11)
+        json += ']'
+        return json
+
+    @classmethod
+    def from_condor_script(cls, path):
+        """Parse job description from HTCondor submit script."""
+        desc = cls(path)
+        initialdir = None
+        executable = None
+        arguments = []
+        output = None
+        error = None
+        re_queue = re.compile(r'\s*queue\s*$')
+        re_kv = re.compile(r'\s*(\w+)\s*=\s*(.*)$')
+        with open(path) as f:
+            for line in f:
+                if re_queue.match(line):
+                    if not executable:
+                        raise Exception("queue without executable defined before")
+                    desc.append(Command(executable, arguments, output, error, initialdir))
                 else:
-                    pattern = re.compile((parent + '+').replace('+', '\\+'))
-                    for batch in jobs.keys():
-                        if pattern.match(batch):
-                            parents.append(batch)
-                child = prefix + m_parent.group(2)
-                children = []
-                if child in jobs:
-                    children.append(child)
+                    m = re_kv.match(line)
+                    if m:
+                        key = m.group(1)
+                        val = m.group(2)
+                        if key == 'executable':
+                            executable = val
+                        elif key == 'arguments':
+                            if len(val) > 1 and val[0] == '"' and val[-1] == '"':
+                                val = val[1:-1]
+                            arguments = shlex.split(val)
+                        elif key == 'output':
+                            output = val
+                        elif key == 'error':
+                            error = val
+                        elif key == 'initialdir':
+                            initialdir = val
+        return desc
+
+
+class Job(TreeNode):
+    """A single batch job consisting of one or more independent commands.
+
+    A batch job is defined by a HTCondor submit script (.sub) with one or more
+    "queue" commands on a single line. A batch job can be generic with variable
+    substitutions to be filled in by the respective parent Batch object.
+    """
+
+    def __init__(self, name=None, desc=None):
+        """Construct new job with given job identifier."""
+        TreeNode.__init__(self, name)
+        self.desc = desc
+        self.macros = {}
+        self.done = False
+
+    def append(self, cmd):
+        """Append command."""
+        self.desc.append(cmd)
+
+    def __len__(self):
+        """Get number of job commands."""
+        if not self.desc:
+            return 0
+        return len(self.desc)
+
+    def __getitem__(self, index):
+        """Get job command."""
+        if not self.desc:
+            raise Exception("Index out of bounds")
+        return self.desc[index]
+
+    def add_macro(self, name, value):
+        """Set command macro."""
+        self.macros[name] = value
+
+    def commands(self):
+        """Get list of commands with macros expanded."""
+        if not self.desc:
+            return []
+        return self.desc.commands(macros=self.macros)
+
+    def mark_finished_jobs(self):
+        """Mark job as done when all command output files have the word 'DONE' on the last line."""
+        if not self.done:
+            self.done = True
+            re_done = re.compile(r'DONE$')
+            for cmd in self.commands():
+                if os.path.isfile(cmd.output):
+                    with open(cmd.output, "r") as f:
+                        lines = f.readlines()
+                        while len(lines) > 0 and lines[-1].strip() == '':
+                            lines.pop()
+                        if len(lines) == 0 or not re_done.match(lines[-1]):
+                            self.done = False
+                            break
                 else:
-                    pattern = re.compile((child + '+').replace('+', '\\+'))
-                    for batch in jobs.keys():
-                        if pattern.match(batch):
-                            children.append(batch)
-                if len(children) == 0 and len(parents) == 0:
-                    raise Exception("Could not identify dependencies for: PARENT {} CHILD {}".format(parent, child))
-                for child in children:
-                    for parent in parents:
-                        deps[child].append(parent)
-    return (jobs, deps)
+                    self.done = False
+                    break
+        return 1 if self.done else 0
+
+    def json(self, indent=0):
+        """Get object description in JSON format."""
+        indentation = indent * ' '
+        json = '{\n'
+        json += indentation + '  "type": "Job",\n'
+        json += indentation + '  "name": "{}",\n'.format(self.name)
+        json += indentation + '  "done": {},\n'.format(str(self.done).lower())
+        json += indentation + '  "vars": {},\n'.format(self.macros)
+        json += indentation + '  "deps": ['
+        deps = list(self.deps)
+        for i in range(len(deps)):
+            if i > 0:
+                json += ', '
+            json += '"{}"'.format(deps[i])
+        json += '],\n'
+        json += self.desc.json(indent)
+        json += '\n'
+        json += indentation + '}'
+        return json
 
 
-def read_rescue_file(fname):
-    done = []
-    if os.path.isfile(fname):
-        re_done = re.compile(r'\s*DONE\s+([^ ]+)\s*$')
-        with open(fname) as f:
+class JobArray(TreeNode):
+    """Array of jobs with common job description and no inter-job dependencies."""
+
+    def __init__(self):
+        TreeNode.__init__(self)
+        self.jobs = []
+
+    @property
+    def desc(self):
+        """Get common job description."""
+        if len(self.jobs) == 0:
+            return None
+        return self.jobs[0].desc
+
+    @property
+    def done(self):
+        """True when all jobs in this array are done and False otherwise."""
+        for job in self.jobs:
+            if not job.done:
+                return False
+        return True
+
+    def append(self, job):
+        """Append job to job array."""
+        if not isinstance(job, Job):
+            raise Exception("Job array can only contain objects of type Job")
+        if not self.parent:
+            self.parent = job.parent
+        elif job.parent != self.parent:
+            raise Exception("All jobs in a job array must be children of the same batch job")
+        if job.name in self:
+            raise Exception("Job with name {} already exists in job array {}".format(job.name, self.name))
+        self.jobs.append(job)
+
+    def __len__(self):
+        """Get number of jobs in job array."""
+        return len(self.jobs)
+
+    def __getitem__(self, index_or_name):
+        """Get job in job array."""
+        if isinstance(index_or_name, int):
+            return self.jobs[index_or_name]
+        for job in self.jobs:
+            if job.name == index_or_name:
+                return job
+        raise Exception("Job {} does not exist in job array {}".format(index_or_name, self.name))
+
+    def __contains__(self, name):
+        """Check if named job is part of this job array."""
+        for job in self.jobs:
+            if job.name == name:
+                return True
+        return False
+
+    def nodes(self, pos=TreeNode.ANY, expand=False):
+        """Get nodes of job graph."""
+        if expand:
+            return self.jobs
+        else:
+            return [self]
+
+    def json(self, indent=0):
+        """Get object description in JSON format."""
+        indentation = indent * ' '
+        json = '{\n'
+        json += indentation + '  "type": "JobArray",\n'
+        json += indentation + '  "name": "{}",\n'.format(self.name)
+        json += indentation + '  "done": {},\n'.format(str(self.done).lower())
+        json += indentation + '  "deps": ['
+        deps = list(self.deps)
+        for i in range(len(deps)):
+            if i > 0:
+                json += ', '
+            json += '"{}"'.format(deps[i])
+        json += '],\n'
+        json += indentation + '  "jobs": ['
+        for i in range(len(self.jobs)):
+            if i > 0:
+                json += ',\n'
+                json += indentation
+                json += 12 * ' '
+            json += self.jobs[i].json(indent+12)
+        json += ']\n'
+        json += indentation + '}'
+        return json
+
+
+class JobBatch(TreeNode):
+    """A collection of jobs with possible dependencies."""
+
+    def __init__(self, name='', path=''):
+        """Construct new batch job."""
+        TreeNode.__init__(self, name)
+        self.path = path
+        self.jobs = []
+
+    def append(self, job):
+        """Add job to this batch."""
+        if not job.name:
+            raise Exception("Jobs in batch must have a name")
+        if '+' in job.name:
+            raise Exception("Job names cannot contain '+' character")
+        if job.name in self:
+            raise Exception("Job with name {} already exists in batch {}".format(job.name, self.name))
+        if job.parent:
+            raise Exception("Job {} already belongs to batch {}".format(job.name, job.parent.name))
+        job.parent = self
+        self.jobs.append(job)
+
+    @property
+    def children(self):
+        """Get children of batch job."""
+        return self.jobs
+
+    def collapse(self):
+        """Group related batch jobs into job arrays."""
+        # group related jobs into arrays
+        groups = []
+        for job in self.jobs:
+            if isinstance(job, Job):
+                i = -1
+                for j in range(len(groups)):
+                    group = groups[j]
+                    if job.desc.path == group[0].desc.path and job.deps.isdisjoint(group[1]) and job.name not in group[2]:
+                        i = j
+                        break
+                if i == -1:
+                    groups.append([JobArray(), set(), set()])
+                groups[i][0].append(job)
+                groups[i][1].add(job.name)
+                groups[i][2].update(job.deps)
+            else:
+                job.collapse()
+                groups.append([job, set([job.name]), set(job.deps)])
+        # ungroup jobs where there is only one job array element
+        for group in groups:
+            if isinstance(group[0], JobArray) and len(group[0]) == 1:
+                group[0] = group[0][0]
+        # assign names to job arrays
+        groups_by_name = {}
+        for group in groups:
+            job = group[0]
+            if isinstance(job, JobArray):
+                if len(job) == 1:
+                    job.name = job.jobs[0].name
+                else:
+                    prefix, ext = os.path.splitext(os.path.basename(job.desc.path))
+                    if re.match(r'\.\d+', ext):
+                        prefix = os.path.splitext(prefix)[0]
+                    job.name = prefix
+            try:
+                groups_by_name[job.name].append(group)
+            except KeyError:
+                groups_by_name[job.name] = [group]
+        for name in groups_by_name:
+            groups_with_this_name = groups_by_name[name]
+            if len(groups_with_this_name) > 1:
+                for i in range(len(groups_with_this_name)):
+                    job = groups_with_this_name[i][0]
+                    job.name = '{}@{}'.format(name, i + 1)
+        # set new dependencies of grouped jobs
+        indices = range(len(groups))
+        for i in indices:
+            groups[i][0].deps.clear()
+            for j in indices:
+                if i == j:
+                    continue
+                if not groups[j][1].isdisjoint(groups[i][2]):
+                    groups[i][0].deps.add(groups[j][0].name)
+        # set new batch jobs
+        self.jobs = [group[0] for group in groups]
+
+    def expand(self):
+        """Insert jobs of job arrays directly into batch."""
+        # TODO: Restore dependencies afterwards (currently unused after this operation)
+        jobs = []
+        for job in self.jobs:
+            job.expand()
+            if isinstance(job, JobBatch):
+                jobs.append(job)
+            elif isinstance(job, JobArray):
+                jobs.extend(job.jobs)
+            else:
+                jobs.append(job)
+        self.jobs = jobs
+
+    def json(self, indent=0):
+        """Get object description in JSON format."""
+        indentation = indent * ' '
+        json = '{\n'
+        json += indentation + '  "type": "JobBatch",\n'
+        json += indentation + '  "name": "{}",\n'.format(self.name)
+        json += indentation + '  "done": {},\n'.format(str(self.isdone).lower())
+        json += indentation + '  "deps": ['
+        if len(self.deps) > 0:
+            deps = list(self.deps)
+            for i in range(len(deps)):
+                if i > 0:
+                    json += ', '
+                json += '"{}"'.format(deps[i])
+        json += '],\n'
+        json += indentation + '  "jobs": ['
+        for i in range(len(self.jobs)):
+            if i > 0:
+                json += ',\n'
+                json += indentation
+                json += 12 * ' '
+            json += self.jobs[i].json(indent+12)
+        json += ']\n'
+        json += indentation + '}'
+        return json
+
+    @classmethod
+    def from_condor_script(cls, path, name=''):
+        """Parse batch description from .dag file."""
+        batch = cls(name, path)
+        re_sub = re.compile(r'\s*(?:SPLICE|SUBDAG\s+EXTERNAL)\s+(?P<name>[^ ]+)\s+(?P<path>[a-zA-Z0-9\//-_ ,.+=]+)\s*$')
+        re_job = re.compile(r'\s*JOB\s+(?P<name>[^ ]+)\s+(?P<path>[a-zA-Z0-9\//-_ ,.+=]+)\s*$')
+        re_dep = re.compile(r'\s*PARENT\s+(?P<parents>.+)\s+CHILD\s+(?P<children>.+)\s*$')
+        re_vars = re.compile(r'\s*VARS\s+(?P<name>[^ ]+)\s+(?P<macros>.*)\s*$')
+        re_macro = re.compile(r'\s*(?P<macro>[a-zA-Z0-9_]+)=(?:["\'])(?P<value>[^"\']*)(?:["\'])')
+        with open(path) as f:
             for line in f:
                 line = line.strip()
-                m_done = re_done.match(line)
+                m_sub = re_sub.match(line)
+                m_job = re_job.match(line)
+                m_dep = re_dep.match(line)
+                m_vars = re_vars.match(line)
+                if m_sub:
+                    name = m_sub.group('name')
+                    if name in batch:
+                        raise Exception("Duplicate job name: {}".format(name))
+                    dagpath = m_sub.group('path')
+                    batch.append(JobBatch.from_condor_script(dagpath, name))
+                elif m_job:
+                    name = m_job.group('name')
+                    if name in batch:
+                        raise Exception("Duplicate job name: {}".format(name))
+                    subpath = m_job.group('path')
+                    desc = None
+                    for job in batch.jobs:
+                        if job.desc.path == subpath:
+                            desc = job.desc
+                            break
+                    if not desc:
+                        desc = JobDesc.from_condor_script(subpath)
+                    batch.append(Job(name, desc))
+                elif m_vars:
+                    name = m_vars.group('name')
+                    if not name in batch:
+                        raise Exception("Undefined job in VARS declaration")
+                    job = batch[name]
+                    if not isinstance(job, Job):
+                        raise Exception("VARS definition only allowed for JOB entries")
+                    macros = re_macro.findall(m_vars.group('macros'))
+                    for macro in macros:
+                        job.add_macro(macro[0], macro[1])
+                elif m_dep:
+                    parents = re.split('\s', m_dep.group('parents'))
+                    children = re.split('\s', m_dep.group('children'))
+                    for parent in parents:
+                        if parent not in batch:
+                            raise Exception("Undefined PARENT job {} in dependency declaration in {}".format(parent, path))
+                    for child in children:
+                        if child not in batch:
+                            raise Exception("Undefined CHILD job {} in dependency declaration in {}".format(child, path))
+                        job = batch[child]
+                        job.deps.update(parents)
+        return batch
+
+    def apply_rescue_file(self, path):
+        """Mark jobs as done given DAGMan rescue file."""
+        n = 0
+        re_done = re.compile(r'\s*DONE\s+([^ ]+)\s*$')
+        with open(path, "r") as f:
+            for line in f:
+                m_done = re_done.match(line.strip())
                 if m_done:
-                    done.append(m_done.group(1))
-    return done
+                    name = m_done.group(1)
+                    job = self[name]
+                    if not isinstance(job, Job):
+                        raise Exception("Rescue file refers node named '{}' which is not of type Job".format(name))
+                    job.done = True
+                    n += 1
+        return n
+
+    def mark_finished_jobs(self):
+        """Mark jobs with existing output file ending with 'DONE' as done."""
+        n = 0
+        for child in self.children:
+            n += child.mark_finished_jobs()
+        return n
 
 
 # ==============================================================================
@@ -132,135 +737,85 @@ def read_rescue_file(fname):
 
 
 def run_job_local(job):
-    """Execute single job locally."""
-    argv = [job['executable']]
-    if 'arguments' in job:
-        argv.extend(job['arguments'])
-    if _try_run:
-        for i in range(len(argv)):
-            if ' ' in argv[i]:
-                argv[i] = '"' + argv[i].replace('"', '\\"') + '"'
-        sys.stdout.write('\n' + ' '.join(argv) + '\n')
-    else:
-        if 'output' in job and 'error' in job:
-            if job['output'] == job['error']:
-                with open(os.path.join(job['initialdir'], job['output']), "w") as log:
-                    subprocess.check_call(argv, stdout=log, stderr=subprocess.STDOUT)
-            else:
-                out = os.path.join(job['initialdir'], job['output'])
-                err = os.path.join(job['initialdir'], job['error'])
-                with open(out, "w") as fout, open(err, "w") as ferr:
-                    subprocess.check_call(argv, stdout=fout, stderr=ferr)
-        elif 'output' in job:
-            with open(os.path.join(job['initialdir'], job['output']), "w") as log:
-                subprocess.check_call(argv, stdout=log)
-        elif 'error' in job:
-            with open(os.path.join(job['initialdir'], job['error']), "w") as log:
-                subprocess.check_call(argv, stderr=log)
+    """Execute job commands locally."""
+    if not _try_run:
+        sys.stdout.write("Executing {}...".format(job.fullname))
+        sys.stdout.flush()
+    for cmd in job.commands():
+        if _try_run:
+            sys.stdout.write('\n' + str(cmd) + '\n')
         else:
-            subprocess.check_call(argv)
+            argv = [cmd.executable]
+            argv.extend(cmd.arguments)
+            if cmd.output == cmd.error:
+                with open(cmd.output, "w") as log:
+                    subprocess.check_call(argv, stdout=log, stderr=subprocess.STDOUT)
+                    log.write("\nDONE\n")
+            else:
+                with open(cmd.output, "w") as out, open(cmd.error, "w") as err:
+                    subprocess.check_call(argv, stdout=out, stderr=err)
+                    out.write("\nDONE\n")
+    if not _try_run:
+        sys.stdout.write(" done\n")
+        sys.stdout.flush()
+    job.done = True
 
 
-def run_local(jobs, deps, rescue_file=None):
-    """Execute jobs sequentially on local machine."""
-    todo = []
-    done = []
-    if rescue_file:
-        done = read_rescue_file(rescue_file)
-    for batch in jobs.keys():
-        if batch not in done:
-            todo.append(batch)
-    if len(todo) > 0:
-        rescue = None
-        try:
-            if rescue_file and not _try_run:
-                rescue = open(rescue_file, "a", False)
-            while len(todo) > 0:
-                batches = todo
-                todo = []
-                for batch in batches:
-                    ready = True
-                    for dep in deps[batch]:
-                        if dep not in done:
-                            ready = False
-                            break
-                    if ready:
-                        sys.stdout.write("Executing {} (#tasks={})...".format(batch, len(jobs[batch])))
-                        sys.stdout.flush()
-                        for job in jobs[batch]:
-                            run_job_local(job)
-                        if rescue is not None:
-                            rescue.write('DONE ' + batch + '\n')
-                        done.append(batch)
-                        sys.stdout.write(" done\n")
-                        sys.stdout.flush()
-                    else:
-                        todo.append(batch)
-                if len(todo) == len(batches):
-                    sys.stderr.write("batches = {}\n".format(batches))
-                    raise Exception("There seem to be circular job dependencies!")
-        finally:
-            if rescue:
-                rescue.close()
-
+def run_local(jobs, deps):
+    todo = set()
+    for i in range(len(jobs)):
+        if not jobs[i].done:
+            todo.add(i)
+    while todo:
+        prev = todo
+        todo = set()
+        for i in prev:
+            ready = True
+            for j in deps[i]:
+                if not jobs[j].done:
+                    ready = False
+                    break
+            if ready:
+                if isinstance(jobs[i], JobArray):
+                    for job in jobs[i]:
+                        run_job_local(job)
+                else:
+                    run_job_local(jobs[i])
+            else:
+                todo.add(i)
+        if prev == todo or len(prev) < len(todo):
+            raise Exception("There seem to be circular job dependencies!\nCheck dependencies of {}.".format([jobs[i].fullname for i in todo]))
+    
 
 # ==============================================================================
 # SLURM submission
 # ==============================================================================
 
 
-def read_slurm_info(jobs):
-    done = []
-    re_jobid = re.compile(r'\s*SLURM JOB\s+([0-9]+)\s*$')
-    re_done = re.compile(r'\s*SLURM JOB DONE\s*$')
-    for batch in jobs.keys():
-        batch_done = True
-        for job in jobs[batch]:
-            job['id'] = None
-            job['done'] = False
-            if 'error' not in job:
-                raise Exception("No error file path specified for job {} of batch {}".format(os.path.basename(job['executable']), batch))
-            out = os.path.join(job['initialdir'], job['error'])
-            if os.path.exists(out):
-                with open(out, "r") as log:
-                    for line in log:
-                        m_jobid = re_jobid.match(line)
-                        if m_jobid:
-                            job['id'] = int(m_jobid.group(1))
-                            job['done'] = False
-                        elif job['id']:
-                            m_done = re_done.match(line)
-                            if m_done:
-                                job['done'] = True
-            if not job['done']:
-                batch_done = False
-        if batch_done:
-            done.append(batch)
-    return done
-
-
-def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
+def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
     """Submit SLURM job."""
+    # sbatch shell script
+    cmds = job.commands()
     sbatch_script = "#!/bin/sh\n"
-    sbatch_script += "cd '{}' || exit 1\n".format(job['initialdir'])
-    sbatch_script += "echo \"SLURM JOB $SLURM_JOB_ID\" 1>&2\n"
-    command = job['executable']
-    if ' ' in command:
-        command = "'" + command + "'"
-    if 'arguments' in job:
-        for i in range(len(job['arguments'])):
-            arg = job['arguments'][i]
-            if arg == '-threads':
-                threads = int(job['arguments'][i + 1])
-            if "'" in arg:
-                arg = arg.replace("'", "\\'")
-            if arg == '' or ' ' in arg or '"' in arg:
-                arg = "'" + arg + "'"
-            command += ' ' + arg
-    sbatch_script += command
-    sbatch_script += "\n[ $? -eq 0 ] && echo 'SLURM JOB DONE' 1>&2\n"
+    sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Started SLURM job $SLURM_JOB_ID (#tasks = {})\"\n".format(len(cmds))
+    for i in range(len(cmds)):
+        cmd = cmds[i]
+        for j in range(len(cmd.arguments)):
+            if cmd.arguments[j] == '-threads':
+                n = int(cmd.arguments[j + 1])
+                if n > threads:
+                    threads = n
+        sbatch_script += "\n"
+        sbatch_script += "cd {} || exit 1\n".format(Command.quote(cmd.initialdir))
+        sbatch_script += str(cmd)
+        sbatch_script += " 1> {} 2> {}\n".format(Command.quote(cmd.output), Command.quote(cmd.error))
+        sbatch_script += "echo -e '\\nDONE' > {}\n".format(Command.quote(cmd.output))
+        sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` SLURM job $SLURM_JOB_ID finished tasks {} out of {}\"\n".format(i + 1, len(cmds))
+    sbatch_script += "\n"
+    sbatch_script += "echo \"`date '+%y/%m/%d %H:%M:%S'` Finished SLURM job $SLURM_JOB_ID\"\n"
+    # sbatch command arguments
     sbatch_argv = [
-        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', name
+        'sbatch', '--mem=4G', '-n', '1', '-c', str(threads), '-p', queue, '-J', job.fullname
     ]
     if deps:
         if _try_run:
@@ -268,103 +823,68 @@ def run_job_slurm(name, job, deps=[], threads=1, queue='long'):
         else:
             deps = [str(dep) for dep in deps]
         sbatch_argv.append('--dependency=afterok:' + ',afterok:'.join(deps))
-    error = os.path.join(job['initialdir'], job['error'])
-    errdir = os.path.dirname(error)
-    if not os.path.isdir(errdir):
-        os.makedirs(errdir)
-    sbatch_argv.extend(['-e', error])
-    if 'output' in job:
-        output = os.path.join(job['initialdir'], job['output'])
-        outdir = os.path.dirname(output)
-        if not os.path.isdir(outdir):
-            os.makedirs(outdir)
+    if log:
+        sbatch_argv.extend(['-o', log, '-e', log])
+    if _try_run:
+        global _next_job_id
+        sys.stdout.write('submit_job_{uid}()\n{{\n'.format(uid=_next_job_id))
+        sys.stdout.write(' '.join(sbatch_argv))
+        sys.stdout.write(' <<EOF_SCRIPT_{uid}\n'.format(uid=_next_job_id))
+        sys.stdout.write(sbatch_script.replace("$", "\\$"))
+        sys.stdout.write('EOF_SCRIPT_{uid}\n'.format(uid=_next_job_id))
+        sys.stdout.write('}\n')
+        sys.stdout.write('j{uid}=`submit_job_{uid}`\n'.format(uid=_next_job_id))
+        sys.stdout.write('[ $? -eq 0 ] || exit 1\n')
+        sys.stdout.write('j{uid}=${{j{uid}/Submitted batch job /}}\n'.format(uid=_next_job_id))
+        sys.stdout.write('\n')
+        sbatch_error = ''
+        sbatch_output = 'Submitted batch job {}'.format(_next_job_id)
+        _next_job_id += 1
     else:
-        output = error
-    sbatch_argv.extend(['-o', output])
-    with open(error, "w", False) as err:
-        if _try_run:
-            global _next_job_id_for_try_run
-            if _try_run:
-                sys.stdout.write('submit_job_{id}() {{\n'.format(id=_next_job_id_for_try_run))
-            sys.stdout.write(' '.join(sbatch_argv) + ' <<EOF_SCRIPT\n' + sbatch_script + '\nEOF_SCRIPT\n')
-            if _try_run:
-                sys.stdout.write('}\n')
-                sys.stdout.write('j{id}=`submit_job_{id}`\n'.format(id=_next_job_id_for_try_run))
-                sys.stdout.write('[ $? -eq 0 ] || exit 1\n')
-                sys.stdout.write('j{id}=${{j{id}/Submitted batch job /}}\n'.format(id=_next_job_id_for_try_run))
-            sys.stdout.write('\n')
-            sbatch_error = ''
-            sbatch_output = 'Submitted batch job {}'.format(_next_job_id_for_try_run)
-            _next_job_id_for_try_run += 1
-        else:
-            sbatch_proc = subprocess.Popen(
-                sbatch_argv,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                stdin=subprocess.PIPE
-            )
-            (sbatch_output, sbatch_error) = sbatch_proc.communicate(input=sbatch_script.encode('utf-8'))
-            if sbatch_proc.returncode != 0:
-                err.write(sbatch_error)
-                raise Exception(sbatch_error)
-        m_jobid = re.match('Submitted batch job ([0-9]+)', sbatch_output)
-        if not m_jobid:
-            raise Exception("Failed to determine job ID from sbatch output:\n" + sbatch_output)
-    job['id'] = int(m_jobid.group(1))
-    job['done'] = False
+        if log:
+            logdir = os.path.dirname(log)
+            if not os.path.isdir(logidr):
+                os.makedirs(logdir)
+        sbatch_proc = subprocess.Popen(
+            sbatch_argv,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.PIPE
+        )
+        (sbatch_output, sbatch_error) = sbatch_proc.communicate(input=sbatch_script.encode('utf-8'))
+        if sbatch_proc.returncode != 0:
+            raise Exception(sbatch_error)
+    m_jobid = re.match('Submitted batch job ([0-9]+)', sbatch_output)
+    if not m_jobid:
+        raise Exception("Failed to determine job ID from sbatch output:\n" + sbatch_output)
+    job.uid = int(m_jobid.group(1))
     if not _try_run:
-        print("  Submitted job {} (JobId={})".format(name, job['id']))
+        print("  Submitted job {} (JobId={})".format(name, job.uid))
 
 
-def run_slurm(jobs, deps, rescue_file=None, threads=1, queue='long'):
-    """Submit workflow as SLURM jobs with inter-job dependencies."""
-    todo = []
-    done = read_slurm_info(jobs)
-    if rescue_file:
-        for batch in read_rescue_file(rescue_file):
-            done.append(batch)
-            for job in jobs[batch]:
-                job['done'] = True
-    for batch in jobs.keys():
-        if batch not in done:
-            todo.append(batch)
-    if _try_run and len(todo) > 0:
-        print("#!/bin/sh\n")
-    while len(todo) > 0:
-        batches = todo
-        todo = []
-        for batch in batches:
+def run_slurm(jobs, deps, threads=1, queue='long'):
+    todo = set()
+    for i in range(len(jobs)):
+        if not jobs[i].done:
+            todo.add(i)
+    while todo:
+        prev = todo
+        todo = set()
+        for i in prev:
             ready = True
-            jobids = []
-            for dep in deps[batch]:
-                for job in jobs[dep]:
-                    if not job['done']:
-                        if not job['id']:
-                            ready = False
-                            break
-                        jobids.append(job['id'])
-                if not ready:
-                    break
+            uids = set()
+            for j in deps[i]:
+                if not jobs[j].done:
+                    if not jobs[j].uid:
+                        ready = False
+                        break
+                    uids.add(jobs[j].uid)
             if ready:
-                jobids.sort()
-                if not _try_run:
-                    sys.stdout.write("Submitting {} (#tasks={})...\n".format(batch, len(jobs[batch])))
-                    sys.stdout.flush()
-                for i in range(len(jobs[batch])):
-                    name = batch
-                    if len(jobs[batch]) > 1:
-                        name += '+job{}'.format(i + 1)
-                    run_job_slurm(name=name, job=jobs[batch][i], deps=jobids,
-                                  threads=threads, queue=queue)
-                if not _try_run:
-                    sys.stdout.write("Submitting {}... done\n".format(batch))
-                    sys.stdout.flush()
+                run_job_slurm(jobs[i], deps=uids, threads=threads, queue=queue)
             else:
-                todo.append(batch)
-        if len(todo) == len(batches):
-            for batch in batches:
-                sys.stderr.write("batch {} deps: {}\n".format(batch, deps[batch]))
-            raise Exception("There seem to be circular job dependencies!")
+                todo.add(i)
+        if prev == todo or len(prev) < len(todo):
+            raise Exception("There seem to be circular job dependencies!\nCheck dependencies of {}.".format([jobs[i].fullname for i in todo]))
 
 
 # ==============================================================================
@@ -378,19 +898,33 @@ if __name__ == '__main__':
                         help="Workflow description HTCondor DAGMan format")
     parser.add_argument('--rescue-file',
                         help="HTCondor rescue file with entries of done job")
-    parser.add_argument('--backend', choices=['local', 'condor', 'slurm'], default='local',
+    parser.add_argument('--output-rescue-file',
+                        help="HTCondor rescue file with entries of done job")
+    parser.add_argument('--backend', choices=['local', 'condor', 'slurm', 'none'], default='local',
                         help="Backend to use for job execution")
+    parser.add_argument('--threads', default=1,
+                        help="Default number of CPUs to request for each job when no -threads argument found in list of executable arguments")
     parser.add_argument('--queue', default='long',
-                        help="Queue of batch processing backend")
+                        help="Queue of batch processing backend to which to submit the jobs")
     parser.add_argument('--print', dest='try_run', action='store_true',
                         help="Print job submission commands without execution")
     args = parser.parse_args()
+
+    batch = JobBatch.from_condor_script(args.dag_file)
+    if args.rescue_file:
+        batch.apply_rescue_file(args.rescue_file)
+    batch.mark_finished_jobs()
+    #batch.collapse()
+    jobs, deps = batch.graph()
+
     _try_run = args.try_run
     if args.backend == 'condor':
-        sys.stderr.write("Call lib/tools/submit-dag-to-condor instead")
+        sys.stderr.write("Use lib/tools/submit-dag-to-condor instead")
         sys.exit(1)
-    jobs, deps = read_dag(args.dag_file)
-    if args.backend == 'slurm':
-        run_slurm(jobs, deps, rescue_file=args.rescue_file, queue=args.queue)
-    else:
-        run_local(jobs, deps, rescue_file=args.rescue_file)
+    elif args.backend == 'slurm':
+        run_slurm(jobs, deps, threads=args.threads, queue=args.queue)
+    elif args.backend == 'local':
+        run_local(jobs, deps)
+
+    if args.output_rescue_file:
+        batch.write_rescue_file(args.output_rescue_file)
