@@ -84,7 +84,7 @@ tmpdir='../output/temp'               # directory of intermediate average images
 notify_user="${USER}@ic.ac.uk"
 notification='Error'
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer == 14'
-log='condor.log'
+log='progress.log'
 
 # utility function to set pardir in custom configuration
 set_pardir_from_file_path()

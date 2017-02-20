@@ -283,9 +283,10 @@ class JobDesc(object):
     before command execution.
     """
 
-    def __init__(self, path=None):
+    def __init__(self, path=''):
         self.path = path
         self.cmds = []
+        self.log = ''
 
     def append(self, cmd):
         """Append command."""
@@ -321,7 +322,7 @@ class JobDesc(object):
     def script(self, jobid='(unknown)', taskid=0, macros={}):
         """Generate shell script for command execution."""
         cmds = self.commands(macros=macros)
-        script = "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Started job {} (#commands = {})\"\n".format(jobid, len(cmds))
+        script = "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Started job {} (#commands = {})\"\n".format(jobid, len(cmds))
         for i in range(len(cmds)):
             cmd = cmds[i]
             ini = Command.quote(cmd.initialdir)
@@ -336,13 +337,13 @@ class JobDesc(object):
             script += "[ $? -eq 0 ] || {\n"
             script += "  echo > \"$out\"\n"
             script += "  echo FAILED > \"$out\"\n"
-            script += "  echo \"`date '+%y/%m/%d %H:%M:%S'`: FAIL Job {} command {} failed\"\n".format(jobid, i + 1)
+            script += "  echo \"`date '+%y/%m/%d %H:%M:%S'` FAIL Job {} command {} failed\"\n".format(jobid, i + 1)
             script += "}\n"
             script += "echo > \"$out\"\n"
             script += "echo DONE > \"$out\"\n"
-            script += "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Job {} finished commands {} out of {}\"\n".format(jobid, i + 1, len(cmds))
+            script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Job {} finished commands {} out of {}\"\n".format(jobid, i + 1, len(cmds))
         script += "\n"
-        script += "echo \"`date '+%y/%m/%d %H:%M:%S'`: INFO Finished job {}\"\n".format(jobid)
+        script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Finished job {}\"\n".format(jobid)
         return script
 
     @classmethod
@@ -367,7 +368,9 @@ class JobDesc(object):
                     if m:
                         key = m.group(1)
                         val = m.group(2)
-                        if key == 'executable':
+                        if key == 'log':
+                            desc.log = val
+                        elif key == 'executable':
                             executable = val
                         elif key == 'arguments':
                             if len(val) > 1 and val[0] == '"' and val[-1] == '"':
@@ -396,6 +399,12 @@ class Job(TreeNode):
         self.desc = desc
         self.macros = OrderedDict()
         self.done = False
+
+    @property
+    def log(self):
+        if self.desc:
+            return self.desc.log
+        return ''
 
     def append(self, cmd):
         """Append command."""
@@ -480,6 +489,12 @@ class JobArray(TreeNode):
         if len(self.jobs) == 0:
             return None
         return self.jobs[0].desc
+
+    @property
+    def log(self):
+        if self.desc:
+            return self.desc.log
+        return ''
 
     def commands(self, macros={}):
         """Get list of commands with macros expanded."""
@@ -844,7 +859,7 @@ def run_local(jobs, deps):
 # ==============================================================================
 
 
-def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
+def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
     """Submit SLURM job."""
     sbatch_script = "#!/bin/sh\n"
     sbatch_script += job.script(jobid='$SLURM_JOB_ID', taskid='$SLURM_ARRAY_TASK_ID')
@@ -852,12 +867,16 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
         for i in range(len(cmd.arguments)):
             if cmd.arguments[i] == '-threads':
                 threads = max(int(cmd.arguments[i + 1]), threads)
+    if not log:
+        log = job.log
     sbatch_argv = [
         'sbatch',
         '-J', job.fullname,
         '-n', '1',
         '-c', str(threads),
         '-p', queue,
+        '-o', log,
+        '-e', log,
         '--mem=4G'
     ]
     if isinstance(job, JobArray):
@@ -906,7 +925,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=None):
         print("  Submitted job {} (JobId={})".format(name, job.uid))
 
 
-def run_slurm(jobs, deps, threads=1, queue='long'):
+def run_slurm(jobs, deps, threads=1, queue='long', log=''):
     todo = set()
     for i in range(len(jobs)):
         if not jobs[i].done:
@@ -924,7 +943,7 @@ def run_slurm(jobs, deps, threads=1, queue='long'):
                         break
                     uids.add(jobs[j].uid)
             if ready:
-                run_job_slurm(jobs[i], deps=uids, threads=threads, queue=queue)
+                run_job_slurm(jobs[i], deps=uids, threads=threads, queue=queue, log=log)
             else:
                 todo.add(i)
         if prev == todo or len(prev) < len(todo):
@@ -952,6 +971,7 @@ if __name__ == '__main__':
                         help="Queue of batch processing backend to which to submit the jobs")
     parser.add_argument('--print', dest='try_run', action='store_true',
                         help="Print job submission commands without execution")
+    parser.add_argument('--log', default='', help="Common batch queuing job log")
     args = parser.parse_args()
 
     batch = JobBatch.from_condor_script(args.dag_file)
@@ -968,7 +988,7 @@ if __name__ == '__main__':
         sys.stderr.write("Use lib/tools/submit-dag-to-condor instead")
         sys.exit(1)
     elif args.backend == 'slurm':
-        run_slurm(jobs, deps, threads=args.threads, queue=args.queue)
+        run_slurm(jobs, deps, threads=args.threads, queue=args.queue, log=args.log)
     elif args.backend == 'local':
         run_local(jobs, deps)
 
