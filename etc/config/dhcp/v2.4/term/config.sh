@@ -7,14 +7,14 @@ refid='serag-40'
 set_pardir_from_file_path "$BASH_SOURCE"
 agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
-sublst="$pardir/test.lst" # TODO: Remove this line
+#sublst="$pardir/test.lst" # TODO: Remove this line
 
 # registration
 resolution=0.5
-similarity='NCC'
+similarity='NMI'
 bending=1e-3
 jacobian=1e-5
-refine=1
+refine=3
 
 # regression
 means=(40)
