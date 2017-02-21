@@ -323,10 +323,24 @@ class JobDesc(object):
         json += ']'
         return json
 
-    def script(self, jobid='(unknown)', taskid=0, macros={}):
+    def script(self, jobid='(unknown)', taskid=0, hostid='', macros={}):
         """Generate shell script for command execution."""
         cmds = self.commands(macros=macros)
-        script = "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Started job {} (#commands = {})\"\n".format(jobid, len(cmds))
+        script = "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Started job "
+        if jobid and isinstance(jobid, str) and jobid[-1] == ')' and (len(cmds) > 0 or hostid):
+            script += jobid[0:-1]
+            script += ", "
+        else:
+            script += str(jobid)
+            if len(cmds) > 0 or hostid:
+                script += " ("
+        if len(cmds) > 0:
+            script += "#Commands={}".format(len(cmds))
+        if hostid:
+            if len(cmds) > 0:
+                script += ", "
+            script += "Host={}".format(hostid)
+        script += ")\"\n"
         for i in range(len(cmds)):
             cmd = cmds[i]
             ini = Command.quote(cmd.initialdir)
@@ -346,7 +360,8 @@ class JobDesc(object):
             script += "}\n"
             script += "echo >> \"$out\"\n"
             script += "echo DONE >> \"$out\"\n"
-            script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Job {} finished commands {} out of {}\"\n".format(jobid, i + 1, len(cmds))
+            if len(cmds) > 1:
+                script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Finished job {} command {}/{}\"\n".format(jobid, i + 1, len(cmds))
         script += "\n"
         script += "echo \"`date '+%y/%m/%d %H:%M:%S'` INFO Finished job {}\"\n".format(jobid)
         return script
@@ -476,9 +491,9 @@ class Job(TreeNode):
         json += indentation + '}'
         return json
 
-    def script(self, jobid='(unknown)', taskid=0):
+    def script(self, jobid='(unknown)', taskid=0, hostid=''):
         """Generate shell script for job execution."""
-        return self.desc.script(jobid=jobid, taskid=taskid, macros=self.macros)
+        return self.desc.script(jobid=jobid, taskid=taskid, hostid=hostid, macros=self.macros)
 
 
 class JobArray(TreeNode):
@@ -580,7 +595,7 @@ class JobArray(TreeNode):
         json += indentation + '}'
         return json
 
-    def script(self, jobid='(unknown)', taskid='$1'):
+    def script(self, jobid='(unknown)', taskid='$1', hostid=''):
         """Generate shell script for job execution."""
         script = ''
         if len(self.jobs) > 0:
@@ -592,7 +607,7 @@ class JobArray(TreeNode):
                     script += "  {}='{}'\n".format(k, v)
                     macros[k] = '$' + k
             script += "fi\n\n"
-            script += self.desc.script(jobid=jobid, macros=macros)
+            script += self.desc.script(jobid=jobid, hostid=hostid, macros=macros)
         return script
 
 
@@ -867,7 +882,7 @@ def run_local(jobs, deps):
 def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
     """Submit SLURM job."""
     sbatch_script = "#!/bin/sh\n"
-    sbatch_script += job.script(jobid='$SLURM_JOB_ID', taskid='$SLURM_ARRAY_TASK_ID')
+    sbatch_script += job.script(jobid='$SLURM_JOB_NAME (JobId=$SLURM_JOB_ID)', taskid='$SLURM_ARRAY_TASK_ID', hostid='$SLURM_JOB_NODELIST')
     for cmd in job.commands():
         for i in range(len(cmd.arguments)):
             if cmd.arguments[i] == '-threads':
