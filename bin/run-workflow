@@ -740,14 +740,16 @@ class JobBatch(TreeNode):
     def from_condor_script(cls, path, name=''):
         """Parse batch description from .dag file."""
         batch = cls(name, path)
-        re_sub = re.compile(r'\s*(?:SPLICE|SUBDAG\s+EXTERNAL)\s+(?P<name>[^ ]+)\s+(?P<path>[a-zA-Z0-9\//-_ ,.+=]+)\s*$')
-        re_job = re.compile(r'\s*JOB\s+(?P<name>[^ ]+)\s+(?P<path>[a-zA-Z0-9\//-_ ,.+=]+)\s*$')
+        re_sub = re.compile(r'\s*(?:SPLICE|SUBDAG\s+EXTERNAL)\s+(?P<name>[^ ]+)\s+(?P<path>[-_ a-zA-Z0-9,.+=/\\]+)\s*$')
+        re_job = re.compile(r'\s*JOB\s+(?P<name>[^ ]+)\s+(?P<path>[-_ a-zA-Z0-9,.+=/\\]+)\s*$')
         re_dep = re.compile(r'\s*PARENT\s+(?P<parents>.+)\s+CHILD\s+(?P<children>.+)\s*$')
         re_vars = re.compile(r'\s*VARS\s+(?P<name>[^ ]+)\s+(?P<macros>.*)\s*$')
         re_macro = re.compile(r'\s*(?P<macro>[a-zA-Z0-9_]+)=(?:["\'])(?P<value>[^"\']*)(?:["\'])')
         with open(path) as f:
             for line in f:
                 line = line.strip()
+                if not line or line[0] == '#':
+                    continue
                 m_sub = re_sub.match(line)
                 m_job = re_job.match(line)
                 m_dep = re_dep.match(line)
@@ -792,6 +794,8 @@ class JobBatch(TreeNode):
                             raise Exception("Undefined CHILD job {} in dependency declaration in {}".format(child, path))
                         job = batch[child]
                         job.deps.update(parents)
+                else:
+                    sys.stderr.write("Unrecognized .dag line: {}\n".format(line))
         return batch
 
     def apply_rescue_file(self, path):
