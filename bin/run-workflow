@@ -242,9 +242,13 @@ class Command(object):
     @staticmethod
     def quote(arg):
         """Quote command argument if necessary."""
+        if arg == '':
+            return "''"
         arg = arg.replace('"', '\\"')
-        if ' ' in arg or "'" in arg:
+        if "'" in arg:
             arg = '"' + arg + '"'
+        elif ' ' in arg:
+            arg = "'" + arg + "'"
         return arg
 
     def __str__(self):
@@ -338,6 +342,7 @@ class JobDesc(object):
             script += "  echo >> \"$out\"\n"
             script += "  echo FAILED >> \"$out\"\n"
             script += "  echo \"`date '+%y/%m/%d %H:%M:%S'` FAIL Job {} command {} failed\"\n".format(jobid, i + 1)
+            script += "  exit 1\n"
             script += "}\n"
             script += "echo >> \"$out\"\n"
             script += "echo DONE >> \"$out\"\n"
@@ -875,8 +880,6 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
         '-n', '1',
         '-c', str(threads),
         '-p', queue,
-        '-o', log,
-        '-e', log,
         '--mem=4G'
     ]
     if isinstance(job, JobArray):
@@ -888,7 +891,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
             deps = [str(dep) for dep in deps]
         sbatch_argv.append('--dependency=afterok:' + ',afterok:'.join(deps))
     if log:
-        sbatch_argv.extend(['-o', log, '-e', log])
+        sbatch_argv.extend(['-o', log, '-e', log, '--open-mode=append'])
     if _try_run:
         global _next_job_id
         sys.stdout.write('\nsubmit_job_{uid}()\n{{\n'.format(uid=_next_job_id))
