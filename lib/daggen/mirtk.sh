@@ -1315,6 +1315,10 @@ average_images_node()
   local imgsuf='.nii.gz'
   local dofin1=
   local dofin2=
+  local dofin3=
+  local dofid1=
+  local dofid2=
+  local dofid3=
   local dofpre=
   local dofsuf='.dof.gz'
   local dofinv='false'
@@ -1328,18 +1332,23 @@ average_images_node()
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
       -sublst)   optarg  idlst   $1 "$2"; shift; ;;
       -refid)    refid="$2"; shift; ;;
-      -refdir)   optarg  refdir  $1 "$2"; shift; ;;
+      -refdir)   optarg refdir $1 "$2"; shift; ;;
       -refpre)   refpre="$2"; shift; ;;
       -refsuf)   refsuf="$2"; shift; ;;
-      -imgdir)   optarg  imgdir  $1 "$2"; shift; ;;
+      -imgdir)   optarg imgdir  $1 "$2"; shift; ;;
       -imgpre)   imgpre="$2"; shift; ;;
-      -imgsuf)   optarg  imgsuf  $1 "$2"; shift; ;;
-      -dofin1|-dofdir) optarg  dofin1  $1 "$2"; shift; ;;
-      -dofin2)   optarg  dofin2  $1 "$2"; shift; ;;
-      -dofpre)   optarg  dofpre  $1 "$2"; shift; ;;
-      -dofsuf)   optarg  dofsuf  $1 "$2"; shift; ;;
-      -dofinv) options="$options -invert"; ;;
-      -output)   optarg  average $1 "$2"; shift; ;;
+      -imgsuf)   imgsuf="$2"; shift; ;;
+      -dofdir)   optarg dofin1 $1 "$2"; shift; ;;
+      -dofin1)   dofin1="$2"; shift; ;;
+      -dofin2)   dofin2="$2"; shift; ;;
+      -dofin3)   dofin3="$2"; shift; ;;
+      -dofid1)   dofid1="$2"; shift; ;;
+      -dofid2)   dofid2="$2"; shift; ;;
+      -dofid3)   dofid3="$2"; shift; ;;
+      -dofpre)   dofpre="$2"; shift; ;;
+      -dofsuf)   dofsuf="$2"; shift; ;;
+      -dofinv)   options="$options -invert"; ;;
+      -output)   optarg average $1 "$2"; shift; ;;
       -spacing|-voxelsize|-resolution)
         local voxelsize
         optargs voxelsize "$@"
@@ -1377,27 +1386,48 @@ average_images_node()
     # write image list with optional transformations and weights
     local imglst="$_dagdir/images.csv"
     local images="$topdir\n"
+    local weights=()
     if [ -n "$idlst" ]; then
       [ ${#ids[@]} -eq 0 ] || error "average_images_node: options -subjects and -sublst are mutually exclusive"
-      local pair id weight
+      local pair line
       while read line; do
         pair=($line)
-        id=${pair[0]}
-        weight=${pair[1]}
-        images="$images\"$imgpre$id$imgsuf\""
-        [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
-        [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
-        [ -z "$weight" ] || images="$images,$weight"
-        images="$images\n"
+        ids=("${ids[@]}" "${pair[0]}")
+        weights=("${weights[@]}" "${pair[1]}")
       done < "$idlst"
-    else
-      for id in "${ids[@]}"; do
-        images="$images\"$imgpre$id$imgsuf\""
-        [ -z "$dofin1" ] || images="$images,\"$dofin1/$dofpre$id$dofsuf\""
-        [ -z "$dofin2" ] || images="$images,\"$dofin2/$dofpre$id$dofsuf\""
-        images="$images,1\n"
-      done
     fi
+    local i=0
+    while [ $i -lt ${#ids[@]} ]; do
+      images="$images\"$imgpre${ids[i]}$imgsuf\""
+      if [ -n "$dofin1" ] && [[ $dofid1 != false ]]; then
+        if [ -n "$dofid1" ]; then
+          images="$images,\"$dofin1/$dofpre$dofid1$dofsuf\""
+        else
+          images="$images,\"$dofin1/$dofpre${ids[i]}$dofsuf\""
+        fi
+      fi
+      if [ -n "$dofin2" ] && [[ $dofid2 != false ]]; then
+        if [ -n "$dofid2" ]; then
+          images="$images,\"$dofin2/$dofpre$dofid2$dofsuf\""
+        else
+          images="$images,\"$dofin2/$dofpre${ids[i]}$dofsuf\""
+        fi
+      fi
+      if [ -n "$dofin3" ] && [[ $dofid3 != false ]]; then
+        if [ -n "$dofid3" ]; then
+          images="$images,\"$dofin3/$dofpre$dofid3$dofsuf\""
+        else
+          images="$images,\"$dofin3/$dofpre${ids[i]}$dofsuf\""
+        fi
+      fi
+      if [ $i -lt ${#weights[@]} ]; then
+        images="$images,${weights[i]}"
+      else
+        images="$images,1"
+      fi
+      images="$images\n"
+      let i++
+    done
     write "$imglst" "$images"
 
     # node to create output directories

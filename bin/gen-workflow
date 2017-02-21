@@ -323,10 +323,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point between each pair of images
-  #
-  # TODO: Use only subset of images for this stage when iterative template
-  #       refinement is used in the next stage, i.e., use only first n images
-  #       of each temporal kernel, merge, and remove duplicates.
   begin_dag 'def_alignment' -parent "$prev_node" -splice
 
     # deformable registration of all pairs of images after global normalization
@@ -350,10 +346,11 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         -levels   4 \
         -symmetric
 
-    # compute average deformations for each subject and atlas time point
+    # for each atlas time point...
     defdofs="$dofdir/2.2_avg"
     for t in ${timepoints[@]}; do
 
+      # compute average deformations for each subject
       average_dofs_node "avg_ffds_$t" -parent 'reg_pairwise' \
           -doflst "$kernel/t$t.csv" \
           -dofins "$dofdir/2.1_def" \
@@ -369,10 +366,18 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # optional iterative refinement of local deformations
   #
-  # 1. Update average image without global average scale
-  # 2. Register average to each image
-  # 3. Repeat steps 1 and 2 a number of times
-  #    (TODO: or until average image barely changes)
+  # 1. Update average image without global average scale    (--> mean intensity)
+  # 2. Deform average image by residual average deformation (--> mean shape)
+  # 3. Register current template to each image
+  # 4. Repeat steps 1-3 a number of times
+  #    (TODO: or until average image barely changes
+  #           or as long as residual template deformation is not close to identity)
+  dofid3=false  # false: do not use average inverse subject to atlas deformation
+                # other: deform average intensity image by inverse of this transform
+                #        this is used during the iterative refinement to minimize
+                #        the residual deformation required to deform each subject
+                #        to the template shape
+
   if [ -n "$refine" ] && [ $refine -gt 0 ]; then
     begin_dag 'def_refinement' -parent "$prev_node" -splice
 
@@ -384,11 +389,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
         let j="$i + 1"
         nxtdofs="$dofdir/2.${j}_def"
 
-        # update average images
+        # update template images
         begin_dag "make_templates_$i" -parent "$prev_node" -splice
           for t in ${timepoints[@]}; do
 
-            average_images_node "average_$t" \
+            # average intensity (minimize intensity difference)
+            average_images_node "avgimgs_$t" \
                 -sublst "$kernel/t$t.csv" \
                 -imgdir "$imgdir" \
                 -imgpre "$imgpre" \
@@ -399,16 +405,17 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
                 -dofin2 "$defdofs/t$t" \
-                -output "$tmpdir/t2w_$t-$i.nii.gz"
+                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
+                -output "$tmpdir/t2w_t${t}_${i}.nii.gz"
 
           done
-        end_dag       
+        end_dag
 
         # register average images to each subject (after global normalization)
         begin_dag "reg_templates_$i" -parent "make_templates_$i" -splice
           for t in ${timepoints[@]}; do
 
-            register_node "refine_$t" \
+            register_node "register_$t" \
                 -sublst   "$kernel/t$t.csv" \
                 -imgdir   "$imgdir" \
                 -imgpre   "$imgpre" \
@@ -429,6 +436,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
                 -maxres   $resolution
 
+            dofid3="avginv"
+            average_dofs_node "average_$t" -parent "register_$t" \
+                -doflst "$kernel/t$t.csv" \
+                -dofins "$nxtdofs/t$t" \
+                -dofdir "$nxtdofs/t$t" \
+                -dofid  "$dofid3" \
+                -invert
+
           done
         end_dag
 
@@ -445,7 +460,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   fi
 
   # ----------------------------------------------------------------------------
-  # average global scaling (i.e. brain size relative to reference)
+  # average global scaling (i.e. brain size relative to global reference)
   begin_dag 'make_dofs' -parent "$prev_node" -splice
     for t in ${timepoints[@]}; do
 
@@ -475,6 +490,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refsuf "$nrmsuf" \
           -dofin1 "$nrmdofs" \
           -dofin2 "$defdofs/t$t" \
+          -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
           -output "$outdir/average/t2w/t$t.nii.gz"
 
       edit_image_node "putdof_$t" -parent "average_$t" \
@@ -513,6 +529,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
                 -dofin2 "$defdofs/t$t" \
+                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
                 -label $l
      
@@ -548,6 +565,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
                 -dofin2 "$defdofs/t$t" \
+                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
                 -label $l
      
