@@ -461,7 +461,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make template images
-  begin_dag 'make_templates' -parent "$prev_node" -splice
+  begin_dag 'make_templates' -parent "make_dofs" -splice
     for t in ${timepoints[@]}; do
 
       average_images_node "average_$t" \
@@ -477,7 +477,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofin2 "$defdofs/t$t" \
           -output "$outdir/average/t2w/t$t.nii.gz"
 
-      edit_image_node "putdof_$t" \
+      edit_image_node "putdof_$t" -parent "average_$t" \
           -imgdir "$outdir/average/t2w" \
           -imgid  "t$t" \
           -imgsuf ".nii.gz" \
