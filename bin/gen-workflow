@@ -386,7 +386,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       i=1
       while [ $i -le $refine ]; do
 
-        let j="$i + 1"
+        let j="$i + 2"
         nxtdofs="$dofdir/2.${j}_def"
 
         # update template images
@@ -421,7 +421,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -imgpre   "$imgpre" \
                 -imgsuf   "$imgsuf" \
                 -srcdir   "$tmpdir" \
-                -srcid    "t2w_$t-$i" \
+                -srcid    "t2w_t${t}_${i}" \
                 -srcsuf   ".nii.gz" \
                 -model    "SVFFD" \
                 -mffd     "None" \
@@ -434,15 +434,16 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofins   "identity" \
                 -dofdir   "$nxtdofs/t$t" \
                 -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
-                -maxres   $resolution
+                -maxres   $resolution \
+                -symmetric
 
-            dofid3="avginv"
+            dofid3="residual"
             average_dofs_node "average_$t" -parent "register_$t" \
                 -doflst "$kernel/t$t.csv" \
                 -dofins "$nxtdofs/t$t" \
                 -dofdir "$nxtdofs/t$t" \
                 -dofid  "$dofid3" \
-                -invert
+                -dofs -invert
 
           done
         end_dag
