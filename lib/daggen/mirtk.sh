@@ -1399,18 +1399,14 @@ average_images_node()
         ;;
       -sharpen)
         local arg=
-        if [ -z "$arg" ] || [[ ${arg:0:1} == '-' ]]; then
-          arg='yes'
-        else
-          optarg arg $1 "$2"; shift
-        fi
+        optarg arg $1 "$2"; shift
         options="$options -sharpen $arg"
         ;;
       -label)
         optarg label $1 "$2"; shift
         options="$options -label $label";;
       -*)        error "average_images_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "average_images_node: too many arguments"
+      *)         [ -z "$node" ] || error "average_images_node: too many arguments: $@"
                  node="$1"; ;;
     esac
     shift
