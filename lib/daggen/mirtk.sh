@@ -127,6 +127,8 @@ register_node()
   local model=
   local mffd='Sum'
   local similarity='NMI'
+  local bins=64
+  local radius=2
   local interp='Fast linear'
   local resolution=
   local levels=(4 1)
@@ -240,6 +242,12 @@ register_node()
       -sim|-similarity)
         optarg similarity $1 "$2"
         shift; ;;
+      -bins)
+        optarg bins $1 "$2"
+        shift; ;;
+      -radius)
+        optarg radius $1 "$2"
+        shift; ;;
       -bgvalue)
         optarg bgvalue $1 "$2"
         shift; ;;
@@ -263,9 +271,24 @@ register_node()
           levels=("${levels[0]}" 1)
         fi; ;;
       -inverse-consistent)
-        ic='true'; ;;
+        if [[ $2 == true ]]; then
+          ic='true'; shift
+        elif [[ $2 == false ]]; then
+          ic='false'; shift
+        else
+          ic='true'
+        fi
+        ;;
       -symmetric)
-        ic='true'; sym='true'; ;;
+        if [[ $2 == true ]]; then
+          sym='true'; shift
+        elif [[ $2 == false ]]; then
+          sym='false'; shift
+        else
+          sym='true'
+        fi
+        [[ $sym == false ]] || ic='true'
+        ;;
       -ds|-spacing)
         optarg w $1 "$2"
         params="$params\nControl point spacing = $w"
@@ -388,8 +411,8 @@ register_node()
     cfg="$cfg\nImage interpolation mode         = $interp"
     cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy](T) + 0 VP[Volume preservation](T) + 0 JAC[Jacobian penalty](T)"
     cfg="$cfg\nSimilarity measure               = $similarity"
-    cfg="$cfg\nNo. of bins                      = 64"
-    cfg="$cfg\nLocal window size [box]          = 5 vox"
+    cfg="$cfg\nNo. of bins                      = $bins"
+    cfg="$cfg\nLocal window radius [box]        = $radius vox"
     cfg="$cfg\nMaximum streak of rejected steps = 2"
     cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of resolution levels         = $nlevels"
@@ -1364,6 +1387,25 @@ average_images_node()
       -bgvalue|-padding)
         optarg bgvalue $1 "$2"; shift
         options="$options -padding $bgvalue";;
+      -normalize|-normalization)
+        local arg=
+        optarg arg $1 "$2"; shift
+        options="$options -normalization $arg"
+        ;;
+      -rescale|-rescaling)
+        local arg=
+        optarg arg $1 "$2"; shift
+        options="$options -rescaling $arg"
+        ;;
+      -sharpen)
+        local arg=
+        if [ -z "$arg" ] || [[ ${arg:0:1} == '-' ]]; then
+          arg='yes'
+        else
+          optarg arg $1 "$2"; shift
+        fi
+        options="$options -sharpen $arg"
+        ;;
       -label)
         optarg label $1 "$2"; shift
         options="$options -label $label";;

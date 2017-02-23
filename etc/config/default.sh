@@ -14,7 +14,7 @@ LD_LIBRARY_PATH="$appdir/lib:$MIRTK_DIR/lib:$MIRTK_DIR/lib/mirtk:$LD_LIBRARY_PAT
 export PATH LD_LIBRARY_PATH
 
 
-# default input settings
+# input settings
 topdir="`cd $appdir && pwd`"          # absolute path of top-level working directory
 
 pardir="`dirname "$BASH_SOURCE"`"     # directory containing configuration files
@@ -28,6 +28,8 @@ imgdir='../images'                    # directory of anatomical brain images
 imgpre=''                             # brain image file name prefix
 imgsuf='.nii.gz'                      # brain image file name suffix
 bgvalue=0                             # background value of skull-stripped images
+padding=$bgvalue                      # background threshold used to define image foreground
+                                      # (used only for deformable registration)
 
 lbldir='../labels'                    # base directory of available segmentations
 lblpre='structures/'                  # file name prefix of structural segmentation label image
@@ -41,50 +43,67 @@ segdir='../masks'                     # directory with binary segmentation masks
 segpre=''                             # file name prefix of binary segmentation masks
 segsuf='.nii.gz'                      # file name suffix of binary segmentation masks
 
-# default reference for global normalization
+# global normalization
 refdir="etc/reference"                # directory of reference image
 refpre=''                             # reference image file name prefix
 refsuf='.nii.gz'                      # reference image file name suffix
 refid=''                              # ID of reference image (optional)
                                       # - set reference ID to empty string to compute
                                       #   population specific linear average
-refini='true'                         # - false: use reference for global normalization
+refini=true                           # - false: use reference for global normalization
                                       # - true:  construct linear population reference
                                       #          and, when refid set, align this average
-                                      #          image with the specified reference
+                                      #          image rigidly with the specified reference
 
-# default workflow parameters
+# common settings
 verbose=0                             # verbosity of output messages
+threads=8                             # maximum no. of CPU cores to use
+update=false                          # enable (true) or disable update of existing DAG files
+binlnk=true                           # link (true) or copy (false) job executables
+
+# registration parameters
 resolution=1                          # highest image resolution at final level in mm
 interpolation='Linear'                # image interpolation mode
-similarity='NCC'                      # image (dis-)similarity measure: SSD, NMI, NCC
+similarity='NMI'                      # image (dis-)similarity measure: SSD, NMI, NCC
+radius=2                              # radius of NCC in number of voxels (0: global NCC)
+bins=64                               # no. of bins to use for NMI
+model='SVFFD'                         # free-form deformation model
+mffd='None'                           # multi-level transformation model
+levels=4                              # no. of resolution levels for deformable registration
 spacing=2.5                           # control point spacing on finest level
 bending=0.001                         # weight of bending energy term
 jacobian=0.01                         # weigth of Jacobian-based penalty term
-refine=1                              # no. of template refinement steps
-threads=8                             # maximum no. of CPU cores to use
+symmetric=true                        # use symmetric registration (requires 'SVFFD' model)
+pairwise=true                         # true:  construct template using pairwise deformable registrations
+                                      # false: use initial affine average as initial template
+refine=10                             # no. of subject to template deformation refinement steps
+
+# temporal kernel regression parameters
 epsilon=0.001                         # kernel weight threshold
 means=()                              # default list of atlas time points
 sigma=1                               # default standard deviation of temporal kernel
 kernel="$pardir/weights"              # directory containing temporal kernel files
-update='false'                        # enable (true) or disable update of existing DAG files
-binlnk='true'                         # link (true) or copy (false) job executables
+
+# averaging options
+normalization='mean'                  # input normalization option of mirtk average-images
+rescaling='dist'                      # output rescaling option of mirtk average-images
+sharpen=true                          # whether to enhance edges in average image
 
 # default output settings
 libdir="lib"                          # shared libraries required by job executables
 bindir="$libdir/tools"                # symbolic links to / copy of job executable files
-dagdir='dag'                          # workflow description as DAG files for HTCondor DAGMan
-logdir='log'                          # directory of log files written by workflow jobs
-dofdir='../output/dofs'               # transformations computed during atlas construction
-evldir='../output/eval'               # directory of evaluation output files
-outdir='../output/atlas'              # atlas output directory
-tmpdir='../output/temp'               # directory of intermediate average images
+dagdir="dag"                          # workflow description as DAG files for HTCondor DAGMan
+logdir="log"                          # directory of log files written by workflow jobs
+dofdir="../output/dofs"               # transformations computed during atlas construction
+evldir="../output/eval"               # directory of evaluation output files
+outdir="../output/atlas"              # atlas output directory
+tmpdir="../output/temp"               # directory of intermediate average images
 
-# default HTCondor settings
+# HTCondor settings
 notify_user="${USER}@ic.ac.uk"
-notification='Error'
+notification="Error"
 requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer == 14'
-log='progress.log'
+log="progress.log"
 
 # utility function to set pardir in custom configuration
 set_pardir_from_file_path()

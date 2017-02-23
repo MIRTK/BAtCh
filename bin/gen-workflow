@@ -125,11 +125,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgsuf   "$imgsuf" \
           -dofdir   "$dofdir/1.1_ini" \
           -model    "Similarity" \
+          -interp   "$interpolation" \
           -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
           -bgvalue  "$bgvalue" \
-          -maxres   $resolution \
+          -maxres   "$resolution" \
           -segdir   "$segdir" \
-          -segmsk   'BS+CB' .33 \
+          -segmsk   "BS+CB" .33 \
           -levels   4 2
 
       # affine registration
@@ -146,9 +149,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir   "$dofdir/1.2_ref" \
           -model    "Affine" \
           -par      "Allow shearing" No \
+          -interp   "$interpolation" \
           -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
           -padding  "$bgvalue" \
-          -maxres   $resolution \
+          -maxres   "$resolution" \
           -levels   3 1
 
       # global normalization output
@@ -164,11 +170,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgsuf   "$imgsuf" \
           -dofdir   "$dofdir/1.1_sim" \
           -model    "Similarity" \
+          -interp   "$interpolation" \
           -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
           -bgvalue  "$bgvalue" \
-          -maxres   $resolution \
+          -maxres   "$resolution" \
           -segdir   "$segdir" \
-          -segmsk   'BS+CB' .33 \
+          -segmsk   "BS+CB" .33 \
           -levels   4 2 \
           -group    20
 
@@ -182,9 +191,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir   "$dofdir/1.2_aff" \
           -model    "Affine" \
           -par      "Allow shearing" No \
+          -interp   "$interpolation" \
           -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
           -padding  "$bgvalue" \
-          -maxres   $resolution \
+          -maxres   "$resolution" \
           -levels   3 1 \
           -group    20
 
@@ -202,13 +214,16 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -hdrdofs  "$dofdir/1.3_avg" \
-          -dofins   'identity' \
+          -dofins   "identity" \
           -dofdir   "$dofdir/1.4_res" \
           -model    "Affine" \
           -par      "Allow shearing" No \
+          -interp   "$interpolation" \
           -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
           -padding  "$bgvalue" \
-          -maxres   $resolution \
+          -maxres   "$resolution" \
           -levels   2 \
           -group    20
 
@@ -249,19 +264,22 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   fi
 
   average_images_node 'make_average' -parent 'aff_alignment' \
-      -subjects "${subids[@]}" \
-      -refdir   "$refdir" \
-      -refpre   "$refpre" \
-      -refid    "$linref" \
-      -refsuf   "$refsuf" \
-      -imgdir   "$imgdir" \
-      -imgpre   "$imgpre" \
-      -imgsuf   "$imgsuf" \
-      -dofdir   "$nrmdofs" \
-      -output   "$nrmdir/$nrmref$nrmsuf" \
-      -spacing  $resolution \
-      -padding  "$bgvalue" \
-      -margin   5
+      -subjects  "${subids[@]}" \
+      -refdir    "$refdir" \
+      -refpre    "$refpre" \
+      -refid     "$linref" \
+      -refsuf    "$refsuf" \
+      -imgdir    "$imgdir" \
+      -imgpre    "$imgpre" \
+      -imgsuf    "$imgsuf" \
+      -dofdir    "$nrmdofs" \
+      -output    "$nrmdir/$nrmref$nrmsuf" \
+      -spacing   "$resolution" \
+      -padding   "$bgvalue" \
+      -normalize "$normalization" \
+      -rescale   "$rescaling" \
+      -sharpen   "$sharpen" \
+      -margin    5
 
   prev_node='make_average'
 
@@ -274,6 +292,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # register user reference to constructed affine reference
       register_node 'reg_average' \
           -model   "Rigid" \
+          -interp  "$interpolation" \
+          -sim     "$similarity" \
+          -bins    "$bins" \
+          -radius  "$radius" \
           -tgtdir  "$nrmdir" \
           -tgtid   "$nrmref" \
           -tgtpre  "$nrmpre" \
@@ -296,7 +318,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -tgtid    "$refid" \
           -tgtpre   "$refpre" \
           -tgtsuf   "$refsuf" \
-          -spacing  $resolution \
+          -spacing  "$resolution" \
           -padding  "$bgvalue" \
           -dofins   "$tmpdir" -invert \
           -outdir   "$outdir/average/t2w" \
@@ -323,45 +345,53 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point between each pair of images
-  begin_dag 'def_alignment' -parent "$prev_node" -splice
-
-    # deformable registration of all pairs of images after global normalization
-    register_node 'reg_pairwise' \
-        -subjects "${subids[@]}" \
-        -imgdir   "$imgdir" \
-        -imgpre   "$imgpre" \
-        -imgsuf   "$imgsuf" \
-        -model    "SVFFD" \
-        -mffd     "None" \
-        -spacing  $spacing \
-        -bending  $bending \
-        -jacobian $jacobian \
-        -sim      "$similarity" \
-        -padding  "$bgvalue" \
-        -hdrdofs  "$nrmdofs" \
-        -dofins   "identity" \
-        -dofdir   "$dofdir/2.1_def" \
-        -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
-        -maxres   $resolution \
-        -levels   4 \
-        -symmetric
-
-    # for each atlas time point...
+  defdofs=''
+  if [[ $pairwise == true ]]; then
     defdofs="$dofdir/2.2_avg"
-    for t in ${timepoints[@]}; do
 
-      # compute average deformations for each subject
-      average_dofs_node "avg_ffds_$t" -parent 'reg_pairwise' \
-          -doflst "$kernel/t$t.csv" \
-          -dofins "$dofdir/2.1_def" \
-          -dofdir "$defdofs/t$t" \
-          -dofs
+    begin_dag 'def_alignment' -parent "$prev_node" -splice
 
-    done
+      # deformable registration of all pairs of images after global normalization
+      register_node 'regpairs' \
+          -subjects  "${subids[@]}" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -model     "$model" \
+          -mffd      "$mffd" \
+          -symmetric "$symmetric" \
+          -spacing   "$spacing" \
+          -bending   "$bending" \
+          -jacobian  "$jacobian" \
+          -interp    "$interpolation" \
+          -sim       "$similarity" \
+          -bins      "$bins" \
+          -radius    "$radius" \
+          -bgvalue   "$bgvalue" \
+          -padding   "$padding" \
+          -hdrdofs   "$nrmdofs" \
+          -dofins    "identity" \
+          -dofdir    "$dofdir/2.1_def" \
+          -domain    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+          -maxres    "$resolution" \
+          -levels    "$levels"
 
-  end_dag
+      # for each atlas time point...
+      for t in ${timepoints[@]}; do
 
-  prev_node='def_alignment'
+        # compute average deformations for each subject
+        average_dofs_node "avgdefs_$t" -parent 'regpairs' \
+            -doflst "$kernel/t$t.csv" \
+            -dofins "$dofdir/2.1_def" \
+            -dofdir "$defdofs/t$t" \
+            -dofs
+
+      done
+
+    end_dag
+
+    prev_node='def_alignment'
+  fi
 
   # ----------------------------------------------------------------------------
   # optional iterative refinement of local deformations
@@ -378,7 +408,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 #        the residual deformation required to deform each subject
                 #        to the template shape
 
-  if [ -n "$refine" ] && [ $refine -gt 0 ]; then
+  if [ $refine -gt 0 ]; then
     begin_dag 'def_refinement' -parent "$prev_node" -splice
 
       prev_node=''
@@ -386,27 +416,41 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       i=1
       while [ $i -le $refine ]; do
 
-        let j="$i + 2"
-        nxtdofs="$dofdir/2.${j}_def"
+        if [[ $pairwise == true ]]; then
+          nxtdofs="$dofdir/3.${i}_def"
+        else
+          nxtdofs="$dofdir/2.${i}_def"
+        fi
 
         # update template images
         begin_dag "make_templates_$i" -parent "$prev_node" -splice
           for t in ${timepoints[@]}; do
 
+            if [ -n "$defdofs" ]; then
+              curdofs="$defdofs/t$t"
+              resdofs="$defdofs/t$t"
+            else
+              curdofs=''
+              resdofs=''
+            fi
+
             # average intensity (minimize intensity difference)
             average_images_node "avgimgs_$t" \
-                -sublst "$kernel/t$t.csv" \
-                -imgdir "$imgdir" \
-                -imgpre "$imgpre" \
-                -imgsuf '.nii.gz' \
-                -refid  "$nrmref" \
-                -refdir "$nrmdir" \
-                -refpre "$nrmpre" \
-                -refsuf "$nrmsuf" \
-                -dofin1 "$nrmdofs" \
-                -dofin2 "$defdofs/t$t" \
-                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
-                -output "$tmpdir/t2w_t${t}_${i}.nii.gz"
+                -sublst    "$kernel/t$t.csv" \
+                -imgdir    "$imgdir" \
+                -imgpre    "$imgpre" \
+                -imgsuf    ".nii.gz" \
+                -refid     "$nrmref" \
+                -refdir    "$nrmdir" \
+                -refpre    "$nrmpre" \
+                -refsuf    "$nrmsuf" \
+                -dofin1    "$nrmdofs" \
+                -dofin2    "$curdofs" \
+                -dofin3    "$resdofs" -dofid3 "$dofid3" \
+                -output    "$tmpdir/t2w_t${t}_${i}.nii.gz" \
+                -normalize "$normalization" \
+                -rescale   "$rescaling" \
+                -sharpen   "$sharpen"
 
           done
         end_dag
@@ -416,26 +460,31 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           for t in ${timepoints[@]}; do
 
             register_node "register_$t" \
-                -sublst   "$kernel/t$t.csv" \
-                -imgdir   "$imgdir" \
-                -imgpre   "$imgpre" \
-                -imgsuf   "$imgsuf" \
-                -srcdir   "$tmpdir" \
-                -srcid    "t2w_t${t}_${i}" \
-                -srcsuf   ".nii.gz" \
-                -model    "SVFFD" \
-                -mffd     "None" \
-                -spacing  $spacing \
-                -bending  $bending \
-                -jacobian $jacobian \
-                -sim      "$similarity" \
-                -padding  "$bgvalue" \
-                -hdrdofs  "$nrmdofs" \
-                -dofins   "identity" \
-                -dofdir   "$nxtdofs/t$t" \
-                -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
-                -maxres   $resolution \
-                -symmetric
+                -sublst    "$kernel/t$t.csv" \
+                -imgdir    "$imgdir" \
+                -imgpre    "$imgpre" \
+                -imgsuf    "$imgsuf" \
+                -srcdir    "$tmpdir" \
+                -srcid     "t2w_t${t}_${i}" \
+                -srcsuf    ".nii.gz" \
+                -model     "$model" \
+                -mffd      "$mffd" \
+                -symmetric "$symmetric" \
+                -spacing   "$spacing" \
+                -bending   "$bending" \
+                -jacobian  "$jacobian" \
+                -interp    "$interpolation" \
+                -sim       "$similarity" \
+                -bins      "$bins" \
+                -radius    "$radius" \
+                -bgvalue   "$bgvalue" \
+                -padding   "$padding" \
+                -hdrdofs   "$nrmdofs" \
+                -dofins    "identity" \
+                -dofdir    "$nxtdofs/t$t" \
+                -domain    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+                -maxres    "$resolution" \
+                -levels    "$levels"
 
             dofid3="residual"
             average_dofs_node "average_$t" -parent "register_$t" \
@@ -492,7 +541,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofin1 "$nrmdofs" \
           -dofin2 "$defdofs/t$t" \
           -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
-          -output "$outdir/average/t2w/t$t.nii.gz"
+          -output "$outdir/average/t2w/t$t.nii.gz" \
+          -normalize "$normalization" \
+          -rescale   "$rescaling" \
+          -sharpen   "$sharpen"
 
       edit_image_node "putdof_$t" -parent "average_$t" \
           -imgdir "$outdir/average/t2w" \
