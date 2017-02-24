@@ -448,6 +448,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2    "$curdofs" \
                 -dofin3    "$resdofs" -dofid3 "$dofid3" \
                 -output    "$tmpdir/t2w_t${t}_${i}.nii.gz" \
+                -padding   "$bgvalue" \
                 -normalize "$normalization" \
                 -rescale   "$rescaling" \
                 -sharpen   "$sharpen"
@@ -530,18 +531,19 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     for t in ${timepoints[@]}; do
 
       average_images_node "average_$t" \
-          -sublst "$kernel/t$t.csv" \
-          -imgdir "$imgdir" \
-          -imgpre "$imgpre" \
-          -imgsuf '.nii.gz' \
-          -refid  "$nrmref" \
-          -refdir "$nrmdir" \
-          -refpre "$nrmpre" \
-          -refsuf "$nrmsuf" \
-          -dofin1 "$nrmdofs" \
-          -dofin2 "$defdofs/t$t" \
-          -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
-          -output "$outdir/average/t2w/t$t.nii.gz" \
+          -sublst    "$kernel/t$t.csv" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    ".nii.gz" \
+          -refid     "$nrmref" \
+          -refdir    "$nrmdir" \
+          -refpre    "$nrmpre" \
+          -refsuf    "$nrmsuf" \
+          -dofin1    "$nrmdofs" \
+          -dofin2    "$defdofs/t$t" \
+          -dofin3    "$defdofs/t$t" -dofid3 "$dofid3" \
+          -output    "$outdir/average/t2w/t$t.nii.gz" \
+          -padding   "$bgvalue" \
           -normalize "$normalization" \
           -rescale   "$rescaling" \
           -sharpen   "$sharpen"
@@ -584,7 +586,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$defdofs/t$t" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-                -label $l
+                -label  "$l"
      
             let l++
           done
@@ -620,7 +622,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$defdofs/t$t" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-                -label $l
+                -label  "$l"
      
             let l++
           done
