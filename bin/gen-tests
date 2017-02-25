@@ -1,0 +1,320 @@
+#! /bin/bash
+
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/mirtk.sh" || {
+  echo "Failed to import daggen/mirtk module!" 1>&2
+  exit 1
+}
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $appid <sublst> <refimg> <dagdir> <outdir> [options]
+
+This script generates the DAGMan worflow description used to test different
+registration parameter settings for use in the atlas construction. The DAGMan
+workflow can be directly submitted to the batch queuing system HTCondor for
+distributed parallel execution. Alternatively, the workflow can be executed
+sequentially on the local machine or submitted to another supported batch
+queuing system (e.g., SLURM) using the run-workflow script.
+
+Arguments:
+  sublst   Text file with image IDs.
+  refimg   Reference image used for global normalization.
+  dagdir   Top-level directory for DAGMan workflow files.
+  outdir   Top-level directory for workflow output files.
+
+Options:
+  -c, -config <config.sh>
+      Custom configuration file. (default: none)
+  -h, -help
+      Print help and exit.
+  -v, -verbose
+      Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# configuration
+# ==============================================================================
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
+  esac
+  let o++
+done
+
+verbose=0
+sublst="$1"; shift
+refimg="$1"; shift
+dagdir="$1"; shift
+outdir="$1"; shift
+update=true
+
+[ -n "$sublst" ] || error "Missing sublst argument!"
+[ -n "$refimg" ] || error "Missing refimg argument!"
+[ -n "$dagdir" ] || error "Missing dagdir argument!"
+[ -n "$outdir" ] || error "Missing outdir argument!"
+read_sublst subids "$sublst"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|-config) shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose) let verbose++; ;;
+    *) error "Unknown argument: $1"; ;;
+  esac
+  shift
+done
+
+refdir="$(dirname "$refimg")"
+refid="$(basename "$refimg")"
+refpre=""
+regex="(.*)((.nii|.hdr|.img)(.gz)?)$"
+if [[ $refid =~ $regex ]]; then
+  refid="${BASH_REMATCH[1]}"
+  refsuf="${BASH_REMATCH[2]}"
+else
+  error "This workflow only supports NIfTI images!"
+fi
+
+dofdir="$outdir/dofs"
+
+clsdir="$(dirname  "$lbldir/${clspre}id")"
+clspre="$(basename "$lbldir/${clspre}id")"
+clspre="${clspre:0:${#clspre}-2}"
+
+# ==============================================================================
+# auxiliary functions
+# ==============================================================================
+
+pairwise_registration_test()
+{
+  local name="$1"; shift
+  local parent="$1"; shift
+
+  begin_dag "$name" -parent "$parent"
+
+    # perform pairwise test registrations
+    register_node "register_images" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -bgvalue  "$bgvalue" \
+        -hdrdofs  "$nrmdofs" \
+        -dofins   "identity" \
+        -dofdir   "$outdir/$name/dofs" \
+        -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+        "$@"
+
+    # transform intensity images and tissue segmentations to each subject
+    transform_image_node "transform_images" -parent "register_images" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -refid    "$refid" \
+        -refdir   "$refdir" \
+        -refpre   "$refpre" \
+        -refsuf   "$refsuf" \
+        -hdrdofs  "$nrmdofs" \
+        -dofins   "$outdir/$name/dofs" \
+        -outdir   "$outdir/$name/images" \
+        -padding  "$bgvalue" \
+        -include_identity
+
+    transform_image_node "transform_tissues" -parent "register_images" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$clsdir" \
+        -imgpre   "$clspre" \
+        -imgsuf   "$clssuf" \
+        -refid    "$refid" \
+        -refdir   "$refdir" \
+        -refpre   "$refpre" \
+        -refsuf   "$refsuf" \
+        -hdrdofs  "$nrmdofs" \
+        -dofins   "$outdir/$name/dofs" \
+        -outdir   "$outdir/$name/tissues" \
+        -include_identity -labels   "all"
+
+    # evaluate Dice overlap of tissue segmentations
+    evaluate_overlap_node "evaluate_overlap" -parent "transform_tissues" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$outdir/$name/tissues" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -outdir   "$outdir/$name/overlap" \
+        -outsuf   "_dice.csv" \
+        -metric   "Dice"
+
+    # average images transformed by average transformations
+    average_dofs_node "average_dofs" -parent "register_images" \
+        -subjects "${subids[@]}" \
+        -dofins   "$outdir/$name/dofs" \
+        -dofdir   "$outdir/$name/dofs/average"
+
+    # TODO: generate average image for each subject, see -output option
+    # average_images_node "average_images" -parent "average_dofs" \
+    #     -sublst    "${subids[@]}" \
+    #     -imgdir    "$imgdir" \
+    #     -imgpre    "$imgpre" \
+    #     -imgsuf    ".nii.gz" \
+    #     -refid     "$nrmref" \
+    #     -refdir    "$nrmdir" \
+    #     -refpre    "$nrmpre" \
+    #     -refsuf    "$nrmsuf" \
+    #     -dofin1    "$nrmdofs" \
+    #     -dofin2    "$outdir/$name/dofs/average" \
+    #     -output    "$outdir/average/ID.nii.gz" \
+    #     -padding   "$bgvalue" \
+    #     -normalize "mean" \
+    #     -rescale   "no" \
+    #     -sharpen   "no"
+
+    # TODO: evaluate "sharpness" of average, how?
+
+
+  end_dag
+}
+
+# ==============================================================================
+# workflow
+# ==============================================================================
+
+begin_dag "tests"
+
+  # ----------------------------------------------------------------------------
+  # global normalization (translation, rotation, and scale)
+  begin_dag "normalization" -splice
+
+      register_node "rigid" \
+          -subjects "${subids[@]}" \
+          -srcid    "$refid" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofdir   "$dofdir/1.1_sim" \
+          -model    "Similarity" \
+          -interp   "$interpolation" \
+          -sim      "NMI" \
+          -bins     "64" \
+          -bgvalue  "$bgvalue" \
+          -maxres   "$resolution" \
+          -segdir   "$segdir" \
+          -segmsk   "BS+CB" .33 \
+          -levels   4 2
+
+      register_node "affine" -parent "rigid" \
+          -subjects "${subids[@]}" \
+          -srcid    "$refid" \
+          -srcdir   "$refdir" \
+          -srcpre   "$refpre" \
+          -srcsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofins   "$dofdir/1.1_sim" \
+          -dofdir   "$dofdir/1.2_aff" \
+          -model    "Affine" \
+          -par      "Allow shearing" No \
+          -interp   "$interpolation" \
+          -sim      "NMI" \
+          -bins     "64" \
+          -padding  "$bgvalue" \
+          -maxres   "$resolution" \
+          -levels   3 1
+
+      nrmdofs="$dofdir/1.2_aff"
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # generate population specific reference image/mask
+  nrmdir="$outdir/average"
+  nrmref="linear"
+  nrmpre=""
+  nrmsuf=".nii.gz"
+
+  average_images_node "make_average" -parent "normalization" \
+      -subjects  "${subids[@]}" \
+      -refdir    "$refdir" \
+      -refpre    "$refpre" \
+      -refid     "$refid" \
+      -refsuf    "$refsuf" \
+      -imgdir    "$imgdir" \
+      -imgpre    "$imgpre" \
+      -imgsuf    "$imgsuf" \
+      -dofdir    "$nrmdofs" \
+      -output    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+      -spacing   "$resolution" \
+      -padding   "$bgvalue" \
+      -normalize "mean" \
+      -rescale   "dist" \
+      -sharpen   "yes" \
+      -margin    5
+
+  # ----------------------------------------------------------------------------
+  # pairwise registration with different parameters
+  i=0
+  for sim in nmi ncc; do
+
+    spacing=2.5
+    bending=(1e-2)
+    jacobian=(1e-3)
+    symmetric=true
+    mffd="None"
+
+    if [[ $sim == ncc ]]; then
+      #wradius=(3 5 7)
+      wradius=(3 5)
+      nbins=(0)
+    else
+      wradius=(0)
+      #nbins=(64 256)
+      nbins=(64)
+    fi
+
+    for model in SVFFD; do
+    for bins in ${nbins[@]}; do
+    for radius in ${wradius[@]}; do
+
+      let i++
+      pairwise_registration_test "test_$i" "make_average" \
+          -model "$model" \
+          -mffd "$mffd" \
+          -similarity "$sim" \
+          -bins "$bins" \
+          -radius "$radius" \
+          -spacing "$spacing" \
+          -bending "$bending" \
+          -jacobian "$jacobian" \
+          -symmetric "$symmetric"
+
+    done; done; done
+
+  done
+ 
+end_dag
