@@ -53,7 +53,7 @@ upvar()
 # get command-line option argument
 optarg()
 {
-  [ -n "$3" ] || { echo "Option $2 requires an argument!" 1>&2; exit 1; }
+  [ -n "$3" ] || error "Option $2 requires an argument!"
   local "$1" && upvar $1 "$3"
 }
 
@@ -72,7 +72,7 @@ optargs()
     esac
     shift
   done
-  [ ${#arg[@]} -gt 0 ] || { echo "Option $opt requires an argument!" 1>&2; exit 1; }
+  [ ${#arg[@]} -gt 0 ] || error "Option $opt requires an argument!"
   local "$var" && upvar $var "${arg[@]}"
 }
 
