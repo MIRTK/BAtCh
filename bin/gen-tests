@@ -281,15 +281,9 @@ begin_dag "tests"
   i=0
   for sim in nmi ncc; do
 
-    spacing=2.5
-    bending=(1e-2)
-    jacobian=(1e-3)
-    symmetric=true
-    mffd="None"
-
     if [[ $sim == ncc ]]; then
       #wradius=(3 5 7)
-      wradius=(3 5)
+      wradius=(5)
       nbins=(0)
     else
       wradius=(0)
@@ -297,23 +291,40 @@ begin_dag "tests"
       nbins=(64)
     fi
 
-    for model in SVFFD; do
-    for bins in ${nbins[@]}; do
-    for radius in ${wradius[@]}; do
+    for model in None:SVFFD; do
+    #for model in None:SVFFD None:Affine+SVFFD LogSum:Affine+SVFFD; do
 
-      let i++
-      pairwise_registration_test "test_$i" "make_average" \
-          -model "$model" \
-          -mffd "$mffd" \
-          -similarity "$sim" \
-          -bins "$bins" \
-          -radius "$radius" \
-          -spacing "$spacing" \
-          -bending "$bending" \
-          -jacobian "$jacobian" \
-          -symmetric "$symmetric"
+      mffd=${model/:*}
+      model=${model/*:}
+      spacing=2.5
+      symmetric=false
+      if [[ $model =~ SVFFD ]]; then
+        if [[ $mffd != None ]] || [[ $mffd != LogSum ]]; then
+          symmetric=true
+        fi
+      fi
 
-    done; done; done
+      for bins     in ${nbins[@]}; do
+      for radius   in ${wradius[@]}; do
+      for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
+      for jacobian in 0 1e-3 1e-4 1e-5 1e-6; do
+
+        let i++
+        echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jp=$jacobian"
+
+        pairwise_registration_test "test_$i" "make_average" \
+            -model "$model" \
+            -mffd "$mffd" \
+            -similarity "$sim" \
+            -bins "$bins" \
+            -radius "$radius" \
+            -spacing "$spacing" \
+            -bending "$bending" \
+            -jacobian "$jacobian" \
+            -symmetric "$symmetric"
+
+      done; done; done; done
+    done
 
   done
  
