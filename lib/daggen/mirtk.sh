@@ -804,6 +804,7 @@ transform_image_node()
   local resample='false'
   local invert='false'
   local spacing=()
+  local labels=()
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -834,6 +835,10 @@ transform_image_node()
       -dofsuf)             optarg  dofsuf  $1 "$2"; shift; ;;
       -bgvalue|-padding)   optarg  padding $1 "$2"; shift; ;;
       -interp)             optarg  interp  $1 "$2"; shift; ;;
+      -labels)
+        labels=()
+        optargs labels "$@"
+        shift ${#labels[@]}; ;;
       -dofinv|-invert) invert='true'; ;;
       -include_identity)   resample='true'; ;;
       -spacing|-voxelsize|-resolution)
@@ -860,10 +865,10 @@ transform_image_node()
   fi
   [ -n "$tgtdir" ] || tgtdir="$imgdir"
   [ -n "$srcdir" ] || srcdir="$imgdir"
-  [[ $tgtpre != '$imgpre' ]] || tgtpre="$tgtpre"
-  [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$tgtsuf"
-  [[ $srcpre != '$imgpre' ]] || srcpre="$srcpre"
-  [[ $srcsuf != '$imgsuf' ]] || srcsuf="$srcsuf"
+  [[ $tgtpre != '$imgpre' ]] || tgtpre="$imgpre"
+  [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$imgsuf"
+  [[ $srcpre != '$imgpre' ]] || srcpre="$imgpre"
+  [[ $srcsuf != '$imgsuf' ]] || srcsuf="$imgsuf"
   [[ $outpre != '$imgpre' ]] || outpre="$imgpre"
   [[ $outsuf != '$imgsuf' ]] || outsuf="$imgsuf"
   if [ -z "$ref" -a -n "$refid" ]; then
@@ -897,10 +902,6 @@ transform_image_node()
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
   fi
-  if [ -z "$srcid" ]; then
-    outpre="\$(target)/$outpre"
-    dofpre="\$(target)/$dofpre"
-  fi
   local subdir=
   if [ -z "$tgtid$srcid" ]; then
     subdir="\$(target)/"
@@ -927,6 +928,9 @@ transform_image_node()
       sub="$sub -target '$tgtdir/$tgtpre\$(target)$tgtsuf'"
       [ -z "$hdrdofs" ] || sub="$sub -target-affdof '$hdrdofs/\$(target)$dofsuf'"
     fi
+    if [ ${#labels[@]} -gt 0 ]; then
+      sub="$sub -labels ${labels[@]}"
+    fi
     sub="$sub\""
     sub="$sub\noutput       = $_dagdir/${subdir}transform_\$(source).log"
     sub="$sub\nerror        = $_dagdir/${subdir}transform_\$(source).log"
@@ -942,6 +946,9 @@ transform_image_node()
       sub="$sub -threads $threads -interp $interp -dofin identity"
       [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
       [ -z "$ref" ] || sub="$sub -target '$ref'"
+      if [ ${#labels[@]} -gt 0 ]; then
+        sub="$sub -labels ${labels[@]}"
+      fi
       sub="$sub\""
       sub="$sub\noutput       = $_dagdir/${subdir}resample_\$(source).log"
       sub="$sub\nerror        = $_dagdir/${subdir}resample_\$(source).log"
@@ -1028,6 +1035,151 @@ transform_image_node()
         [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done; done
+    fi
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# add node for evaluation of segmentation label overlaps
+evaluate_overlap_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local imgdir=
+  local imgpre=
+  local imgsuf='.nii.gz'
+  local tgtid=
+  local tgtdir=
+  local tgtpre='$imgpre'
+  local tgtsuf='$imgsuf'
+  local padding=0
+  local labels=()
+  local metric="dice"
+  local outdir=
+  local outpre=
+  local outsuf=".csv"
+  local table=
+  local delim=","
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -imgdir)   optarg imgdir $1 "$2"; shift; ;;
+      -imgpre)   imgpre="$2"; shift; ;;
+      -imgsuf)   imgsuf="$2"; shift; ;;
+      -tgtdir)   optarg tgtdir $1 "$2"; shift; ;;
+      -tgtid)    tgtid="$2";  shift; ;;
+      -tgtpre)   tgtpre="$2"; shift; ;;
+      -tgtsuf)   tgtsuf="$2"; shift; ;;
+      -bgvalue)  optarg padding $1 "$2"; shift; ;;
+      -metric)   optarg metric $1 "$2"; shift; ;;
+      -outdir)   optarg outdir $1 "$2"; shift; ;;
+      -outpre)   outpre="$2"; shift; ;;
+      -outsuf)   outsuf="$2"; shift; ;;
+      -table)    optarg $1 "$2"; shift; ;;
+      -delim)    optarg $1 "$2"; shift; ;;
+      -*) error "evaluate_overlap_node: invalid option: $1"; ;;
+      *)
+        [ -z "$node" ] || error "evaluate_overlap_node: too many arguments"
+        node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node" ] || error "evaluate_overlap_node: missing name argument"
+  if [ -n "$tgtid" ]; then
+    [ ${#ids[@]} -ge 1 ] || error "evaluate_overlap_node: not enough -subjects specified"
+  else
+    [ ${#ids[@]} -ge 2 ] || error "evaluate_overlap_node: not enough -subjects specified"
+  fi
+  [ -n "$tgtdir" ] || tgtdir="$imgdir"
+  [[ $tgtpre != '$imgpre' ]] || tgtpre="$imgpre"
+  [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$imgsuf"
+
+  if [ -n "$tgtid" ]; then
+    [ -n "$table" ] || error "evaluate_overlap_node: -table option required when overlap with single -tgtid is evaluated"
+    outdir="$(dirname "$table")"
+  fi
+
+  # number of jobs
+  local N=1
+  if [ -n "$tgtid" ]; then
+    N=1
+  else
+    let N="${#ids[@]}"
+  fi
+
+  # add SUBDAG node
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create generic transformation submission script
+    local sub="arguments    = \""
+    if [ -n "$tgtid" ]; then
+      sub="$sub '$tgtdir/$tgtpre$tgtid$tgtsuf'"
+      sub="$sub -images $_dagdir/images.csv"
+    else
+      sub="$sub '$imgdir/\$(target)/$imgpre\$(target)$imgsuf'"
+      sub="$sub -images $_dagdir/images_\$(target).csv"
+    fi
+    sub="$sub -labels ${labels[@]} -metric $metric -delim '$delim'"
+    if [ -n "$table" ]; then
+      sub="$sub -table '$table'"
+    else
+      sub="$sub -table '$outdir/$outpre\$(target)$outsuf'"
+    fi
+    sub="$sub -threads $threads\""
+    if [ -n "$tgtid" ]; then
+      sub="$sub\noutput       = $_dagdir/evaluate.log"
+      sub="$sub\nerror        = $_dagdir/evaluate.log"
+    else
+      sub="$sub\noutput       = $_dagdir/evaluate.log"
+      sub="$sub\nerror        = $_dagdir/evaluate_\$(target).log"
+    fi
+    sub="$sub\nqueue"
+    make_sub_script "evaluate.sub" "$sub" -executable evaluate-overlap
+
+    # job to create output directories
+    local pre=''
+    if [ -n "$outdir" ] && [[ $outdir != '.' ]]; then
+      pre="$pre\nmkdir -p '$outdir' || exit 1"
+    fi
+    if [ -n "$pre" ]; then
+      make_script "mkdirs.sh" "$pre"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+    fi
+
+    # add job nodes
+    local job_node sublst
+    if [ -n "$tgtid" ]; then
+      sublst="$_dagdir/images.csv"
+      echo "$topdir/$imgdir" > "$sublst"
+      for id in ${ids[@]}; do
+        echo "$imgpre$id$imgsuf" >> "$sublst"
+      done
+      job_node="evaluate"
+      add_node "$job_node" -subfile "evaluate.sub"
+      [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+      [ ! -f "$table" ] || node_done "$job_node"
+    else
+      local n=0
+      for tgtid in "${ids[@]}"; do
+        sublst="$_dagdir/images_$tgtid.csv"
+        echo "$topdir/$imgdir/$tgtid" > "$sublst"
+        for srcid in ${ids[@]}; do
+          echo "$imgpre$srcid$imgsuf" >> "$sublst"
+        done
+        job_node="evaluate_${tgtid}"
+        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$tgtid\""
+        [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+        [ ! -f "$outdir/$outpre$tgtid$outsuf" ] || node_done "$job_node"
+        let n++ && info "  Added job `printf '%3d of %d' $n $N`"
+      done
     fi
 
   }; end_dag
