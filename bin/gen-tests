@@ -103,6 +103,8 @@ clsdir="$(dirname  "$lbldir/${clspre}id")"
 clspre="$(basename "$lbldir/${clspre}id")"
 clspre="${clspre:0:${#clspre}-2}"
 
+log="$outdir/progress.log"
+
 # ==============================================================================
 # auxiliary functions
 # ==============================================================================
