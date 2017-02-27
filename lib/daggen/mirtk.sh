@@ -1064,6 +1064,7 @@ evaluate_overlap_node()
   local outsuf=".csv"
   local table=
   local delim=","
+  local digits=5
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1077,12 +1078,17 @@ evaluate_overlap_node()
       -tgtpre)   tgtpre="$2"; shift; ;;
       -tgtsuf)   tgtsuf="$2"; shift; ;;
       -bgvalue)  optarg padding $1 "$2"; shift; ;;
-      -metric)   optarg metric $1 "$2"; shift; ;;
+      -metric)
+        metric=()
+        optargs metric "$@"
+        shift ${#metric[@]}
+        ;;
       -outdir)   optarg outdir $1 "$2"; shift; ;;
       -outpre)   outpre="$2"; shift; ;;
       -outsuf)   outsuf="$2"; shift; ;;
-      -table)    optarg $1 "$2"; shift; ;;
-      -delim)    optarg $1 "$2"; shift; ;;
+      -table)    optarg table $1 "$2"; shift; ;;
+      -delim)    optarg delim $1 "$2"; shift; ;;
+      -digits)   optarg digits $1 "$2"; shift; ;;
       -*) error "evaluate_overlap_node: invalid option: $1"; ;;
       *)
         [ -z "$node" ] || error "evaluate_overlap_node: too many arguments"
@@ -1100,53 +1106,73 @@ evaluate_overlap_node()
   [[ $tgtpre != '$imgpre' ]] || tgtpre="$imgpre"
   [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$imgsuf"
 
-  if [ -n "$tgtid" ]; then
-    [ -n "$table" ] || error "evaluate_overlap_node: -table option required when overlap with single -tgtid is evaluated"
-    outdir="$(dirname "$table")"
-  fi
-
   # number of jobs
   local N=1
   if [ -n "$tgtid" ]; then
-    N=1
+    if [ -n "$table" ]; then
+      N=1
+    else
+      let N="${#ids[@]}"  
+    fi
   else
-    let N="${#ids[@]}"
+    let N="${#ids[@]} * (${#ids[@]} - 1)"
   fi
 
   # add SUBDAG node
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    # create generic transformation submission script
+    # create generic evaluate-overlap submission script
     local sub="arguments    = \""
     if [ -n "$tgtid" ]; then
       sub="$sub '$tgtdir/$tgtpre$tgtid$tgtsuf'"
-      sub="$sub -images $_dagdir/images.csv"
+      if [ -n "$table" ]; then
+        sub="$sub -images '$_dagdir/images.csv'"
+        sub="$sub -table '$table'"
+      else
+        sub="$sub '$imgdir/$imgpre\$(source)$imgsuf'"
+        sub="$sub -table '$outdir/$outpre\$(source)$outsuf'"
+      fi
     else
       sub="$sub '$imgdir/\$(target)/$imgpre\$(target)$imgsuf'"
-      sub="$sub -images $_dagdir/images_\$(target).csv"
+      sub="$sub '$imgdir/\$(target)/$imgpre\$(source)$imgsuf'"
+      sub="$sub -table '$outdir/\$(target)/$outpre\$(source)$outsuf'"
     fi
-    sub="$sub -labels ${labels[@]} -metric $metric -delim '$delim'"
-    if [ -n "$table" ]; then
-      sub="$sub -table '$table'"
-    else
-      sub="$sub -table '$outdir/$outpre\$(target)$outsuf'"
-    fi
+    sub="$sub -labels ${labels[@]} -metric ${metric[@]}"
+    sub="$sub -precision $digits -delim '$delim'"
     sub="$sub -threads $threads\""
     if [ -n "$tgtid" ]; then
-      sub="$sub\noutput       = $_dagdir/evaluate.log"
-      sub="$sub\nerror        = $_dagdir/evaluate.log"
+      if [ -n "$table" ]; then
+        sub="$sub\noutput       = $_dagdir/evaluate.log"
+        sub="$sub\nerror        = $_dagdir/evaluate.log"
+      else
+        sub="$sub\noutput       = $_dagdir/evaluate_\$(source).log"
+        sub="$sub\nerror        = $_dagdir/evaluate_\$(source).log"
+      fi
     else
-      sub="$sub\noutput       = $_dagdir/evaluate.log"
-      sub="$sub\nerror        = $_dagdir/evaluate_\$(target).log"
+      sub="$sub\noutput       = $_dagdir/evaluate_\$(target),\$(source).log"
+      sub="$sub\nerror        = $_dagdir/evaluate_\$(target),\$(source).log"
     fi
     sub="$sub\nqueue"
     make_sub_script "evaluate.sub" "$sub" -executable evaluate-overlap
 
     # job to create output directories
     local pre=''
-    if [ -n "$outdir" ] && [[ $outdir != '.' ]]; then
-      pre="$pre\nmkdir -p '$outdir' || exit 1"
+    if [ -n "$tgtid" ]; then
+      if [ -n "$table" ]; then
+        local csvdir="$(dirname "$table")"
+        if [[ $csvdir != '.' ]]; then
+          pre="$pre\nmkdir -p '$csvdir' || exit 1"
+        fi
+      elif [ -n "$outdir" ]; then
+        if [[ $outdir != '.' ]]; then
+          pre="$pre\nmkdir -p '$outdir' || exit 1"
+        fi
+      fi
+    elif [ -n "$outdir" ]; then
+      for id in ${ids[@]}; do
+        pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
+      done
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
@@ -1157,27 +1183,36 @@ evaluate_overlap_node()
     # add job nodes
     local job_node sublst
     if [ -n "$tgtid" ]; then
-      sublst="$_dagdir/images.csv"
-      echo "$topdir/$imgdir" > "$sublst"
-      for id in ${ids[@]}; do
-        echo "$imgpre$id$imgsuf" >> "$sublst"
-      done
-      job_node="evaluate"
-      add_node "$job_node" -subfile "evaluate.sub"
-      [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
-      [ ! -f "$table" ] || node_done "$job_node"
+      if [ -n "$table" ]; then
+        sublst="$_dagdir/images.csv"
+        echo "$topdir/$imgdir" > "$sublst"
+        for id in ${ids[@]}; do
+          if [[ "$id" != "$tgtid" ]]; then
+            echo "$imgpre$id$imgsuf" >> "$sublst"
+          fi
+        done
+        job_node="evaluate"
+        add_node "$job_node" -subfile "evaluate.sub"
+        [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+        [ ! -f "$table" ] || node_done "$job_node"
+      else
+        local n=0
+        for id in ${ids[@]}; do
+          job_node="evaluate_$id"
+          add_node "$job_node" -subfile "evaluate.sub" -var "source=\"$id\""
+          [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+          [ ! -f "$outdir/$outpre$id$outsuf" ] || node_done "$job_node"
+          let n++ && info "  Added job `printf '%3d of %d' $n $N`"
+        done
+      fi
     else
       local n=0
-      for tgtid in "${ids[@]}"; do
-        sublst="$_dagdir/images_$tgtid.csv"
-        echo "$topdir/$imgdir/$tgtid" > "$sublst"
-        for srcid in ${ids[@]}; do
-          echo "$imgpre$srcid$imgsuf" >> "$sublst"
-        done
-        job_node="evaluate_${tgtid}"
-        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$tgtid\""
+      for id1 in "${ids[@]}"; do
+      for id2 in "${ids[@]}"; do
+        job_node="evaluate_$id1,$id2"
+        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
-        [ ! -f "$outdir/$outpre$tgtid$outsuf" ] || node_done "$job_node"
+        [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done
     fi

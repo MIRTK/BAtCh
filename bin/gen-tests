@@ -166,8 +166,7 @@ pairwise_registration_test()
         -imgpre   "$imgpre" \
         -imgsuf   "$imgsuf" \
         -outdir   "$outdir/$name/overlap" \
-        -outsuf   "_dice.csv" \
-        -metric   "Dice"
+        -metric   TP FP FN TN Sensitivity Specificity Precision Accuracy Dice Jaccard
 
     # average images transformed by average transformations
     average_dofs_node "average_dofs" -parent "register_images" \
