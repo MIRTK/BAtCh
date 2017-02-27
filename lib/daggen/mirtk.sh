@@ -1198,6 +1198,7 @@ evaluate_overlap_node()
       else
         local n=0
         for id in ${ids[@]}; do
+          [[ "$id" != "$tgtid" ]] || continue
           job_node="evaluate_$id"
           add_node "$job_node" -subfile "evaluate.sub" -var "source=\"$id\""
           [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
@@ -1209,6 +1210,7 @@ evaluate_overlap_node()
       local n=0
       for id1 in "${ids[@]}"; do
       for id2 in "${ids[@]}"; do
+        [[ "$id1" != "$id2" ]] || continue
         job_node="evaluate_$id1,$id2"
         add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
