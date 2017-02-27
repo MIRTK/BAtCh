@@ -1214,7 +1214,7 @@ evaluate_overlap_node()
         [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
         [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
-      done
+      done; done
     fi
 
   }; end_dag
