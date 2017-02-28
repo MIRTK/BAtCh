@@ -50,6 +50,11 @@ HELP
 # configuration
 # ==============================================================================
 
+[ $# -ge 4 ] || {
+  print_help
+  exit 1
+}
+
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
@@ -68,7 +73,7 @@ sublst="$1"; shift
 refimg="$1"; shift
 dagdir="$1"; shift
 outdir="$1"; shift
-update=true
+update=false
 
 [ -n "$sublst" ] || error "Missing sublst argument!"
 [ -n "$refimg" ] || error "Missing refimg argument!"
@@ -79,6 +84,7 @@ read_sublst subids "$sublst"
 while [ $# -gt 0 ]; do
   case "$1" in
     -c|-config) shift; ;; # already loaded
+    -u|-update) update=true; ;;
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose) let verbose++; ;;
     *) error "Unknown argument: $1"; ;;
@@ -102,8 +108,6 @@ dofdir="$outdir/dofs"
 clsdir="$(dirname  "$lbldir/${clspre}id")"
 clspre="$(basename "$lbldir/${clspre}id")"
 clspre="${clspre:0:${#clspre}-2}"
-
-log="$outdir/progress.log"
 
 # ==============================================================================
 # auxiliary functions
@@ -159,7 +163,7 @@ pairwise_registration_test()
         -outdir   "$outdir/$name/tissues" \
         -include_identity -labels   "all"
 
-    # evaluate Dice overlap of tissue segmentations
+    # evaluate overlap of tissue segmentations
     evaluate_overlap_node "evaluate_overlap" -parent "transform_tissues" \
         -subjects "${subids[@]}" \
         -imgdir   "$outdir/$name/tissues" \
@@ -174,26 +178,23 @@ pairwise_registration_test()
         -dofins   "$outdir/$name/dofs" \
         -dofdir   "$outdir/$name/dofs/average"
 
-    # TODO: generate average image for each subject, see -output option
-    # average_images_node "average_images" -parent "average_dofs" \
-    #     -sublst    "${subids[@]}" \
-    #     -imgdir    "$imgdir" \
-    #     -imgpre    "$imgpre" \
-    #     -imgsuf    ".nii.gz" \
-    #     -refid     "$nrmref" \
-    #     -refdir    "$nrmdir" \
-    #     -refpre    "$nrmpre" \
-    #     -refsuf    "$nrmsuf" \
-    #     -dofin1    "$nrmdofs" \
-    #     -dofin2    "$outdir/$name/dofs/average" \
-    #     -output    "$outdir/average/ID.nii.gz" \
-    #     -padding   "$bgvalue" \
-    #     -normalize "mean" \
-    #     -rescale   "no" \
-    #     -sharpen   "no"
-
-    # TODO: evaluate "sharpness" of average, how?
-
+    average_images_node "average_images" -parent "average_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -refid     "$refid" \
+        -refdir    "$refdir" \
+        -refpre    "$refpre" \
+        -refsuf    "$refsuf" \
+        -dofin1    "$nrmdofs" \
+        -dofin2    "$outdir/$name/dofs/average" \
+        -mean      "$outdir/$name/images/mean.nii.gz" \
+        -sdev      "$outdir/$name/images/sdev.nii.gz" \
+        -padding   "$bgvalue" \
+        -normalize "$normalization" \
+        -rescale   "$rescaling" \
+        -sharpen   "$sharpen"
 
   end_dag
 }
@@ -277,56 +278,122 @@ begin_dag "tests"
       -sharpen   "yes" \
       -margin    5
 
-  # ----------------------------------------------------------------------------
-  # pairwise registration with different parameters
+  # last test id / counter
   i=0
-  for sim in nmi ncc; do
 
-    if [[ $sim == ncc ]]; then
-      #wradius=(3 5 7)
-      wradius=(5)
-      nbins=(0)
-    else
-      wradius=(0)
-      #nbins=(64 256)
-      nbins=(64)
-    fi
+  # ----------------------------------------------------------------------------
+  # initial pairwise registration tests with different regularization weights  
+  for sim in 'nmi' 'ncc'; do
 
-    for model in None:SVFFD; do
-    #for model in None:SVFFD None:Affine+SVFFD LogSum:Affine+SVFFD; do
+    mffd='None'
+    model='SVFFD'
+    spacing=2.5
+    symmetric=true
+    bins=64
+    radius=5
 
-      mffd=${model/:*}
-      model=${model/*:}
-      spacing=2.5
-      symmetric=false
-      if [[ $model =~ SVFFD ]]; then
-        if [[ $mffd != None ]] || [[ $mffd != LogSum ]]; then
-          symmetric=true
-        fi
-      fi
+    for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
+    for jacobian in 0 1e-3 1e-4 1e-5 1e-6; do
 
-      for bins     in ${nbins[@]}; do
-      for radius   in ${wradius[@]}; do
-      for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
-      for jacobian in 0 1e-3 1e-4 1e-5 1e-6; do
+      let i++
+      echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "test_$i" "make_average" \
+          -model "$model" \
+          -mffd "$mffd" \
+          -similarity "$sim" \
+          -bins "$bins" \
+          -radius "$radius" \
+          -spacing "$spacing" \
+          -bending "$bending" \
+          -jacobian "$jacobian" \
+          -symmetric "$symmetric"
 
-        let i++
-        echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jp=$jacobian"
-
-        pairwise_registration_test "test_$i" "make_average" \
-            -model "$model" \
-            -mffd "$mffd" \
-            -similarity "$sim" \
-            -bins "$bins" \
-            -radius "$radius" \
-            -spacing "$spacing" \
-            -bending "$bending" \
-            -jacobian "$jacobian" \
-            -symmetric "$symmetric"
-
-      done; done; done; done
-    done
+    done; done
 
   done
- 
+
+  # ----------------------------------------------------------------------------
+  # different NMI #bins, regularization weights based on initial tests
+  mffd='None'
+  model='SVFFD'
+  spacing=2.5
+  symmetric=true
+  bending=1e-4
+  jacobian=1e-5
+  sim='nmi'
+  radius=5
+  for bins in 100 150 200; do
+    let i++
+    echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+    pairwise_registration_test "test_$i" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric"
+  done
+
+  # ----------------------------------------------------------------------------
+  # different NCC window size, regularization weights based on initial tests
+  mffd='None'
+  model='SVFFD'
+  spacing=2.5
+  symmetric=true
+  bending=1e-2
+  jacobian=1e-6
+  sim='ncc'
+  bins=64
+  for radius in 0 1 2 3 4; do
+    let i++
+    echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+    pairwise_registration_test "test_$i" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric"
+  done
+
+  # ----------------------------------------------------------------------------
+  # different model with similarity measure and regularization weights based on preceeding tests
+  spacing=2.5
+  symmetric=true
+  radius=5
+  bins=64
+  for sim in 'nmi' 'ncc'; do
+
+    if [[ $sim == 'nmi' ]]; then
+      bending=1e-4
+      jacobian=1e-5
+    else
+      bending=1e-2
+      jacobian=1e-6
+    fi
+
+    for model in None:Affine+SVFFD Sum:Affine+SVFFD LogSum:Affine+SVFFD; do
+      mffd=${model/:*}
+      model=${model/*:}
+      let i++
+      echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "test_$i" "make_average" \
+          -model "$model" \
+          -mffd "$mffd" \
+          -similarity "$sim" \
+          -bins "$bins" \
+          -radius "$radius" \
+          -spacing "$spacing" \
+          -bending "$bending" \
+          -jacobian "$jacobian" \
+          -symmetric "$symmetric"
+    done
+  done
+
 end_dag

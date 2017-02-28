@@ -1535,6 +1535,7 @@ average_images_node()
   local dofsuf='.dof.gz'
   local dofinv='false'
   local average=
+  local stdev=
   local options=''
   local label margin bgvalue
 
@@ -1560,7 +1561,12 @@ average_images_node()
       -dofpre)   dofpre="$2"; shift; ;;
       -dofsuf)   dofsuf="$2"; shift; ;;
       -dofinv)   options="$options -invert"; ;;
-      -output)   optarg average $1 "$2"; shift; ;;
+      -output|-mean|-average)
+        optarg average $1 "$2"
+        shift; ;;
+      -sd|-sdev|-stdev|-stddev|-sigma)
+        optarg stdev $1 "$2"
+        shift; ;;
       -spacing|-voxelsize|-resolution)
         local voxelsize
         optargs voxelsize "$@"
@@ -1601,7 +1607,7 @@ average_images_node()
     shift
   done
   [ -n "$node" ] || error "average_images_node: missing name argument"
-  [ -n "$average" ] || error "average_images_node: missing -output argument"
+  [ -n "$average" ] || error "average_images_node: missing -output, -average, or -mean argument"
   [ -z "$imgdir" ] || imgpre="$imgdir/$imgpre"
   [ -n "$refdir" ] || refdir="$imgdir"
   [ -n "$refsuf" ] || refsuf="$imgsuf"
@@ -1658,17 +1664,26 @@ average_images_node()
     write "$imglst" "$images"
 
     # node to create output directories
-    local avgdir="$(dirname "$average")"
     local deps=()
+    local pre=
+    local avgdir="$(dirname "$average")"
     if [[ "$avgdir" != '.' ]]; then
-      make_script "mkdirs.sh" "mkdir -p '$avgdir' || exit 1"
+      pre="mkdir -p '$avgdir' || exit 1"
+    fi
+    local stddir="$(dirname "$stdev")"
+    if [[ "$stddir" != '.' ]]; then
+      pre="mkdir -p '$stddir' || exit 1"
+    fi
+    if [ -n "$pre" ]; then
+      make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
       deps=('mkdirs')
     fi
 
     # add average node to DAG
-    local sub="arguments = \"$average -v -images '$imglst' -delim , -threads $threads $options\""
+    local sub="arguments = \"'$average' -v -images '$imglst' -delim , -threads $threads $options\""
+    [ -n "$stdev" ] || sub="$sub -stdev '$stdev'"
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
@@ -1676,7 +1691,11 @@ average_images_node()
     for dep in ${deps[@]}; do
       add_edge "average" "$dep"
     done
-    [ ! -f "$average" ] || node_done average
+    if [ -f "$average" ]; then
+      if [ -z "$stdev" ] || [ -f "$stdev" ]; then
+        node_done average
+      fi
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
