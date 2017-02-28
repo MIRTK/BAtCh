@@ -1,0 +1,39 @@
+#!/bin/bash
+[ $# -ge 1 ] || { echo "usage: $0 <table> [<append:0|1>] [<dagdir>] [<test_num>...]" 1>&2; exit 1; }
+
+csv="$1"
+shift
+
+append="${1:-1}"
+shift
+
+dagdir="$1"
+if [ -n "$dagdir" ]; then
+  shift
+else
+  dagdir="dag"
+fi
+
+tests=($@)
+[ ${#tests[@]} -gt 0 ] || tests=({1..50})
+
+remove_trailing_zeros()
+{
+  echo -n $1 | sed 's/\(\.[0-9]*[1-9]\)0*$/\1/;s/\.0*$//'
+}
+
+if [[ $append == false ]] || [[ $append == no ]] || [[ $apend == 0 ]]; then
+  echo "Test,Average Runtime [s]" > "$csv"
+fi
+for i in ${tests[@]}; do
+  n=0
+  s=0
+  for row in $(grep 'Finished in ' "$dagdir/tests/test_$i/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in ([[:digit:]]+) min ([[:digit:]]+) sec/\1,\2/'); do
+    time=(${row/,*/} ${row/*,/})
+    let s="$s + ${time[0]} * 60 + ${time[1]}"
+    let n++
+  done
+  avg=$(/usr/bin/bc -l <<< "$s / ($n * 60.0)")
+  avg=$(remove_trailing_zeros $avg)
+  echo "$i,$avg" >> "$csv"
+done
