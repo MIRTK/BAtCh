@@ -1,0 +1,36 @@
+#!/bin/bash
+[ $# -ge 1 ] || { echo "usage: $0 <table> [<append:0|1>] [<outdir>] [<test_id>...]" 1>&2; exit 1; }
+
+csv="$1"
+shift
+
+append="${1:-1}"
+shift
+
+outdir="${1:-$PWD}"
+shift
+
+tests=($@)
+[ ${#tests[@]} -gt 0 ] || tests=({1..50})
+
+for i in ${tests[@]}; do
+  if [ ! -f "$outdir/test_$i/overlap/micro_average.csv" ]; then
+    echo "test_$i: compute average of individual pairwise overlaps"
+    mirtk average-overlap "$outdir/test_$i/overlap/"*/*.csv --micro \
+        > "$outdir/test_$i/overlap/micro_average.csv"
+    [ $? -eq 0 ] || exit 1
+  fi
+done
+
+if [[ $append == false ]] || [[ $append == no ]] || [[ $apend == 0 ]]; then
+  echo "Test,cGM,WM,Ventricles,dGM" >> "$csv"
+fi
+for i in ${tests[@]}; do
+  echo -n "$i" >> "$csv"
+  for l in 2 3 5 7; do
+    dice=$(egrep "^$l," "$outdir/test_$i/overlap/micro_average.csv" | cut -d, -f6)
+    [ $? -eq 0 ] || exit 1
+    echo -n ",$dice" >> "$csv"
+  done
+  echo >> "$csv"
+done
