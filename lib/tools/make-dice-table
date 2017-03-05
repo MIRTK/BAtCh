@@ -14,21 +14,23 @@ tests=($@)
 [ ${#tests[@]} -gt 0 ] || tests=({1..50})
 
 for i in ${tests[@]}; do
-  if [ ! -f "$outdir/test_$i/overlap/micro_average.csv" ]; then
-    echo "test_$i: compute average of individual pairwise overlaps"
-    mirtk average-overlap "$outdir/test_$i/overlap/"*/*.csv --micro \
-        > "$outdir/test_$i/overlap/micro_average.csv"
+  name=test_$(printf %03d $i)
+  if [ ! -f "$outdir/$name/overlap/micro_average.csv" ]; then
+    echo "$name: compute average of individual pairwise overlaps"
+    mirtk average-overlap "$outdir/$name/overlap/"*/*.csv --micro \
+        > "$outdir/$name/overlap/micro_average.csv"
     [ $? -eq 0 ] || exit 1
   fi
 done
 
-if [[ $append == false ]] || [[ $append == no ]] || [[ $apend == 0 ]]; then
-  echo "Test,cGM,WM,Ventricles,dGM" >> "$csv"
+if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
+  echo "Test,cGM,WM,Ventricles,dGM" > "$csv"
 fi
 for i in ${tests[@]}; do
+  name=test_$(printf %03d $i)
   echo -n "$i" >> "$csv"
   for l in 2 3 5 7; do
-    dice=$(egrep "^$l," "$outdir/test_$i/overlap/micro_average.csv" | cut -d, -f6)
+    dice=$(egrep "^$l," "$outdir/$name/overlap/micro_average.csv" | cut -d, -f6)
     [ $? -eq 0 ] || exit 1
     echo -n ",$dice" >> "$csv"
   done

@@ -139,10 +139,10 @@ pairwise_registration_test()
         -imgdir   "$imgdir" \
         -imgpre   "$imgpre" \
         -imgsuf   "$imgsuf" \
-        -refid    "$refid" \
-        -refdir   "$refdir" \
-        -refpre   "$refpre" \
-        -refsuf   "$refsuf" \
+        -refid    "$nrmref" \
+        -refdir   "$nrmdir" \
+        -refpre   "$nrmpre" \
+        -refsuf   "$nrmsuf" \
         -hdrdofs  "$nrmdofs" \
         -dofins   "$outdir/$name/dofs" \
         -outdir   "$outdir/$name/images" \
@@ -154,10 +154,10 @@ pairwise_registration_test()
         -imgdir   "$clsdir" \
         -imgpre   "$clspre" \
         -imgsuf   "$clssuf" \
-        -refid    "$refid" \
-        -refdir   "$refdir" \
-        -refpre   "$refpre" \
-        -refsuf   "$refsuf" \
+        -refid    "$nrmref" \
+        -refdir   "$nrmdir" \
+        -refpre   "$nrmpre" \
+        -refsuf   "$nrmsuf" \
         -hdrdofs  "$nrmdofs" \
         -dofins   "$outdir/$name/dofs" \
         -outdir   "$outdir/$name/tissues" \
@@ -183,10 +183,10 @@ pairwise_registration_test()
         -imgdir    "$imgdir" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
-        -refid     "$refid" \
-        -refdir    "$refdir" \
-        -refpre    "$refpre" \
-        -refsuf    "$refsuf" \
+        -refid     "$nrmref" \
+        -refdir    "$nrmdir" \
+        -refpre    "$nrmpre" \
+        -refsuf    "$nrmsuf" \
         -dofin1    "$nrmdofs" \
         -dofin2    "$outdir/$name/dofs/average" \
         -mean      "$outdir/$name/images/mean.nii.gz" \
@@ -296,8 +296,9 @@ begin_dag "tests"
     for jacobian in 0 1e-3 1e-4 1e-5 1e-6; do
 
       let i++
-      echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
-      pairwise_registration_test "test_$i" "make_average" \
+      name="test_$(printf %03d $i)"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
           -similarity "$sim" \
@@ -324,8 +325,9 @@ begin_dag "tests"
   radius=5
   for bins in 100 150 200; do
     let i++
-    echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
-    pairwise_registration_test "test_$i" "make_average" \
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+    pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
         -similarity "$sim" \
@@ -349,8 +351,9 @@ begin_dag "tests"
   bins=64
   for radius in 0 1 2 3 4; do
     let i++
-    echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
-    pairwise_registration_test "test_$i" "make_average" \
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+    pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
         -similarity "$sim" \
@@ -365,9 +368,10 @@ begin_dag "tests"
   # ----------------------------------------------------------------------------
   # different model with similarity measure and regularization weights based on preceeding tests
   spacing=2.5
-  symmetric=true
   radius=5
   bins=64
+
+  symmetric=true
   for sim in 'nmi' 'ncc'; do
 
     if [[ $sim == 'nmi' ]]; then
@@ -378,12 +382,14 @@ begin_dag "tests"
       jacobian=1e-6
     fi
 
-    for model in None:Affine+SVFFD Sum:Affine+SVFFD LogSum:Affine+SVFFD; do
+    for model in None:Affine+SVFFD LogSum:Affine+SVFFD; do
       mffd=${model/:*}
       model=${model/*:}
+
       let i++
-      echo "test $i: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
-      pairwise_registration_test "test_$i" "make_average" \
+      name="test_$(printf %03d $i)"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
           -similarity "$sim" \
@@ -395,5 +401,47 @@ begin_dag "tests"
           -symmetric "$symmetric"
     done
   done
+
+  symmetric=false
+  for sim in 'nmi' 'ncc'; do
+
+    if [[ $sim == 'nmi' ]]; then
+      bending=1e-4
+      jacobian=1e-5
+    else
+      bending=1e-2
+      jacobian=1e-6
+    fi
+
+    for model in None:Affine+SVFFD LogSum:Affine+SVFFD Sum:Affine+SVFFD Sum:Affine+FFD; do
+      mffd=${model/:*}
+      model=${model/*:}
+
+      let i++
+      name="test_$(printf %03d $i)"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "$name" "make_average" \
+          -model "$model" \
+          -mffd "$mffd" \
+          -similarity "$sim" \
+          -bins "$bins" \
+          -radius "$radius" \
+          -spacing "$spacing" \
+          -bending "$bending" \
+          -jacobian "$jacobian" \
+          -symmetric "$symmetric"
+    done
+  done
+
+  # ----------------------------------------------------------------------------
+  # with padding, -interp "Fast linear with padding" (previous tests were without)
+  #
+  # Note: "Fast linear" interpolation identical to "Linear" so far because
+  #       Option "Precompute image derivatives" is ON by default.
+
+
+  # ----------------------------------------------------------------------------
+  # with cubic B-spline interpolation?
+
 
 end_dag
