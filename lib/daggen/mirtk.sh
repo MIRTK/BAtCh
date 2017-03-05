@@ -796,7 +796,12 @@ transform_image_node()
   local refpre=
   local refsuf='.nii.gz'
   local hdrdofs=
-  local dofins=
+  local dofin1=
+  local dofin2=
+  local dofin3=
+  local inv1='false'
+  local inv2='false'
+  local inv3='false'
   local dofpre=
   local dofsuf='.dof.gz'
   local padding=0
@@ -830,11 +835,16 @@ transform_image_node()
       -outid)              outid="$2"; shift; ;;
       -outpre)             outpre="$2"; shift; ;;
       -outsuf)             outsuf="$2"; shift; ;;
-      -hdrdofs)            optarg  hdrdofs $1 "$2"; shift; ;;
-      -dofins)             optarg  dofins  $1 "$2"; shift; ;;
-      -dofsuf)             optarg  dofsuf  $1 "$2"; shift; ;;
-      -bgvalue|-padding)   optarg  padding $1 "$2"; shift; ;;
-      -interp)             optarg  interp  $1 "$2"; shift; ;;
+      -hdrdofs)            optarg hdrdofs $1 "$2"; shift; ;;
+      -dofins|-dofin1) dofin1=(); optarg dofins  $1 "$2"; shift; ;;
+      -dofin2) dofin2=(); optarg dofin2 $1 "$2"; shift; ;;
+      -dofin3) dofin3=(); optarg dofin3 $1 "$2"; shift; ;;
+      -dofinv1) inv1='true'; ;;
+      -dofinv2) inv2='true'; ;;
+      -dofinv3) inv3='true'; ;;
+      -dofsuf)             optarg dofsuf  $1 "$2"; shift; ;;
+      -bgvalue|-padding)   optarg padding $1 "$2"; shift; ;;
+      -interp)             optarg interp  $1 "$2"; shift; ;;
       -labels)
         labels=()
         optargs labels "$@"
@@ -856,7 +866,6 @@ transform_image_node()
     shift
   done
   [ -n "$node"   ] || error "transform_image_node: missing name argument"
-  [ -n "$dofins" ] || error "transform_image_node: missing -dofins argument"
   [ -n "$outdir" ] || error "transform_image_node: missing -outdir argument"
   if [ -n "$srcid" ]; then
     [ ${#ids[@]} -eq 0 ] || error "transform_image_node: options -srcid and -subjects are mutually exclusive"
@@ -919,7 +928,27 @@ transform_image_node()
     sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
     [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
     sub="$sub -threads $threads -interp $interp"
-    sub="$sub -dofin '$dofins/${subdir}\$(source)$dofsuf'"
+    if [ -n "$dofin1" ]; then
+      if [[ $inv1 == true ]]; then
+        sub="$sub -dofin '$dofin1/${subdir}\$(source)$dofsuf'"
+      else
+        sub="$sub -dofin_i '$dofin1/${subdir}\$(source)$dofsuf'"
+      fi
+    fi
+    if [ -n "$dofin2" ]; then
+      if [[ $inv2 == true ]]; then
+        sub="$sub -dofin '$dofin2/${subdir}\$(source)$dofsuf'"
+      else
+        sub="$sub -dofin_i '$dofin2/${subdir}\$(source)$dofsuf'"
+      fi
+    fi
+    if [ -n "$dofin3" ]; then
+      if [[ $inv3 == true ]]; then
+        sub="$sub -dofin '$dofin3/${subdir}\$(source)$dofsuf'"
+      else
+        sub="$sub -dofin_i '$dofin3/${subdir}\$(source)$dofsuf'"
+      fi
+    fi
     [[ $invert == false ]] || sub="$sub -invert"
     [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
     if [ -n "$ref" ]; then
@@ -1696,6 +1725,87 @@ average_images_node()
         node_done average
       fi
     fi
+
+  }; end_dag
+  add_edge $node ${parent[@]}
+  info "Adding node $node... done"
+}
+
+# ------------------------------------------------------------------------------
+# compute per-voxel statistics of co-registered images
+aggregate_images_node()
+{
+  local node=
+  local parent=()
+  local ids=()
+  local imgdir=
+  local imgpre=''
+  local imgsuf='.nii.gz'
+  local outdir=
+  local outpre='$imgpre'
+  local outsuf='$imgsuf'
+  local mode='mean'
+  local normalization=
+  local padding=
+  local alpha=
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -parent) optargs parent "$@"; shift ${#parent[@]}; ;;
+      -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -mode) optarg mode $1 "$2"; shift; ;;
+      -imgdir) optarg imgdir $1 "$2"; shift; ;;
+      -imgpre) imgpre="$2"; shift; ;;
+      -imgsuf) imgsuf="$2"; shift; ;;
+      -output) optarg outdir $1 "$2"; shift; ;;
+      -padding|-bgvalue) optarg padding $1 "$2"; shift; ;;
+      -normalize|-normalization) optarg normalization $1 "$2"; shift; ;;
+      -alpha) optarg alpha $1 "$2"; shift; ;;
+      -*) error "aggregate_images_node: invalid option: $1"; ;;
+      *)
+        [ -z "$node" ] || error "aggregate_images_node: too many arguments"
+        node=$1; ;;
+    esac
+    shift
+  done
+  [ -n "$node"   ] || error "aggregate_images_node: missing name argument"
+  [ -n "$imgdir" ] || error "aggregate_images_node: missing -imgdir argument"
+  [ -n "$output" ] || error "aggregate_images_node: missing -output argument"
+
+  info "Adding node $node..."
+  begin_dag $node -splice || {
+
+    # create aggregate-images submission script
+    local sub="arguments = \"$mode"
+    for id in ${ids[@]}; do
+      sub="$sub '$imgdir/$imgpre${id}$imgsuf'"
+    done
+    [ -z "$alpha" ] || sub="$sub -alpha $alpha"
+    [ -z "$normalization" ] || sub="$sub -normalization $normalization"
+    [ -z "$padding" ] || sub="$sub -padding $padding"
+    sub="$sub -output '$output' -threads $threads"
+    sub="$sub\""
+    sub="$sub\noutput    = $_dagdir/aggregate_images.log"
+    sub="$sub\nerror     = $_dagdir/aggregate_images.log"
+    sub="$sub\nqueue"
+    make_sub_script "aggregate_images.sub" "$sub" -executable aggregate_images
+
+    # node to create output directory
+    local deps=()
+    local outdir="$(dirname "$output")"
+    if [[ "$outdir" != '.' ]]; then
+      make_script "mkdirs.sh" "mkdir -p '$outdir' || exit 1"
+      add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
+                        -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      deps=('mkdirs')
+    fi
+
+    # add sub-nodes to DAG
+    add_node "aggregate" -subfile "aggregate_images.sub"
+    for dep in ${deps[@]}; do
+      add_edge "aggregate" "$dep"
+    done
+    [ ! -f "$output" ] || node_done "aggregate"
 
   }; end_dag
   add_edge $node ${parent[@]}
