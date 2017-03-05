@@ -105,9 +105,9 @@ fi
 
 dofdir="$outdir/dofs"
 
-clsdir="$(dirname  "$lbldir/${clspre}id")"
-clspre="$(basename "$lbldir/${clspre}id")"
-clspre="${clspre:0:${#clspre}-2}"
+segdir="$(dirname  "$lbldir/${lblpre}id")"
+segpre="$(basename "$lbldir/${lblpre}id")"
+segpre="${segpre:0:${#segpre}-2}"
 
 # ==============================================================================
 # auxiliary functions
@@ -133,7 +133,7 @@ pairwise_registration_test()
         -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
         "$@"
 
-    # transform intensity images and tissue segmentations to each subject
+    # transform intensity images and segmentations to each subject
     transform_image_node "transform_images" -parent "register_images" \
         -subjects "${subids[@]}" \
         -imgdir   "$imgdir" \
@@ -149,52 +149,80 @@ pairwise_registration_test()
         -padding  "$bgvalue" \
         -include_identity
 
-    transform_image_node "transform_tissues" -parent "register_images" \
+    transform_image_node "transform_labels" -parent "register_images" \
         -subjects "${subids[@]}" \
-        -imgdir   "$clsdir" \
-        -imgpre   "$clspre" \
-        -imgsuf   "$clssuf" \
+        -imgdir   "$segdir" \
+        -imgpre   "$segpre" \
+        -imgsuf   "$segsuf" \
         -refid    "$nrmref" \
         -refdir   "$nrmdir" \
         -refpre   "$nrmpre" \
         -refsuf   "$nrmsuf" \
         -hdrdofs  "$nrmdofs" \
         -dofins   "$outdir/$name/dofs" \
-        -outdir   "$outdir/$name/tissues" \
-        -include_identity -labels   "all"
+        -outdir   "$outdir/$name/labels" \
+        -include_identity -labels "all"
 
-    # evaluate overlap of tissue segmentations
-    evaluate_overlap_node "evaluate_overlap" -parent "transform_tissues" \
+    # evaluate overlap of segmentations
+    evaluate_overlap_node "evaluate_overlap" -parent "transform_labels" \
         -subjects "${subids[@]}" \
-        -imgdir   "$outdir/$name/tissues" \
+        -imgdir   "$outdir/$name/labels" \
         -imgpre   "$imgpre" \
         -imgsuf   "$imgsuf" \
         -outdir   "$outdir/$name/overlap" \
         -metric   TP FP FN TN Sensitivity Specificity Precision Accuracy Dice Jaccard
 
-    # average images transformed by average transformations
+    # transform images to average space
     average_dofs_node "average_dofs" -parent "register_images" \
         -subjects "${subids[@]}" \
         -dofins   "$outdir/$name/dofs" \
         -dofdir   "$outdir/$name/dofs/average"
 
-    average_images_node "average_images" -parent "average_dofs" \
+    transform_image_node "transform_images_to_atlas" -parent "average_dofs" \
         -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -hdrdofs  "$nrmdofs" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$outdir/$name/dofs/average" \
+        -outdir   "$outdir/$name/images/atlas" \
+        -padding  "$bgvalue"
+
+    # compute voxel-wise statistics of co-registered images
+    aggregate_images_node "compute_mean" -parent "transform_images_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "mean" \
         -imgdir    "$imgdir" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
-        -refid     "$nrmref" \
-        -refdir    "$nrmdir" \
-        -refpre    "$nrmpre" \
-        -refsuf    "$nrmsuf" \
-        -dofin1    "$nrmdofs" \
-        -dofin2    "$outdir/$name/dofs/average" \
-        -mean      "$outdir/$name/images/mean.nii.gz" \
-        -sdev      "$outdir/$name/images/sdev.nii.gz" \
-        -padding   "$bgvalue" \
-        -normalize "$normalization" \
-        -rescale   "$rescaling" \
-        -sharpen   "$sharpen"
+        -output    "$outdir/$name/stats/mean.nii.gz" \
+        -normalize "z-score" \
+        -padding   "$bgvalue"
+
+    aggregate_images_node "compute_stdev" -parent "transform_images_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "stdev" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -output    "$outdir/$name/stats/stdev.nii.gz" \
+        -normalize "z-score" \
+        -padding   "$bgvalue"
+
+    aggregate_images_node "compute_gini" -parent "transform_images_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "gini" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -normalize "z-score" \
+        -output    "$outdir/$name/stats/gini.nii.gz" \
+        -padding   "$bgvalue"
 
   end_dag
 }
