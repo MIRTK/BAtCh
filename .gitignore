@@ -11,6 +11,7 @@
 /lib/tools/invert-dof
 /lib/tools/compose-dofs
 /lib/tools/average-images
+/lib/tools/aggregate-images
 /lib/tools/average-dofs
 /lib/tools/transform-image
 /lib/tools/edit-image
