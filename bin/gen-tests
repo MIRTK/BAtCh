@@ -187,11 +187,10 @@ pairwise_registration_test()
         -tgtdir   "$nrmdir" \
         -tgtpre   "$nrmpre" \
         -tgtsuf   "$nrmsuf" \
-        -hdrdofs  "$nrmdofs" \
         -dofin1   "$nrmdofs" \
         -dofin2   "$outdir/$name/dofs/average" \
         -outdir   "$outdir/$name/images/atlas" \
-        -padding  "$bgvalue"
+        -padding  "$bgvalue" -invert
 
     # compute voxel-wise statistics of co-registered images
     aggregate_images_node "compute_mean" -parent "transform_images_to_atlas" \
@@ -459,6 +458,45 @@ begin_dag "tests"
           -jacobian "$jacobian" \
           -symmetric "$symmetric"
     done
+  done
+
+  # ----------------------------------------------------------------------------
+  # exclude constraints from energy value, fit line for convergence test
+  spacing=2.5
+  symmetric='true'
+  mffd='None'
+  model='SVFFD'
+  bins=64
+  radius=3
+  for sim in nmi ncc; do
+
+    if [[ $sim == nmi ]]; then
+      be=(1e-2 1e-3 1e-4)
+      jl=(0 1e-4 1e-3)
+    else
+      be=(1e-2 5-e3 1e-3)
+      jl=(0 1e-6 1e-5)
+    fi
+
+    for bending  in ${be[@]}; do
+    for jacobian in ${jl[@]}; do
+
+      let i++
+      name="test_$(printf %03d $i)"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian"
+      pairwise_registration_test "$name" "make_average" \
+          -model "$model" \
+          -mffd "$mffd" \
+          -similarity "$sim" \
+          -bins "$bins" \
+          -radius "$radius" \
+          -spacing "$spacing" \
+          -bending "$bending" \
+          -jacobian "$jacobian" \
+          -symmetric "$symmetric" \
+          -maxstep 4 -exclude-constraints
+
+    done; done
   done
 
   # ----------------------------------------------------------------------------

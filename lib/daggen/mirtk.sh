@@ -146,6 +146,7 @@ register_node()
   local sym='false'
   local group=1
   local params=
+  local maxstep=0
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -260,6 +261,9 @@ register_node()
       -maxres)
         optarg resolution $1 "$2"
         shift; ;;
+      -maxstep)
+        optarg maxstep $1 "$2"
+        shift; ;;
       -levels)
         unset -v levels
         optargs levels "$@"
@@ -288,6 +292,9 @@ register_node()
           sym='true'
         fi
         [[ $sym == false ]] || ic='true'
+        ;;
+      -exclude-constraints)
+        params="$params\nExclude constraints from energy value = Yes"
         ;;
       -ds|-spacing)
         optarg w $1 "$2"
@@ -424,6 +431,10 @@ register_node()
     if [ -n "$padding" ]; then
       cfg="$cfg\nPadding value of image 1         = $padding"
       cfg="$cfg\nPadding value of image 2         = $padding"
+    fi
+    if [ $maxstep -gt 0 ]; then
+      cfg="$cfg\nStrict total step length range   = Yes"
+      cfg="$cfg\nMaximum length of steps          = $maxstep"
     fi
     cfg="$cfg\n$params\n"
     if [ -n "$resolution" ]; then
@@ -802,6 +813,9 @@ transform_image_node()
   local inv1='false'
   local inv2='false'
   local inv3='false'
+  local dofid1='$(source)'
+  local dofid2='$(source)'
+  local dofid3='$(source)'
   local dofpre=
   local dofsuf='.dof.gz'
   local padding=0
@@ -836,9 +850,12 @@ transform_image_node()
       -outpre)             outpre="$2"; shift; ;;
       -outsuf)             outsuf="$2"; shift; ;;
       -hdrdofs)            optarg hdrdofs $1 "$2"; shift; ;;
-      -dofins|-dofin1) dofin1=(); optarg dofins  $1 "$2"; shift; ;;
+      -dofins|-dofin1) dofin1=(); optarg dofin1  $1 "$2"; shift; ;;
       -dofin2) dofin2=(); optarg dofin2 $1 "$2"; shift; ;;
       -dofin3) dofin3=(); optarg dofin3 $1 "$2"; shift; ;;
+      -dofid1) optarg dofid1 $1 "$2"; shift; ;;
+      -dofid2) optarg dofid2 $1 "$2"; shift; ;;
+      -dofid3) optarg dofid3 $1 "$2"; shift; ;;
       -dofinv1) inv1='true'; ;;
       -dofinv2) inv2='true'; ;;
       -dofinv3) inv3='true'; ;;
@@ -922,33 +939,35 @@ transform_image_node()
 
     local sub
 
+    # source transformations
+    local dofins=()
+    local dofinv=()
+    if [ -n "$dofin1" ]; then
+      dofins=("${dofins[@]}" "$dofin1/$subdir$dofid1$dofsuf")
+      dofinv=(${dofinv[@]} $inv1)
+    fi
+    if [ -n "$dofin2" ]; then
+      dofins=("${dofins[@]}" "$dofin2/$subdir$dofid2$dofsuf")
+      dofinv=(${dofinv[@]} $inv2)
+    fi
+    if [ -n "$dofin3" ]; then
+      dofins=("${dofins[@]}" "$dofin3/$subdir$dofid3$dofsuf")
+      dofinv=(${dofinv[@]} $inv3)
+    fi
+
     # create generic transformation submission script
     sub="arguments    = \""
     sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
     sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
     [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
     sub="$sub -threads $threads -interp $interp"
-    if [ -n "$dofin1" ]; then
-      if [[ $inv1 == true ]]; then
-        sub="$sub -dofin '$dofin1/${subdir}\$(source)$dofsuf'"
-      else
-        sub="$sub -dofin_i '$dofin1/${subdir}\$(source)$dofsuf'"
-      fi
-    fi
-    if [ -n "$dofin2" ]; then
-      if [[ $inv2 == true ]]; then
-        sub="$sub -dofin '$dofin2/${subdir}\$(source)$dofsuf'"
-      else
-        sub="$sub -dofin_i '$dofin2/${subdir}\$(source)$dofsuf'"
-      fi
-    fi
-    if [ -n "$dofin3" ]; then
-      if [[ $inv3 == true ]]; then
-        sub="$sub -dofin '$dofin3/${subdir}\$(source)$dofsuf'"
-      else
-        sub="$sub -dofin_i '$dofin3/${subdir}\$(source)$dofsuf'"
-      fi
-    fi
+    local i=0
+    while [ $i -lt ${#dofins[@]} ]; do
+      sub="$sub -dofin"
+      [[ ${dofinv[i]} != true ]] || sub="${sub}_i"
+      sub="$sub '${dofins[i]}'"
+      let i++
+    done
     [[ $invert == false ]] || sub="$sub -invert"
     [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
     if [ -n "$ref" ]; then
@@ -972,7 +991,7 @@ transform_image_node()
       sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
       sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
       [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
-      sub="$sub -threads $threads -interp $interp -dofin identity"
+      sub="$sub -threads $threads -interp $interp -dofin Id"
       [ ${#spacing[@]} -eq 0 ] || sub="$sub -spacing ${spacing[@]}"
       [ -z "$ref" ] || sub="$sub -target '$ref'"
       if [ ${#labels[@]} -gt 0 ]; then
@@ -1741,9 +1760,7 @@ aggregate_images_node()
   local imgdir=
   local imgpre=''
   local imgsuf='.nii.gz'
-  local outdir=
-  local outpre='$imgpre'
-  local outsuf='$imgsuf'
+  local output=
   local mode='mean'
   local normalization=
   local padding=
@@ -1757,7 +1774,7 @@ aggregate_images_node()
       -imgdir) optarg imgdir $1 "$2"; shift; ;;
       -imgpre) imgpre="$2"; shift; ;;
       -imgsuf) imgsuf="$2"; shift; ;;
-      -output) optarg outdir $1 "$2"; shift; ;;
+      -output) optarg output $1 "$2"; shift; ;;
       -padding|-bgvalue) optarg padding $1 "$2"; shift; ;;
       -normalize|-normalization) optarg normalization $1 "$2"; shift; ;;
       -alpha) optarg alpha $1 "$2"; shift; ;;
@@ -1788,7 +1805,7 @@ aggregate_images_node()
     sub="$sub\noutput    = $_dagdir/aggregate_images.log"
     sub="$sub\nerror     = $_dagdir/aggregate_images.log"
     sub="$sub\nqueue"
-    make_sub_script "aggregate_images.sub" "$sub" -executable aggregate_images
+    make_sub_script "aggregate_images.sub" "$sub" -executable aggregate-images
 
     # node to create output directory
     local deps=()
