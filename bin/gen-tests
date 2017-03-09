@@ -196,7 +196,7 @@ pairwise_registration_test()
     aggregate_images_node "compute_mean" -parent "transform_images_to_atlas" \
         -subjects  "${subids[@]}" \
         -mode      "mean" \
-        -imgdir    "$imgdir" \
+        -imgdir    "$outdir/$name/images/atlas" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -output    "$outdir/$name/stats/mean.nii.gz" \
@@ -206,7 +206,7 @@ pairwise_registration_test()
     aggregate_images_node "compute_stdev" -parent "transform_images_to_atlas" \
         -subjects  "${subids[@]}" \
         -mode      "stdev" \
-        -imgdir    "$imgdir" \
+        -imgdir    "$outdir/$name/images/atlas" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -output    "$outdir/$name/stats/stdev.nii.gz" \
@@ -216,7 +216,7 @@ pairwise_registration_test()
     aggregate_images_node "compute_gini" -parent "transform_images_to_atlas" \
         -subjects  "${subids[@]}" \
         -mode      "gini" \
-        -imgdir    "$imgdir" \
+        -imgdir    "$outdir/$name/images/atlas" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -normalize "z-score" \
