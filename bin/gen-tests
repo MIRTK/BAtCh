@@ -68,6 +68,13 @@ while [ $o -lt $# ]; do
   let o++
 done
 
+_lbldir="$lbldir"
+_lblpre="$lblpre"
+
+lbldir="$(dirname  "$_lbldir/${_lblpre}id")"
+lblpre="$(basename "$_lbldir/${_lblpre}id")"
+lblpre="${lblpre:0:${#lblpre}-2}"
+
 verbose=0
 sublst="$1"; shift
 refimg="$1"; shift
@@ -105,10 +112,6 @@ fi
 
 dofdir="$outdir/dofs"
 
-segdir="$(dirname  "$lbldir/${lblpre}id")"
-segpre="$(basename "$lbldir/${lblpre}id")"
-segpre="${segpre:0:${#segpre}-2}"
-
 # ==============================================================================
 # auxiliary functions
 # ==============================================================================
@@ -133,7 +136,7 @@ pairwise_registration_test()
         -domain   "$nrmdir/$nrmpre$nrmref$nrmsuf" \
         "$@"
 
-    # transform intensity images and segmentations to each subject
+    # transform intensity images to each subject
     transform_image_node "transform_images" -parent "register_images" \
         -subjects "${subids[@]}" \
         -imgdir   "$imgdir" \
@@ -149,11 +152,12 @@ pairwise_registration_test()
         -padding  "$bgvalue" \
         -include_identity
 
+    # evaluate overlap of segmentations
     transform_image_node "transform_labels" -parent "register_images" \
         -subjects "${subids[@]}" \
-        -imgdir   "$segdir" \
-        -imgpre   "$segpre" \
-        -imgsuf   "$segsuf" \
+        -imgdir   "$lbldir" \
+        -imgpre   "$lblpre" \
+        -imgsuf   "$lblsuf" \
         -refid    "$nrmref" \
         -refdir   "$nrmdir" \
         -refpre   "$nrmpre" \
@@ -163,7 +167,6 @@ pairwise_registration_test()
         -outdir   "$outdir/$name/labels" \
         -include_identity -labels "all"
 
-    # evaluate overlap of segmentations
     evaluate_overlap_node "evaluate_overlap" -parent "transform_labels" \
         -subjects "${subids[@]}" \
         -imgdir   "$outdir/$name/labels" \
@@ -238,10 +241,10 @@ begin_dag "tests"
 
       register_node "rigid" \
           -subjects "${subids[@]}" \
-          -srcid    "$refid" \
-          -srcdir   "$refdir" \
-          -srcpre   "$refpre" \
-          -srcsuf   "$refsuf" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
@@ -251,6 +254,7 @@ begin_dag "tests"
           -sim      "NMI" \
           -bins     "64" \
           -bgvalue  "$bgvalue" \
+          -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
@@ -258,10 +262,10 @@ begin_dag "tests"
 
       register_node "affine" -parent "rigid" \
           -subjects "${subids[@]}" \
-          -srcid    "$refid" \
-          -srcdir   "$refdir" \
-          -srcpre   "$refpre" \
-          -srcsuf   "$refsuf" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
@@ -272,11 +276,16 @@ begin_dag "tests"
           -interp   "$interpolation" \
           -sim      "NMI" \
           -bins     "64" \
-          -padding  "$bgvalue" \
+          -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   3 1
 
-      nrmdofs="$dofdir/1.2_aff"
+      invert_dof_node "invert" -parent "affine" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.2_aff" \
+          -dofdir   "$dofdir/1.3_inv" \
+
+      nrmdofs="$dofdir/1.3_inv"
 
   end_dag
 

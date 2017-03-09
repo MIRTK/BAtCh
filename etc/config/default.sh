@@ -28,7 +28,7 @@ imgdir='../images'                    # directory of anatomical brain images
 imgpre=''                             # brain image file name prefix
 imgsuf='.nii.gz'                      # brain image file name suffix
 bgvalue=0                             # background value of skull-stripped images
-padding=$bgvalue                      # background threshold used to define image foreground
+inclbg=false                          # whether to include background in similarity
                                       # (used only for deformable registration)
 
 lbldir='../labels'                    # base directory of available segmentations

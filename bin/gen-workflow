@@ -130,6 +130,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bins     "$bins" \
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
+          -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
@@ -153,7 +154,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -sim      "$similarity" \
           -bins     "$bins" \
           -radius   "$radius" \
-          -padding  "$bgvalue" \
+          -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   3 1
 
@@ -175,6 +176,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bins     "$bins" \
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
+          -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
@@ -195,7 +197,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -sim      "$similarity" \
           -bins     "$bins" \
           -radius   "$radius" \
-          -padding  "$bgvalue" \
+          -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   3 1 \
           -group    20
@@ -222,7 +224,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -sim      "$similarity" \
           -bins     "$bins" \
           -radius   "$radius" \
-          -padding  "$bgvalue" \
+          -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   2 \
           -group    20
@@ -304,7 +306,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -srcid   "$refid" \
           -srcpre  "$refpre" \
           -srcsuf  "$refsuf" \
-          -padding "$bgvalue" \
+          -bgvalue "$bgvalue" \
           -dofdir  "$tmpdir" \
           -dofid   "$nrmref"
 
@@ -368,7 +370,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bins      "$bins" \
           -radius    "$radius" \
           -bgvalue   "$bgvalue" \
-          -padding   "$padding" \
+          -inclbg    "$inclbg" \
           -hdrdofs   "$nrmdofs" \
           -dofins    "identity" \
           -dofdir    "$dofdir/2.1_def" \
@@ -479,7 +481,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -bins      "$bins" \
                 -radius    "$radius" \
                 -bgvalue   "$bgvalue" \
-                -padding   "$padding" \
+                -inclbg    "$inclbg" \
                 -hdrdofs   "$nrmdofs" \
                 -dofins    "identity" \
                 -dofdir    "$nxtdofs/t$t" \

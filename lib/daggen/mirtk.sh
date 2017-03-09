@@ -139,7 +139,7 @@ register_node()
   local dofid=
   local dofsuf='.dof.gz'
   local bgvalue=
-  local padding=
+  local inclbg=false
   local segdir=
   local segments=()
   local ic='false'
@@ -252,8 +252,8 @@ register_node()
       -bgvalue)
         optarg bgvalue $1 "$2"
         shift; ;;
-      -padding)
-        optarg padding $1 "$2"
+      -inclbg)
+        optarg inclbg $1 "$2"
         shift; ;;
       -interp)
         optarg interp $1 "$2"
@@ -347,7 +347,7 @@ register_node()
   [ -n "$srcdir"                ] || srcdir="$imgdir"
   [ -n "$srcpre" -o -n "$srcid" ] || srcpre="$imgpre"
   [ -n "$srcsuf"                ] || srcsuf="$imgsuf"
-  [ -z "$padding" ] || interp="$interp with padding"
+  [[ $inclbg == true ]] || interp="$interp with padding"
   if [ -n "$dofid" ]; then
     if [ -z "$tgtid" -o -z "$srcid" ]; then
       error "register_node: -dofid requires a fixed -tgtid and -srcid"
@@ -429,9 +429,10 @@ register_node()
       cfg="$cfg\nBackground value of image 1      = $bgvalue"
       cfg="$cfg\nBackground value of image 2      = $bgvalue"
     fi
-    if [ -n "$padding" ]; then
-      cfg="$cfg\nPadding value of image 1         = $padding"
-      cfg="$cfg\nPadding value of image 2         = $padding"
+    if [[ $inclbg == true ]]; then
+      cfg="$cfg\nExclude background               = No"
+    else
+      cfg="$cfg\nExclude background               = Yes"
     fi
     if [ $maxstep -gt 0 ]; then
       cfg="$cfg\nStrict total step length range   = Yes"
@@ -446,9 +447,6 @@ register_node()
         res=$('/usr/bin/bc' -l <<< "2^($lvl-1) * $resolution")
         res=$(remove_trailing_zeros $res)
         cfg="$cfg\nResolution = $res"
-        if [ $lvl -eq 1 ]; then
-          cfg="$cfg\nBlurring = 0"
-        fi
         let lvl++
       done
     fi
