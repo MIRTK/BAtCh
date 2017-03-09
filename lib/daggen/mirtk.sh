@@ -421,6 +421,7 @@ register_node()
     cfg="$cfg\nNo. of bins                      = $bins"
     cfg="$cfg\nLocal window radius [box]        = $radius vox"
     cfg="$cfg\nMaximum streak of rejected steps = 2"
+    cfg="$cfg\nNo. of last function values      = 10"
     cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of resolution levels         = $nlevels"
     cfg="$cfg\nFinal resolution level           = ${levels[1]}"
@@ -1731,7 +1732,7 @@ average_images_node()
 
     # add average node to DAG
     local sub="arguments = \"'$average' -v -images '$imglst' -delim , -threads $threads $options\""
-    [ -n "$stdev" ] || sub="$sub -stdev '$stdev'"
+    [ -z "$stdev" ] || sub="$sub -stdev '$stdev'"
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
