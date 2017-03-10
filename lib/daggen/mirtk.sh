@@ -347,7 +347,6 @@ register_node()
   [ -n "$srcdir"                ] || srcdir="$imgdir"
   [ -n "$srcpre" -o -n "$srcid" ] || srcpre="$imgpre"
   [ -n "$srcsuf"                ] || srcsuf="$imgsuf"
-  [[ $inclbg == true ]] || interp="$interp with padding"
   if [ -n "$dofid" ]; then
     if [ -z "$tgtid" -o -z "$srcid" ]; then
       error "register_node: -dofid requires a fixed -tgtid and -srcid"
