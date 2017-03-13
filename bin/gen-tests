@@ -283,7 +283,7 @@ begin_dag "tests"
       invert_dof_node "invert" -parent "affine" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_aff" \
-          -dofdir   "$dofdir/1.3_inv" \
+          -dofdir   "$dofdir/1.3_inv"
 
       nrmdofs="$dofdir/1.3_inv"
 
