@@ -325,7 +325,8 @@ begin_dag "tests"
   symmetric=true
   bins=64
   radius=5
-  inclbg=true
+  interp='Linear with padding'
+  inclbg=false
 
   for sim in 'nmi' 'ncc'; do
   for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
@@ -333,7 +334,7 @@ begin_dag "tests"
 
     let i++
     name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
     pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
@@ -344,6 +345,7 @@ begin_dag "tests"
         -bending "$bending" \
         -jacobian "$jacobian" \
         -symmetric "$symmetric" \
+        -interp "$interp" \
         -inclbg "$inclbg"
 
   done; done; done
@@ -358,12 +360,13 @@ begin_dag "tests"
   jacobian=1e-5
   sim='nmi'
   radius=5
-  inclbg=true
+  interp='Linear with padding'
+  inclbg=false
 
   for bins in 100 150 200; do
     let i++
     name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
     pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
@@ -374,6 +377,7 @@ begin_dag "tests"
         -bending "$bending" \
         -jacobian "$jacobian" \
         -symmetric "$symmetric" \
+        -interp "$interp" \
         -inclbg "$inclbg"
   done
 
@@ -387,12 +391,13 @@ begin_dag "tests"
   jacobian=1e-6
   sim='ncc'
   bins=64
-  inclbg=true
+  interp='Linear with padding'
+  inclbg=false
 
   for radius in 0 1 2 3 4; do
     let i++
     name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
     pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
@@ -403,6 +408,7 @@ begin_dag "tests"
         -bending "$bending" \
         -jacobian "$jacobian" \
         -symmetric "$symmetric" \
+        -interp "$interp" \
         -inclbg "$inclbg"
   done
 
@@ -411,7 +417,8 @@ begin_dag "tests"
   spacing=2.5
   radius=5
   bins=64
-  inclbg=true
+  interp='Linear with padding'
+  inclbg=false
 
   symmetric=true
   for sim in 'nmi' 'ncc'; do
@@ -430,7 +437,7 @@ begin_dag "tests"
 
       let i++
       name="test_$(printf %03d $i)"
-      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
       pairwise_registration_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
@@ -441,6 +448,7 @@ begin_dag "tests"
           -bending "$bending" \
           -jacobian "$jacobian" \
           -symmetric "$symmetric" \
+          -interp "$interp" \
           -inclbg "$inclbg"
     done
   done
@@ -462,7 +470,7 @@ begin_dag "tests"
 
       let i++
       name="test_$(printf %03d $i)"
-      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
       pairwise_registration_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
@@ -473,6 +481,7 @@ begin_dag "tests"
           -bending "$bending" \
           -jacobian "$jacobian" \
           -symmetric "$symmetric" \
+          -interp "$interp" \
           -inclbg "$inclbg"
     done
   done
@@ -485,7 +494,8 @@ begin_dag "tests"
   model='SVFFD'
   bins=64
   radius=3
-  inclbg=true
+  interp='Linear with padding'
+  inclbg=false
 
   for sim in nmi ncc; do
 
@@ -502,7 +512,7 @@ begin_dag "tests"
 
       let i++
       name="test_$(printf %03d $i)"
-      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
       pairwise_registration_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
@@ -513,17 +523,15 @@ begin_dag "tests"
           -bending "$bending" \
           -jacobian "$jacobian" \
           -symmetric "$symmetric" \
+          -interp "$interp" \
           -inclbg "$inclbg" \
-          -maxstep 4 -exclude-constraints
+          -maxstep 2 -exclude-constraints
 
     done; done
   done
 
   # ----------------------------------------------------------------------------
-  # exclude background from downsampling, interpolation, and similarity
-  #
-  # Note: "Fast linear" interpolation identical to "Linear" so far because
-  #       Option "Precompute image derivatives" is ON by default. 
+  # include background in downsampling, interpolation, and similarity
 
   mffd='None'
   model='SVFFD'
@@ -531,7 +539,8 @@ begin_dag "tests"
   symmetric=true
   bins=64
   radius=5
-  inclbg=false
+  interp='Linear'
+  inclbg=true
 
   for sim in 'nmi' 'ncc'; do
   for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
@@ -539,7 +548,7 @@ begin_dag "tests"
 
     let i++
     name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
     pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
@@ -550,10 +559,10 @@ begin_dag "tests"
         -bending "$bending" \
         -jacobian "$jacobian" \
         -symmetric "$symmetric" \
+        -interp "$interp" \
         -inclbg "$inclbg"
 
   done; done; done
-
 
   # ----------------------------------------------------------------------------
   # with cubic B-spline interpolation?

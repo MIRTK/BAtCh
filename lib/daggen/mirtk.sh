@@ -419,9 +419,7 @@ register_node()
     cfg="$cfg\nSimilarity measure               = $similarity"
     cfg="$cfg\nNo. of bins                      = $bins"
     cfg="$cfg\nLocal window radius [box]        = $radius vox"
-    cfg="$cfg\nMaximum streak of rejected steps = 2"
     cfg="$cfg\nNo. of last function values      = 10"
-    cfg="$cfg\nStrict step length range         = No"
     cfg="$cfg\nNo. of resolution levels         = $nlevels"
     cfg="$cfg\nFinal resolution level           = ${levels[1]}"
     if [ -n "$bgvalue" ]; then
@@ -429,14 +427,18 @@ register_node()
       cfg="$cfg\nBackground value of image 2      = $bgvalue"
     fi
     if [[ $inclbg == true ]]; then
-      cfg="$cfg\nExclude background               = No"
+      cfg="$cfg\nDownsample with padding          = No"
+      cfg="$cfg\nImage similarity foreground      = Mask"
     else
-      cfg="$cfg\nExclude background               = Yes"
+      cfg="$cfg\nDownsample with padding          = Yes"
+      cfg="$cfg\nImage similarity foreground      = Overlap"
     fi
     if [ $maxstep -gt 0 ]; then
-      cfg="$cfg\nStrict total step length range   = Yes"
       cfg="$cfg\nMaximum length of steps          = $maxstep"
+      cfg="$cfg\nStrict total step length range   = Yes"
     fi
+    cfg="$cfg\nStrict step length range         = No"
+    cfg="$cfg\nMaximum streak of rejected steps = 2"
     cfg="$cfg\n$params\n"
     if [ -n "$resolution" ]; then
       cfg="$cfg\n"
@@ -927,7 +929,7 @@ transform_image_node()
     let N="${#ids[@]} * (${#ids[@]} - 1)"
   fi
   local subdir=
-  if [ -z "$tgtid$srcid" ]; then
+  if [ -z "$tgtid" ]; then
     subdir="\$(target)/"
   fi
 
@@ -1034,7 +1036,11 @@ transform_image_node()
         add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
       fi
       [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
-      [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+      if [[ outid == '$(source)' ]]; then
+        [ ! -f "$outdir/$outpre$id2$outsuf" ] || node_done "$job_node"
+      else
+        [ ! -f "$outdir/$outpre$outid$outsuf" ] || node_done "$job_node"
+      fi
       n=1 && info "  Added job `printf '%3d of %d' $n $N`"
     elif [ -n "$srcid" ]; then
       id2="$srcid"
@@ -1048,7 +1054,7 @@ transform_image_node()
           add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
         [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
-        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done
     elif [ -n "$tgtid" ]; then
@@ -1063,7 +1069,7 @@ transform_image_node()
           add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
         [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
-        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        [ ! -f "$outdir/$outpre$id2$outsuf" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done
     else
@@ -1078,7 +1084,7 @@ transform_image_node()
           add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
         [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
-        [ ! -f "$outdir/$id1/$id2$suffix" ] || node_done "$job_node"
+        [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
         let n++ && info "  Added job `printf '%3d of %d' $n $N`"
       done; done
     fi

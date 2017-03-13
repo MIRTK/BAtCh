@@ -23,18 +23,28 @@ remove_trailing_zeros()
 }
 
 if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
-  echo "Test,Average Runtime [s]" > "$csv"
+  echo "Test,CPU Time [min],Runtime [min]" > "$csv"
 fi
 for i in ${tests[@]}; do
-  n=0
-  s=0
   name=test_$(printf %03d $i)
-  for row in $(grep 'Finished in ' "$dagdir/tests/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in ([[:digit:]]+) min ([[:digit:]]+) sec/\1,\2/'); do
-    time=(${row/,*/} ${row/*,/})
-    let s="$s + ${time[0]} * 60 + ${time[1]}"
+  n=0
+  # CPU time
+  cpu_time=0
+  for row in $(grep 'CPU time is ' "$dagdir/tests/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/CPU time is +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+    IFS=',' read -ra cols <<< "$row"
+    let cpu_time="$cpu_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
     let n++
   done
-  avg=$(/usr/bin/bc -l <<< "$s / ($n * 60.0)")
-  avg=$(remove_trailing_zeros $avg)
-  echo "$i,$avg" >> "$csv"
+  cpu_time=$(/usr/bin/bc -l <<< "$cpu_time / ($n * 60.0)")
+  cpu_time=$(remove_trailing_zeros $cpu_time)
+  # wall time
+  wall_time=0
+  for row in $(grep 'Finished in ' "$dagdir/tests/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+    IFS=',' read -ra cols <<< "$row"
+    let wall_time="$wall_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
+    let n++
+  done
+  wall_time=$(/usr/bin/bc -l <<< "$wall_time / ($n * 60.0)")
+  wall_time=$(remove_trailing_zeros $wall_time)
+  echo "$i,$cpu_time,$wall_time" >> "$csv"
 done

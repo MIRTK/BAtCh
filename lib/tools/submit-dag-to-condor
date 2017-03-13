@@ -1,7 +1,7 @@
 #!/bin/bash
 
 bindir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
-appdir="$(cd "$bindir/.." && pwd)"
+appdir="$(cd "$bindir/../.." && pwd)"
 source "$appdir/lib/daggen/utils.sh" || exit 1
 
 # usage
@@ -26,7 +26,7 @@ log=
 nosubmit=
 rescue=true
 priority=0
-keytab="/homes/$USER/kerb5.keytab"
+keytab="/homes/$USER/.krb5kt"
 [ -f "$keytab" ] || keytab=
 
 while [ $# -gt 0 ]; do
@@ -34,6 +34,7 @@ while [ $# -gt 0 ]; do
     -d|-dag)      optarg dag      $1 "$2"; shift; ;;
     -p|-priority) optarg priority $1 "$2"; shift; ;;
     -l|-log)      optarg log      $1 "$2"; shift; ;;
+    -k|-key) keytab="$2"; shift; ;;
     -norescue) rescue=false; ;;
     -nosubmit) nosubmit='-no_submit'; ;;
     -h|-help|--help) print_help; exit 0; ;;

@@ -1,7 +1,7 @@
 #!/bin/bash
-[ $# -ge 1 ] || { echo "usage: $0 <table> [<append:0|1>] [<outdir>] [<test_id>...]" 1>&2; exit 1; }
+[ $# -ge 1 ] || { echo "usage: $0 <table> [<append:0|1>] [<outdir> <test_id>...|<csvdir>]" 1>&2; exit 1; }
 
-csv="$1"
+table="$1"
 shift
 
 append="${1:-1}"
@@ -11,13 +11,21 @@ outdir="${1:-$PWD}"
 shift
 
 tests=($@)
-[ ${#tests[@]} -gt 0 ] || tests=({1..50})
+[ ${#tests[@]} -gt 0 ] || tests=(0)
 
 for i in ${tests[@]}; do
-  name=test_$(printf %03d $i)
-  if [ ! -f "$outdir/$name/overlap/average.csv" ]; then
-    echo "$name: compute average of individual pairwise overlaps"
-    mirtk average-overlap "$outdir/$name/overlap/"*/*.csv \
+  if [ $i -eq 0 ]; then
+    name=
+    csvdir="$outdir"
+  else
+    name=$(printf 'test_%03d' $i)
+    csvdir="$outdir/$name/overlap"
+  fi
+  avgcsv="$csvdir/average.csv"
+  if [ ! -f "$avgcsv" ]; then
+    [ -z "$name" ] || echo "$name: compute average of individual pairwise overlaps"
+    csvlst=($(find "$csvdir" -name '*.csv' -type f))
+    mirtk average-overlap "${csvlst[@]}" \
         --measure DSC \
         --segment BG 84 \
         --segment CSF 83 \
@@ -28,26 +36,42 @@ for i in ${tests[@]}; do
         --segment BS+CB 17 18 19 \
         --segment Amygdala+Hippocampus 1..4 \
         --segment Ventricles 49 50 \
-        --output  "$outdir/$name/overlap/average.csv"
+        --output  "$avgcsv"
     [ $? -eq 0 ] || exit 1
   fi
 done
 
 segments=('BG' 'CSF' 'WM' 'cGM' 'dGM' 'CC' 'BS+CB' 'Amygdala+Hippocampus' 'Ventricles')
 if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
-  echo -n "Test" > "$csv"
+  if [ ${#tests[@]} -gt 1 -o ${tests[0]} -ne 0 ]; then
+    echo -n "Test," > "$table" || exit 1
+    c=1
+  else
+    rm -f "$table" || exit 1
+    c=0
+  fi
   for segment in "${segments[@]}"; do
-    echo -n ",$segment" >> "$csv"
+    [ $c -eq 0 ] || echo -n ',' >> "$table"
+    echo -n "$segment" >> "$table"
+    let c++
   done
-  echo >> "$csv"
+  echo >> "$table"
 fi
 for i in ${tests[@]}; do
-  name=test_$(printf %03d $i)
-  echo -n "$i" >> "$csv"
+  if [ $i -eq 0 ]; then
+    avgcsv="$outdir/average.csv"
+    c=0
+  else
+    echo -n "$i" >> "$table"
+    avgcsv="$(printf "$outdir/test_%03d/overlap/average.csv" $i)"
+    c=1
+  fi
   for segment in "${segments[@]}"; do
-    dice=$(grep "^$segment," "$outdir/$name/overlap/average.csv" | cut -d, -f2)
-    [ $? -eq 0 ] || { echo "Segment $segment row not found in '$outdir/$name/overlap/average.csv'" 1>&2; exit 1; }
-    echo -n ",$dice" >> "$csv"
+    dice=$(grep "^$segment," "$avgcsv" | cut -d, -f2)
+    [ $? -eq 0 ] || { echo "Segment $segment row not found in '$avgcsv'" 1>&2; exit 1; }
+    [ $c -eq 0 ] || echo -n ',' >> "$table"
+    echo -n "$dice" >> "$table"
+    let c++
   done
-  echo >> "$csv"
+  echo >> "$table"
 done
