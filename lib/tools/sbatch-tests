@@ -1,0 +1,8 @@
+#!/bin/bash
+
+mkdir -p log/tests
+for i in $@; do
+  test=$(printf test_%03d $i)
+  echo "$test"
+  bin/run-workflow dag/tests/$test.dag --backend slurm --log log/tests/$test.log > log/tests/$test.ids
+done

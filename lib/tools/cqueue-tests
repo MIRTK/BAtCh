@@ -1,0 +1,8 @@
+#!/bin/bash
+
+mkdir -p log/tests
+for i in $@; do
+  test=$(printf test_%03d $i)
+  echo "$test"
+  lib/tools/submit-dag-to-condor -d dag/tests/$test.dag -l log/tests/$test.log -k '/homes/as12312/.krb5kt'
+done
