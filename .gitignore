@@ -4,6 +4,7 @@
 /bin/invert-dof
 /bin/register
 /dag/
+/log/
 *.log
 .*.swo
 .*.swp
@@ -16,3 +17,4 @@
 /lib/tools/transform-image
 /lib/tools/edit-image
 /lib/tools/evaluate-overlap
+/lib/tools/run-dagman
