@@ -28,8 +28,6 @@ imgdir='../images'                    # directory of anatomical brain images
 imgpre=''                             # brain image file name prefix
 imgsuf='.nii.gz'                      # brain image file name suffix
 bgvalue=0                             # background value of skull-stripped images
-inclbg=false                          # whether to include background in similarity
-                                      # (used only for deformable registration)
 
 lbldir='../labels'                    # base directory of available segmentations
 lblpre='structures/'                  # file name prefix of structural segmentation label image
@@ -62,21 +60,23 @@ update=false                          # enable (true) or disable update of exist
 binlnk=true                           # link (true) or copy (false) job executables
 
 # registration parameters
-resolution=1                          # highest image resolution at final level in mm
-interpolation='Linear'                # image interpolation mode
+resolution=0.5                        # highest image resolution at final level in mm
 similarity='NMI'                      # image (dis-)similarity measure: SSD, NMI, NCC
-radius=2                              # radius of NCC in number of voxels (0: global NCC)
+radius=3                              # radius of NCC in number of voxels (0: global NCC)
 bins=64                               # no. of bins to use for NMI
 model='SVFFD'                         # free-form deformation model
 mffd='None'                           # multi-level transformation model
 levels=4                              # no. of resolution levels for deformable registration
 spacing=2.5                           # control point spacing on finest level
-bending=0.001                         # weight of bending energy term
-jacobian=0.01                         # weigth of Jacobian-based penalty term
+bending=5e-3                          # weight of bending energy term
+jacobian=1e-4                         # weigth of Jacobian-based penalty term
 symmetric=true                        # use symmetric registration (requires 'SVFFD' model)
 pairwise=true                         # true:  construct template using pairwise deformable registrations
                                       # false: use initial affine average as initial template
 refine=10                             # no. of subject to template deformation refinement steps
+inclbg=false                          # whether to include background during deformable registration
+interpolation='Linear'                # image interpolation mode
+[[ $inclbg == true ]] || interpolation="$interpolation with padding"
 
 # temporal kernel regression parameters
 epsilon=0.001                         # kernel weight threshold

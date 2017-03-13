@@ -116,10 +116,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # initialize transformations
       register_node 'align' \
           -subjects "${subids[@]}" \
-          -srcid    "$refid" \
-          -srcdir   "$refdir" \
-          -srcpre   "$refpre" \
-          -srcsuf   "$refsuf" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
@@ -139,10 +139,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # affine registration
       register_node 'regref' -parent 'align' \
           -subjects "${subids[@]}" \
-          -srcid    "$refid" \
-          -srcdir   "$refdir" \
-          -srcpre   "$refpre" \
-          -srcsuf   "$refsuf" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
@@ -158,8 +158,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -levels   3 1
 
+      # invert reference to subject transformations
+      invert_dof_node "invert" -parent "regref" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.2_ref" \
+          -dofdir   "$dofdir/1.3_inv"
+
       # global normalization output
-      nrmdofs="$dofdir/1.2_ref"
+      nrmdofs="$dofdir/1.3_inv"
 
     else
 
@@ -181,7 +187,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
           -levels   4 2 \
-          -group    20
+          -group    10
 
       # pairwise affine registration
       register_node 'regaff' -parent 'initdofs' \
@@ -200,7 +206,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   3 1 \
-          -group    20
+          -group    10
 
       # average pairwise transformations
       average_dofs_node 'avgdofs' -parent 'regaff' \
@@ -227,7 +233,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   2 \
-          -group    20
+          -group    10
 
       # average pairwise transformations
       average_dofs_node 'avgres' -parent 'refine' \
