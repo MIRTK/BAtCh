@@ -111,6 +111,7 @@ else
 fi
 
 dofdir="$outdir/dofs"
+log="$dagdir/progress.log"
 
 # ==============================================================================
 # auxiliary functions
@@ -565,7 +566,70 @@ begin_dag "tests"
   done; done; done
 
   # ----------------------------------------------------------------------------
+  # exclude constraints from energy value
+
+  mffd='None'
+  model='SVFFD'
+  spacing=2.5
+  symmetric=true
+  sim='nmi'
+  bins=64
+  interp='Linear with padding'
+  inclbg=false
+
+  for bending  in 5e-3 1e-3; do
+  for jacobian in 1e-4 1e-5 1e-6; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp, excl_constraints=true, maxstep=2"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg" \
+        -maxstep 2 -exclude-constraints
+
+  done; done
+
+  # ----------------------------------------------------------------------------
   # with cubic B-spline interpolation?
 
+  mffd='None'
+  model='SVFFD'
+  spacing=2.5
+  symmetric=true
+  sim='nmi'
+  bins=64
+  interp='Fast cubic BSpline with padding'
+  inclbg=false
+
+  for bending  in 5e-3; do
+  for jacobian in 1e-4; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done
 
 end_dag
