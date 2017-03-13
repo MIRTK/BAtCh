@@ -1,1 +1,1 @@
-dhcp/v2.4/term/config.sh
+dhcp/v2.4/term/config-proposed.sh
