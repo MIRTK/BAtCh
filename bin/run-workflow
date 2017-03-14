@@ -22,7 +22,7 @@ _next_job_id = 1
 
 class TreeNode(object):
     """A node in the batch tree.
-    
+
     A batch tree consists of intermediate JobBatch nodes which have one or
     more other TreeNode instances as children. A leave node in this tree
     is either a Job or a JobArray, i.e., a collection of parallel jobs which
@@ -32,7 +32,7 @@ class TreeNode(object):
     of other child node dependencies are stored in the deps set of each child.
     A batch (sub-)tree must be executed in a depth-first order, starting with
     nodes which have no dependencies on other child nodes at the same level.
-    
+
     """
 
     ANY = 0
@@ -48,11 +48,11 @@ class TreeNode(object):
     @property
     def fullname(self):
         """Get fully qualified job name.
-        
+
         The names of intermediate JobBatch nodes are prepended to the name of
         this node with a '+' character as separator. This resembles the
         job names used by the HTCondor DAGMan application.
-        
+
         """
         if not self.parent or self.parent.isroot:
             return self.name
@@ -147,7 +147,7 @@ class TreeNode(object):
         for child in self.children:
             if (pos == self.ANY or
                    (pos == self.FIRST and child.isfirst) or
-                   (pos == self.LAST  and child.islast )):
+                   (pos == self.LAST and child.islast)):
                 nodes.extend(child.nodes(pos=pos, expand=expand))
         return nodes
 
@@ -158,7 +158,7 @@ class TreeNode(object):
         Dependencies between these jobs are specified by separate
         adjacency lists (of type set), with node IDs corresponding
         to the node array indices in the job nodes list.
-        
+
         """
         if self.isleave:
             return ([self], [set()])
@@ -319,7 +319,7 @@ class JobDesc(object):
                     json += indentation
                     json += 11 * ' '
                 cmd = self.cmds[i]
-                json += cmd.json(indent+11)
+                json += cmd.json(indent + 11)
         json += ']'
         return json
 
@@ -590,7 +590,7 @@ class JobArray(TreeNode):
                 json += ',\n'
                 json += indentation
                 json += 12 * ' '
-            json += self.jobs[i].json(indent+12)
+            json += self.jobs[i].json(indent + 12)
         json += ']\n'
         json += indentation + '}'
         return json
@@ -601,7 +601,8 @@ class JobArray(TreeNode):
         if len(self.jobs) > 0:
             macros = {}
             for i in range(len(self.jobs)):
-                if i > 0: script += "el"
+                if i > 0:
+                    script += "el"
                 script += "if [ {} -eq {} ]; then\n".format(taskid, i + 1)
                 for k, v in self.jobs[i].macros.items():
                     script += "  {}='{}'\n".format(k, v)
@@ -731,7 +732,7 @@ class JobBatch(TreeNode):
                 json += ',\n'
                 json += indentation
                 json += 12 * ' '
-            json += self.jobs[i].json(indent+12)
+            json += self.jobs[i].json(indent + 12)
         json += ']\n'
         json += indentation + '}'
         return json
@@ -775,7 +776,7 @@ class JobBatch(TreeNode):
                     batch.append(Job(name, desc))
                 elif m_vars:
                     name = m_vars.group('name')
-                    if not name in batch:
+                    if name not in batch:
                         raise Exception("Undefined job in VARS declaration")
                     job = batch[name]
                     if not isinstance(job, Job):
@@ -876,7 +877,7 @@ def run_local(jobs, deps):
                 todo.add(i)
         if prev == todo or len(prev) < len(todo):
             raise Exception("There seem to be circular job dependencies!\nCheck dependencies of {}.".format([jobs[i].fullname for i in todo]))
-    
+
 
 # ==============================================================================
 # SLURM submission
@@ -899,10 +900,19 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
         '-n', '1',
         '-c', str(threads),
         '-p', queue,
-        '--mem=4G'
+        '--mem=8G'
     ]
     if isinstance(job, JobArray):
-        sbatch_argv.append('--array=1-{}'.format(len(job)))
+        ranges = []
+        i = 0
+        for k in range(len(job)):
+            if job[k].done:
+                if i + 1 <= k - 1:
+                    ranges.append((i + 1, k - 1))
+                i = k
+        if i + 1 <= len(job) - 1:
+            ranges.append((i + 1, len(job) - 1))
+        sbatch_argv.append('--array=' + ','.join(['{}-{}'.format(r[0], r[1]) for r in ranges]))
     if deps:
         if _try_run:
             deps = ['$j{}'.format(dep) for dep in deps]
