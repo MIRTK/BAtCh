@@ -85,6 +85,7 @@ sigma=1                               # default standard deviation of temporal k
 kernel="$pardir/weights"              # directory containing temporal kernel files
 
 # averaging options
+threshold=0.5                         # minimum accumulated normalized weight threshold
 normalization='mean'                  # input normalization option of mirtk average-images
 rescaling='dist'                      # output rescaling option of mirtk average-images
 sharpen=true                          # whether to enhance edges in average image
@@ -102,7 +103,7 @@ tmpdir="../output/temp"               # directory of intermediate average images
 # HTCondor settings
 notify_user="${USER}@ic.ac.uk"
 notification="Error"
-requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 14'
+requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 14 && Machine != "gingko.doc.ic.ac.uk"'
 log="progress.log"
 
 # utility function to set pardir in custom configuration

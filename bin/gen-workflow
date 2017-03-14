@@ -284,6 +284,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       -output    "$nrmdir/$nrmref$nrmsuf" \
       -spacing   "$resolution" \
       -padding   "$bgvalue" \
+      -threshold "$threshold" \
       -normalize "$normalization" \
       -rescale   "$rescaling" \
       -sharpen   "$sharpen" \
@@ -457,6 +458,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin3    "$resdofs" -dofid3 "$dofid3" \
                 -output    "$tmpdir/t2w_t${t}_${i}.nii.gz" \
                 -padding   "$bgvalue" \
+                -threshold "$threshold" \
                 -normalize "$normalization" \
                 -rescale   "$rescaling" \
                 -sharpen   "$sharpen"
@@ -552,6 +554,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofin3    "$defdofs/t$t" -dofid3 "$dofid3" \
           -output    "$outdir/average/t2w/t$t.nii.gz" \
           -padding   "$bgvalue" \
+          -threshold "$threshold" \
           -normalize "$normalization" \
           -rescale   "$rescaling" \
           -sharpen   "$sharpen"
@@ -594,7 +597,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$defdofs/t$t" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-                -label  "$l"
+                -threshold "$threshold" -label "$l"
      
             let l++
           done
@@ -630,7 +633,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$defdofs/t$t" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-                -label  "$l"
+                -threshold "$threshold" -label "$l"
      
             let l++
           done

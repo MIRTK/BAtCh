@@ -1588,6 +1588,7 @@ average_images_node()
   local dofinv='false'
   local average=
   local stdev=
+  local threshold=0.5
   local options=''
   local label margin bgvalue
 
@@ -1627,6 +1628,9 @@ average_images_node()
         fi
         shift ${#voxelsize[@]}
         options="$options -size ${voxelsize[@]}"
+        ;;
+      -threshold)
+        optarg threshold $1 "$2"; shift
         ;;
       -margin)
         optarg margin $1 "$2"; shift
@@ -1734,7 +1738,7 @@ average_images_node()
     fi
 
     # add average node to DAG
-    local sub="arguments = \"'$average' -v -images '$imglst' -delim , -threads $threads $options\""
+    local sub="arguments = \"'$average' -v -images '$imglst' -threshold $threshold -delim , -threads $threads $options\""
     [ -z "$stdev" ] || sub="$sub -stdev '$stdev'"
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
