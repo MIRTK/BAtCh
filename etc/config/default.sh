@@ -86,7 +86,7 @@ kernel="$pardir/weights"              # directory containing temporal kernel fil
 
 # averaging options
 threshold=0.5                         # minimum accumulated normalized weight threshold
-normalization='mean'                  # input normalization option of mirtk average-images
+normalization='zscore'                # input normalization option of mirtk average-images
 rescaling='dist'                      # output rescaling option of mirtk average-images
 sharpen=true                          # whether to enhance edges in average image
 
