@@ -585,8 +585,8 @@ register_node()
     if [[ $ic == true ]] && [ -z "$tgtid" -a -z "$srcid" ] ; then
       # command used to invert inverse-consistent transformation
       local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
-      sub="$sub\noutput       = $_dagdir/\$(target)/inv_\$(target),\$(source).log"
-      sub="$sub\nerror        = $_dagdir/\$(target)/inv_\$(target),\$(source).log"
+      sub="$sub\noutput       = $_dagdir/\$(target)/inv_\$(source).log"
+      sub="$sub\nerror        = $_dagdir/\$(target)/inv_\$(source).log"
       sub="$sub\nqueue"
       make_sub_script "invert.sub" "$sub" -executable invert-dof
     fi
