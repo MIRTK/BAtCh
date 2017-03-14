@@ -912,7 +912,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
                 i = k
         if i + 1 <= len(job) - 1:
             ranges.append((i + 1, len(job) - 1))
-        sbatch_argv.append('--array=' + ','.join(['{}-{}'.format(r[0], r[1]) for r in ranges]))
+        sbatch_argv.append('--array=' + ','.join(['{}-{}'.format(r[0] + 1, r[1] + 1) for r in ranges]))
     if deps:
         if _try_run:
             deps = ['$j{}'.format(dep) for dep in deps]
@@ -991,6 +991,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('dag_file',
                         help="Workflow description HTCondor DAGMan format")
+    parser.add_argument('--force', action='store_true',
+                        help="Re-execute jobs even if log file states that job is DONE (--rescue-file still considered if given)")
     parser.add_argument('--rescue-file',
                         help="HTCondor rescue file with entries of done job")
     parser.add_argument('--output-rescue-file',
@@ -1009,7 +1011,8 @@ if __name__ == '__main__':
     batch = JobBatch.from_condor_script(args.dag_file)
     if args.rescue_file:
         batch.apply_rescue_file(args.rescue_file)
-    batch.mark_finished_jobs()
+    if not args.force:
+        batch.mark_finished_jobs()
     batch.collapse()
     jobs, deps = batch.graph()
 
