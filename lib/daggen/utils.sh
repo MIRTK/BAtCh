@@ -117,7 +117,7 @@ append()
 # read subject IDs from text file (first column)
 read_sublst()
 {
-  local ids=($(cat "$2" | cut -d' ' -f1 | cut -d, -f1 | cut -d# -f1))
+  local ids=($(cat "$2" | tr '\t' ',' | tr ' ' ',' | tr '#' ',' | cut -d, -f1))
   [ ${#ids[@]} -gt 0 ] || error "Failed to read subject IDs from file $2"
   local "$1" && upvar $1 ${ids[@]}
 }
