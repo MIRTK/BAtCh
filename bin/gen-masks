@@ -1,0 +1,103 @@
+#!/bin/bash
+
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/utils.sh" || {
+  echo "Failed to import daggen/utils module!" 1>&2
+  exit 1
+}
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $(basename "$0") [options]
+
+This script generates the binary masks from the Draw-EM tissue segmentations
+required by the global normalization step of the atlas construction workflow.
+
+Options:
+  -c -config <config.sh>
+      Custom configuration file. (default: none)
+  -a -agelst <age.csv>
+      Comma/space-separated CSV file, where the first column contains
+      the image ID and the second column the associated age.
+      (default: $agelst)
+  -s -sublst <sub.lst>
+      Text file listing the IDs of the images to use for the atlas construction.
+      If not specified, the IDs are read from the -agelst.
+      (default: $sublst)
+  -u, -update
+      Overwrite existing output files.
+  -h -help
+      Print help and exit.
+  -v -verbose
+      Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# main
+# ==============================================================================
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
+  esac
+  let o++
+done
+
+[ -z "$agelst" ] || agelst="$topdir/$agelst"
+[ -z "$sublst" ] || sublst="$topdir/$sublst"
+update=false
+verbose=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-sublst) optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst) optarg agelst $1 "$2"; shift; ;;
+    -u|-update) update='true'; ;;
+    -c|-config) shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose) let verbose++; ;;
+    *) error "Unknown argument: $1"; ;;
+  esac
+  shift
+done
+
+[ -n "$sublst" ] || sublst="$agelst"
+if [ -z "$sublst" ] || [ ! -f "$sublst" ]; then
+  error "Missing CSV file with subject IDs!"
+fi
+read_sublst subids "$sublst"
+
+cd "$topdir" || error "Failed to change to working directory!"
+
+mkdir -p "$segdir/BS+CB" || error "Failed to create output directory!"
+for subid in ${subids[@]}; do
+  [[ $update != true ]] || rm -f "$segdir/BS+CB/$segpre$subid$segsuf"
+  [ -f "$segdir/BS+CB/$segpre$subid$segsuf" ] || {
+    [ $verbose -le 0 ] || echo -n "Generating BS+CB mask for $subid..."
+    mirtk calculate-element-wise "$lbldir/$clspre$subid$clssuf" -label 6 8 -set 1 -pad 0 -out "$segdir/BS+CB/$segpre$subid$segsuf" binary
+    [ $? -eq 0 ] || {
+      [ $verbose -le 0 ] || echo " failed"
+      error "Failed to create BS+CB mask for $subid!"
+    }
+    [ $verbose -le 0 ] || echo " done"
+  }
+done

@@ -1,0 +1,10 @@
+#!/bin/bash
+
+[ $# -eq 2 -o $# -eq 3 ] || { echo "usage: $0 <workflow> <task> [i]" 1>&2; exit 1; }
+
+workflow=$1
+task=$2
+i=${3:-1}
+
+mkdir -p "log/$workflow" || exit 1
+lib/tools/submit-dag-to-condor -d dag/$workflow/${task}.dag -l log/$workflow/${task}_${i}.log -k "$HOME/.krb5kt"

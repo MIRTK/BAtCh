@@ -1,6 +1,6 @@
 #!/bin/bash
 
-topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+topdir="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
 
 source "$topdir/lib/daggen/utils.sh" || {
   echo "Failed to import daggen/utils module!" 1>&2
@@ -38,7 +38,8 @@ outlst="$1"; shift
 rm -f "$outlst" || error "Failed to remove existing output file!"
 outlsts=()
 for kernel in "$@"; do
-  tmplst="pairs_$(basename "$kernel")"
+  tmplst=$(basename "$kernel")
+  tmplst=".pairs_${tmplst/.*/}.csv"
   #(
     read_sublst ids "$kernel"
     echo "Number of subjects in $kernel = ${#ids[@]}"
@@ -51,14 +52,15 @@ for kernel in "$@"; do
       for id2 in ${ids[@]}; do
         let j++
         [ $i -lt $j ] || continue
-        row=$(echo -ne "$id1\n$id2" | sort | tr '\n' ' ')
-        out="$out$row\n"
+        row=$(echo -ne "$id1\n$id2" | sort | tr '\n' ',')
+        out="$out${row:0:-1}\n"
       done
       echo -ne "$out" >> "$tmplst"
     done
   #) &
-  outlsts=("${outlsts[@]}" "$tmplst")
+  tmplsts=("${tmplsts[@]}" "$tmplst")
 done
 wait
-sort -u "${outlsts[@]}" > "$outlst"
+sort -u "${tmplsts[@]}" > "$outlst"
+rm -f "${tmplsts[@]}"
 echo -e "\nNumber of unique (unordered) image pairs: $(wc -l < "$outlst")"

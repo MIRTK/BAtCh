@@ -40,6 +40,9 @@ Options:
       Text file listing the IDs of the images to use for the atlas construction.
       If not specified, the IDs are read from the -agelst.
       (default: $sublst)
+  -t <t1>...
+      Time points for which to construct an atlas.
+      (default: all time points found in $kernel/ directory)
   -u, -update
       Overwrite existing DAGMan files.
   -h, -help
@@ -53,6 +56,7 @@ HELP
 # configuration
 # ==============================================================================
 
+# load custom configuration
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
@@ -69,10 +73,30 @@ done
 [ -z "$agelst" ] || agelst="$topdir/$agelst"
 [ -z "$sublst" ] || sublst="$topdir/$sublst"
 
+# atlas time points for which kernel was create either manually,
+# with another tool (e.g. MATLAB), or using the "kernel" shell script
+if [ ! -d "$topdir/$kernel/" ]; then
+  error "Missing regression kernels directory:\n$topdir/$kernel"
+fi
+timepoints=($(ls "$topdir/$kernel/" | awk "{
+  if (\$0 ~ /$krnpre[0-9]+(\\.[0-9]+)?\\.$krnext/) {
+    print gensub(/$krnpre([0-9.]+(\\.[0-9]+)?)\\.$krnext/, \"\\\\1\", \"g\")
+  }
+}"))
+if [ ${#timepoints[@]} -eq 0 ]; then
+  error "No regression kernels matching pattern \"$krnpre([0-9.]+(\\.[0-9]+)?)\\.$krnext\" found in:\n$topdir/$kernel"
+fi
+
+# parse remaining options
 while [ $# -gt 0 ]; do
   case "$1" in
     -s|-sublst) optarg sublst $1 "$2"; shift; ;;
     -a|-agelst) optarg agelst $1 "$2"; shift; ;;
+    -t|-timepoints)
+      timepoints=()
+      optargs timepoints "$@"
+      shift ${#timepoints[@]}
+      ;;
     -u|-update) update='true'; ;;
     -c|-config) shift; ;; # already loaded
     -h|-help|--help) print_help; exit 0; ;;
@@ -82,24 +106,15 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# read subject IDs
 if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
   error "Missing CSV file with subject IDs and corresponding ages!"
 fi
 [ -n "$sublst" ] || sublst="$agelst"
 read_sublst subids "$sublst"
 
+# change to working directory
 cd "$topdir" || error "Failed to change to working directory!"
-
-# atlas time points for which kernel was create either manually,
-# with another tool (e.g. MATLAB), or using the "kernel" shell script
-timepoints=($(ls "$kernel/" | awk '{
-  if ($0 ~ /t[0-9]+(.[0-9]+)?.csv/) {
-    print gensub(/t([0-9.]+(.[0-9]+)?).csv/, "\\1", "g")
-  }
-}'))
-if [ ${#timepoints} -eq 0 ]; then
-  error "No regression kernels matching pattern \"t([0-9.]+(.[0-9]+)?).csv\" found in $kernel directory!"
-fi
 
 # ==============================================================================
 # workflow
@@ -187,7 +202,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
           -levels   4 2 \
-          -group    10
+          -group    20
 
       # pairwise affine registration
       register_node 'regaff' -parent 'initdofs' \
@@ -206,7 +221,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   3 1 \
-          -group    10
+          -group    20
 
       # average pairwise transformations
       average_dofs_node 'avgdofs' -parent 'regaff' \
@@ -233,7 +248,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
           -levels   2 \
-          -group    10
+          -group    20
 
       # average pairwise transformations
       average_dofs_node 'avgres' -parent 'refine' \
@@ -260,9 +275,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # generate population specific reference image/mask
   nrmdir="$outdir/average/t2w"
-  nrmref='linear'
-  nrmpre=''
-  nrmsuf='.nii.gz'
+  nrmref="linear"
+  nrmpre=""
+  nrmsuf=".nii.gz"
 
   if [[ $refini == false ]]; then
     linref="$refid"
@@ -346,7 +361,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     end_dag
 
     # use user supplied reference space for non-rigid atlas construction
-    prev_node='ref_alignment'
+    prev_node="ref_alignment"
     nrmdofs="$dofdir/1.7_ref"
     nrmdir="$outdir/average/t2w"
 
@@ -354,15 +369,22 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point between each pair of images
-  defdofs=''
+  defdofs=""
   if [[ $pairwise == true ]]; then
     defdofs="$dofdir/2.2_avg"
 
     begin_dag 'def_alignment' -parent "$prev_node" -splice
 
+      # determine unique pairs that need to be registered
+      [ -f "$kernel/pairs.csv" ] || {
+        lib/tools/query-pairs "$kernel/pairs.csv" "$kernel/$krnpre"*".$krnext"
+        [ $? -eq 0 ] || error "Failed to determine unique pairs of images!"
+      }
+
       # deformable registration of all pairs of images after global normalization
       register_node 'regpairs' \
           -subjects  "${subids[@]}" \
+          -pairs     "$kernel/pairs.csv" \
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    "$imgsuf" \
@@ -390,7 +412,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
         # compute average deformations for each subject
         average_dofs_node "avgdefs_$t" -parent 'regpairs' \
-            -doflst "$kernel/t$t.csv" \
+            -doflst "$kernel/$krnpre${t}.$krnext" \
             -dofins "$dofdir/2.1_def" \
             -dofdir "$defdofs/t$t" \
             -dofs
@@ -445,7 +467,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
             # average intensity (minimize intensity difference)
             average_images_node "avgimgs_$t" \
-                -sublst    "$kernel/t$t.csv" \
+                -sublst    "$kernel/$krnpre${t}.$krnext" \
                 -imgdir    "$imgdir" \
                 -imgpre    "$imgpre" \
                 -imgsuf    ".nii.gz" \
@@ -471,7 +493,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           for t in ${timepoints[@]}; do
 
             register_node "register_$t" \
-                -sublst    "$kernel/t$t.csv" \
+                -sublst    "$kernel/$krnpre${t}.$krnext" \
                 -imgdir    "$imgdir" \
                 -imgpre    "$imgpre" \
                 -imgsuf    "$imgsuf" \
@@ -499,7 +521,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
             dofid3="residual"
             average_dofs_node "average_$t" -parent "register_$t" \
-                -doflst "$kernel/t$t.csv" \
+                -doflst "$kernel/$krnpre${t}.$krnext" \
                 -dofins "$nxtdofs/t$t" \
                 -dofdir "$nxtdofs/t$t" \
                 -dofid  "$dofid3" \
@@ -517,7 +539,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     end_dag
 
     unset -v i nxtdofs
-    prev_node='def_refinement'
+    prev_node="def_refinement"
   fi
 
   # ----------------------------------------------------------------------------
@@ -526,7 +548,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     for t in ${timepoints[@]}; do
 
       average_dofs_node "avgdof_$t" \
-          -doflst "$kernel/t$t.csv" \
+          -doflst "$kernel/$krnpre${t}.$krnext" \
           -dofins "$nrmdofs" \
           -dofdir "$outdir/dofs" \
           -dofid  "t$t" -outsuf ".dof" \
@@ -541,7 +563,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     for t in ${timepoints[@]}; do
 
       average_images_node "average_$t" \
-          -sublst    "$kernel/t$t.csv" \
+          -sublst    "$kernel/$krnpre${t}.$krnext" \
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    ".nii.gz" \
@@ -585,7 +607,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           while [ $l -le $tissues ]; do
 
             average_images_node "make_tissue_pbmaps_${l}_${t}" \
-                -sublst "$kernel/t$t.csv" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
                 -imgdir "$inpdir" \
                 -imgpre "$prefix" \
                 -imgsuf "$clssuf" \
@@ -621,7 +643,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           while [ $l -le $structures ]; do
 
             average_images_node "make_structural_pbmaps_${l}_${t}" \
-                -sublst "$kernel/t$t.csv" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
                 -imgdir "$inpdir" \
                 -imgpre "$prefix" \
                 -imgsuf "$lblsuf" \

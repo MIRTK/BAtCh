@@ -118,6 +118,7 @@ register_node()
   local srcid=
   local srcpre=
   local srcsuf='.nii.gz'
+  local pairs=
   local ids=()
   local idlst=
   local imgdir=
@@ -194,7 +195,11 @@ register_node()
         optargs ids "$@"
         shift ${#ids[@]}; ;;
       -sublst|-idlst)
-        optarg idlst $1 "$2"; shift; ;;
+        optarg idlst $1 "$2"
+        shift; ;;
+      -pairs)
+        optarg pairs $1 "$2"
+        shift; ;;
       -model)
         optarg model $1 "$2"
         shift; ;;
@@ -362,6 +367,9 @@ register_node()
   if [ ${#segments[@]} -ne 0 -a -z "$segdir" ]; then
     error "register_node: -mskdir option required when -segmsk used"
   fi
+  if [ -n "$pairs" ] && [ -z "$tgtid$srcid" ] && [ ! -f "$pairs" ]; then
+    error "register_node: specified -pairs file does not exist: $pairs"
+  fi
 
   local nlevels=${levels[0]}
   if [ -n "$resolution" ]; then
@@ -401,13 +409,17 @@ register_node()
     N=1
   elif [ -n "$tgtid" -o -n "$srcid" ]; then
     N=${#ids[@]}
+  elif [ -n "$pairs" ]; then
+    N=$(wc -l "$pairs" | cut -d ' ' -f 1)
+    [ $? -eq 0 ] || error "Failed to determine number of unique image pairs!"
+    [[ $ic == true ]] || let N="$N * 2"
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
     [[ $ic == false ]] || let N="$N / 2"
   fi
 
   # add SUBDAG node
-  info "Adding node $node..."
+  info "Adding node $node (N=$N)..."
   begin_dag $node -splice || {
 
     # registration parameters
@@ -680,7 +692,7 @@ register_node()
     else
       n=0
       t=0
-      local s1 s2 S grpids srcids
+      local s1 s2 S grpids srcids id1 id2
       for id1 in "${ids[@]}"; do
         let t++
         # register all other images to image of subject id1
@@ -698,12 +710,22 @@ register_node()
             let s2="$s1+$group-1"
             if [[ $ic == true ]]; then
               while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
-                [ $s -ge $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
+                [ $s -ge $t ] || {
+                  id2="${ids[$s-1]}"
+                  if [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ]; then
+                    srcids=("${srcids[@]}" "$id2")
+                  fi
+                }
                 let s++
               done
             else
               while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
-                [ $s -eq $t ] || srcids=("${srcids[@]}" "${ids[$s-1]}")
+                [ $s -eq $t ] || {
+                  id2="${ids[$s-1]}"
+                  if [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ]; then
+                    srcids=("${srcids[@]}" "$id2")
+                  fi
+                }
                 let s++
               done
             fi
@@ -752,6 +774,9 @@ register_node()
             else
               [ $t -ne $s ] || continue
             fi
+            if [ -n "$pairs" ] && [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -eq 0 ]; then
+              continue
+            fi
             let n++
             # node to register id1 and id2
             add_node "reg_$id1,$id2" -subfile "register.sub" \
@@ -767,7 +792,6 @@ register_node()
               add_edge "inv_$id1,$id2" "reg_$id1,$id2"
               [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "inv_$id1,$id2"
             fi
-            info "  Added job `printf '%3d of %d' $n $N`"
           done
         fi
       done

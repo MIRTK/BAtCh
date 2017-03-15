@@ -171,13 +171,19 @@ generate_kernel()
   k=0
   for mu in ${kernel_mean[@]}; do
     std=${kernel_sigma[$k]}
-    lst="$kernel/t$mu.csv"
+    lst="$kernel/$krnpre$mu.$krnext"
     [ ! -f "${lst}" ] || rm -f "${lst}"
     i=0
     for id in ${ids[@]}; do
       w=$(gaussian ${age[$i]} $mu $std)
       if [ $(/usr/bin/bc <<< "$w > $epsilon") -eq 1 ]; then
-        printf "%-20s %f\n" $id $w >> "$lst"
+        if [[ $krnext == csv ]]; then
+          printf "%s,%f\n" $id $w >> "$lst"
+        elif [[ $krnext == tsv ]]; then
+          printf "%s\t%f\n" $id $w >> "$lst"
+        else
+          printf "%-20s %f\n" $id $w >> "$lst"
+        fi
         [ $? -eq 0 ] || error "generate_kernel: failed to write weight to file $lst!"
       fi
       let i++

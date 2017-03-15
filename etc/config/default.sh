@@ -83,11 +83,13 @@ epsilon=0.001                         # kernel weight threshold
 means=()                              # default list of atlas time points
 sigma=1                               # default standard deviation of temporal kernel
 kernel="$pardir/weights"              # directory containing temporal kernel files
+krnpre="t"                            # kernel file name prefix
+krnext="tsv"                          # kernel file name extension (excl. leading dot)
 
 # averaging options
 threshold=0.5                         # minimum accumulated normalized weight threshold
 normalization='zscore'                # input normalization option of mirtk average-images
-rescaling='dist'                      # output rescaling option of mirtk average-images
+rescaling='1 100'                     # output rescaling option of mirtk average-images
 sharpen=true                          # whether to enhance edges in average image
 
 # default output settings
