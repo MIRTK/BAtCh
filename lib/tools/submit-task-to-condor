@@ -3,6 +3,8 @@
 [ $# -eq 2 -o $# -eq 3 ] || { echo "usage: $0 <workflow> <task> [i]" 1>&2; exit 1; }
 
 workflow=$1
+workflow=${workflow/dag\//}
+
 task=$2
 i=${3:-1}
 
