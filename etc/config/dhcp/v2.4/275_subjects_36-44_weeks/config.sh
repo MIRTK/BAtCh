@@ -32,7 +32,7 @@ krnpre="t"
 krnext="tsv"
 
 # output settings
-subdir="dhcp-v2.4-n=275-sigma=$sigma-const"
+subdir="dhcp/v2.4/275_subjects_36-44_weeks/sigma_${sigma}_const"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../output/$subdir/dofs"

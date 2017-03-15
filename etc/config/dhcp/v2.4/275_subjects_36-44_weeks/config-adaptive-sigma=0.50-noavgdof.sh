@@ -8,7 +8,7 @@ refine=10
 sigma=0.50
 kernel="$pardir/weights_adaptive_sigma=$sigma"
 
-subdir="dhcp-v2.4-n=275-sigma=$sigma-noavgdof"
+subdir="dhcp/v2.4/275_subjects_36-44_weeks/sigma_${sigma}_noavgdof"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../output/$subdir/dofs"

@@ -5,7 +5,7 @@ source "$(dirname "$BASH_SOURCE")/config.sh"
 sigma=0.50
 kernel="$pardir/weights_adaptive_sigma=$sigma"
 
-subdir="dhcp-v2.4-n=275-sigma=$sigma"
+subdir="dhcp/v2.4/275_subjects_36-44_weeks/sigma_${sigma}"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../output/$subdir/dofs"
