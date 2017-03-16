@@ -210,19 +210,17 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
           -maxstep  1 \
-          -levels   4 2
+          -levels   4 2 \
+          -group    20
 
-        invert_dof_node "invref" -parent "regref" \
+        invert_dof_node "invert" -parent "regref" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.1_ref" \
-          -dofdir   "$dofdir/1.1_inv"
+          -dofdir   "$dofdir/1.1_inv" \
+          -group    20
 
-        compose_dofs_node "initdofs" -parent "invref" \
-            -subjects "${subids[@]}" \
-            -dofin1   "$dofdir/1.1_inv" -dofid1 '$(target)' \
-            -dofin2   "$dofdir/1.1_ref" -dofid2 '$(source)' \
-            -dofdir   "$dofdir/1.1_sim" \
-            -noshearing
+        nrmdofs="$dofdir/1.1_inv"
+        dofins="identity"
 
       else
 
@@ -244,7 +242,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -segmsk   "BS+CB" .33 \
             -levels   4 2 \
             -maxstep  1 \
-            -group    20
+            -group    100
+
+        nrmdofs=""
+        dofins="$dofdir/1.1_sim"
 
       fi
 
@@ -254,7 +255,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
-          -dofins   "$dofdir/1.1_sim" \
+          -hdrdofs  "$nrmdofs" \
+          -dofins   "$dofins" \
           -dofdir   "$dofdir/1.2_aff" \
           -model    "Affine" \
           -par      "Allow shearing" No \
@@ -266,24 +268,39 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -maxstep  1 \
           -levels   3 1 \
-          -group    20
+          -group    100
 
       # average pairwise transformations
       average_dofs_node "avgdofs" -parent "regaff" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_aff" \
-          -dofdir   "$dofdir/1.3_avg" \
+          -dofdir   "$dofdir/1.2_aff/average" \
           -noshearing
 
+      # compose current -hdrdofs with average transformations
+      if [ -n "$nrmdofs" ]; then
+        prev_node="compaff"
+        compose_dofs_node "$prev_node" -parent "avgdofs" \
+            -subjects "${subids[@]}" \
+            -dofin1   "$nrmdofs" \
+            -dofin2   "$dofdir/1.2_aff/average" \
+            -dofdir   "$dofdir/1.2_aff/composite" \
+            -noshearing -group 20
+        nrmdofs="$dofdir/1.2_aff/composite"
+      else
+        prev_node="avgdofs"
+        nrmdofs="$dofdir/1.2_aff/average"
+      fi
+
       # pairwise affine refinement
-      register_node "refine" -parent "avgdofs" \
+      register_node "refine" -parent "$prev_node" \
           -subjects "${subids[@]}" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
-          -hdrdofs  "$dofdir/1.3_avg" \
+          -hdrdofs  "$nrmdofs" \
           -dofins   "identity" \
-          -dofdir   "$dofdir/1.4_res" \
+          -dofdir   "$dofdir/1.3_res" \
           -model    "Affine" \
           -par      "Allow shearing" No \
           -interp   "$interpolation" \
@@ -294,25 +311,28 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -maxstep  1 \
           -levels   2 \
-          -group    20
+          -group    100
 
       # average pairwise transformations
       average_dofs_node "avgres" -parent "refine" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.4_res" \
-          -dofdir   "$dofdir/1.5_avg" \
+          -dofins   "$dofdir/1.3_res" \
+          -dofdir   "$dofdir/1.3_res/average" \
           -noshearing
 
-      # compose average transformations
-      compose_dofs_node "compose" -parent "avgres" \
+      # compose current -hdrdofs with average transformations
+      dofin1="$nrmdofs"
+      if [ -n "$refid" ]; then
+        nrmdofs="$dofdir/1.3_res/composite"
+      else
+        nrmdofs="$dofdir/1.4_ref"
+      fi
+      compose_dofs_node "compres" -parent "avgres" \
           -subjects "${subids[@]}" \
-          -dofin1   "$dofdir/1.3_avg" \
-          -dofin2   "$dofdir/1.5_avg" \
-          -dofdir   "$dofdir/1.6_aff" \
-          -noshearing
-
-      # global normalization output
-      nrmdofs="$dofdir/1.6_aff"
+          -dofin1   "$dofin1" \
+          -dofin2   "$dofdir/1.3_res/average" \
+          -dofdir   "$nrmdofs" \
+          -noshearing -group 20
 
     fi
 
@@ -401,14 +421,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -subjects "${subids[@]}" \
           -dofin1   "$nrmdofs" \
           -dofin2   "$tmpdir" -dofid2 "$nrmref" \
-          -dofdir   "$dofdir/1.7_ref" \
+          -dofdir   "$dofdir/1.4_ref" \
           -noshearing
 
     end_dag
 
     # use user supplied reference space for non-rigid atlas construction
     prev_node="ref_alignment"
-    nrmdofs="$dofdir/1.7_ref"
+    nrmdofs="$dofdir/1.4_ref"
     nrmdir="$outdir/average/t2w"
 
   fi

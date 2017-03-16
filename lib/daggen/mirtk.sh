@@ -207,10 +207,10 @@ register_node()
         optarg mffd $1 "$2"
         shift; ;;
       -hdrdofs)
-        optarg hdrdofs $1 "$2"
+        hdrdofs="$2"
         shift; hdrdof_opt='-dof'; ;;
       -invhdrdofs)
-        optarg hdrdofs $1 "$2"
+        hdrdofs="$2"
         shift; hdrdof_opt='-dof_i'; ;;
       -dofins)
         optarg dofins $1 "$2"
