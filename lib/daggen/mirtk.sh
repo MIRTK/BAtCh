@@ -439,10 +439,10 @@ register_node()
       cfg="$cfg\nBackground value of image 2      = $bgvalue"
     fi
     if [[ $inclbg == true ]]; then
-      cfg="$cfg\nDownsample with padding          = No"
+      cfg="$cfg\nDownsample images with padding   = No"
       cfg="$cfg\nImage similarity foreground      = Mask"
     else
-      cfg="$cfg\nDownsample with padding          = Yes"
+      cfg="$cfg\nDownsample images with padding   = Yes"
       cfg="$cfg\nImage similarity foreground      = Overlap"
     fi
     if [ $maxstep -gt 0 ]; then
@@ -468,21 +468,25 @@ register_node()
       lvl=1
       while [ $lvl -le ${levels[0]} ]; do
         cfg="$cfg\n\n[level $lvl]"
-        blr=(2 2) # blurring of binary mask
-        if [ -n "$refid" -a -n "$refdir" ]; then
-          blr[1]=1 # reference usually a probabilistic map (i.e., a bit blurry)
-        fi
         i=0
         while [ $i -lt ${#segments[@]} ]; do
-          let j="$i + 1"
-          let t="$i + 3"
-          let s="$i + 4"
-          cfg="$cfg\nBlurring of image $t = ${blr[0]} vox"
-          cfg="$cfg\nBlurring of image $s = ${blr[1]} vox"
-          let i="$i + 2"
+          let j="$i + 3"
+          cfg="$cfg\nBlurring of image $j = 2 vox"
+          let i++
         done
         let lvl++
       done
+    fi
+    if [ $maxstep -gt 0 ]; then
+      if [[ $model == Rigid ]] || [[ $model == Similarity ]] || [[ $model == Affine ]]; then
+        cfg="$cfg\n"
+        lvl=1
+        while [ $lvl -le ${levels[0]} ]; do
+          cfg="$cfg\n\n[level $lvl]"
+          cfg="$cfg\nMaximum length of steps = $maxstep"
+          let lvl++
+        done
+      fi
     fi
     parin="$_dagdir/imgreg.cfg"
     write "$parin" "$cfg\n"
@@ -1507,7 +1511,7 @@ compose_dofs_node()
       -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids    "$@"; shift ${#ids[@]}; ;;
       -sublst)   optarg  idlst   $1 "$2"; shift; ;;
-      -dofid)    optarg  dofid3  $1 "$2"; shift; ;;
+      -dofid)    optarg  dofid   $1 "$2"; shift; ;;
       -dofid1)   optarg  dofid1  $1 "$2"; shift; ;;
       -dofid2)   optarg  dofid2  $1 "$2"; shift; ;;
       -dofid3)   optarg  dofid3  $1 "$2"; shift; ;;
@@ -1530,17 +1534,25 @@ compose_dofs_node()
   [ -n "$dofdir" ] || error "compose_dofs_node: missing output -dofdir argument"
   [ -n "$dofin1" ] || error "compose_dofs_node: missing input -dofin1 argument"
   [ -n "$dofin2" ] || error "compose_dofs_node: missing input -dofin2 argument"
-  if [ -z "$dofid" ]; then
-    dofid='$(id)'
+  if [[ $dofid1 == '$(target)' ]] && [[ $dofid2 == '$(source)' ]]; then
+    [ -z "$dofid" ] || [[ "$dofid" == '$(target)/$(source)' ]] || {
+      error "compose_dofs_node: output -dofid cannot be set when -dofid1 '$(target)' -dofid2 '$(source)'")
+    }
+    [ -z "$dofin3" ] || {
+      error "compose_dofs_node: third transformation not allowed when -dofid1 '$(target)' -dofid2 '$(source)'"
+    }
+    dofid='$(target)/$(source)'
+  elif [ -z "$dofid" ]; then
     if [ ${#ids[@]} -eq 0 -a -z "$idlst" ]; then
       error "compose_dofs_node: missing -subjects or -sublst argument"
     fi
+    dofid='$(id)'
   elif [ ${#ids[@]} -gt 0 -o -n "$idlst" ]; then
     error "compose_dofs_node: options -dofid and -subjects/-sublst are mutually exclusive"
   fi
-  [ -n "$dofid1" ] || dofid1="$dofid"
-  [ -n "$dofid2" ] || dofid2="$dofid"
-  [ -n "$dofid3" ] || dofid3="$dofid"
+  [ -z "$dofin1" ] || [ -n "$dofid1" ] || dofid1="$dofid"
+  [ -z "$dofin2" ] || [ -n "$dofid2" ] || dofid2="$dofid"
+  [ -z "$dofin3" ] || [ -n "$dofid3" ] || dofid3="$dofid"
 
   info "Adding node $node..."
   begin_dag $node -splice || {
@@ -1549,22 +1561,43 @@ compose_dofs_node()
     local sub="arguments = \"'$dofin1/$dofid1$dofsuf' '$dofin2/$dofid2$dofsuf'"
     [ -z "$dofin3" ] || sub="$sub '$dofin3/$dofid3$dofsuf'"
     sub="$sub '$dofdir/$dofid$dofsuf' $options -threads $threads\""
-    sub="$sub\noutput    = $_dagdir/compose_$dofid3.log"
-    sub="$sub\nerror     = $_dagdir/compose_$dofid3.log"
+    sub="$sub\noutput    = $_dagdir/compose_${dofid//\//,}.log"
+    sub="$sub\nerror     = $_dagdir/compose_${dofid//\//,}.log"
     sub="$sub\nqueue"
     make_sub_script "compose.sub" "$sub" -executable compose-dofs
 
     # node to create output directories
     local deps=()
-    if [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
-      make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
+    local pre=
+    if [[ $dofid == '$(target)/$(source)' ]]; then
+      [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+      for id in "${ids[@]}"; do
+        pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
+      done
+    elif [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
+      pre="mkdir -p '$dofdir' || exit 1"
+    fi
+    if [ -n "$pre" ]; then
+      make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
       deps=('mkdirs')
     fi
 
     # add dofcombine nodes to DAG
-    if [[ "$dofid" == '$(id)' ]]; then
+    if [[ "$dofid" == '$(target)/$(source)' ]]; then
+      [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+      for id1 in "${ids[@]}"; do
+        for id2 in "${ids[@]}"; do
+          [[ $id1 != $id2 ]] || continue
+          add_node "compose_$id1,$id2" -subfile "compose.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+          for dep in ${deps[@]}; do
+            add_edge "compose_$id1,$id2" "$dep"
+          done
+          [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "compose_$id1,$id2"
+        done
+      done
+    elif [[ "$dofid" == '$(id)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id in "${ids[@]}"; do
         add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""

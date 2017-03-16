@@ -149,6 +149,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
+          -maxstep  1 \
           -levels   4 2
 
       # affine registration
@@ -171,7 +172,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
-          -levels   3 1
+          -maxstep  1 \
+          -levels   3 1 \
 
       # invert reference to subject transformations
       invert_dof_node "invert" -parent "regref" \
@@ -185,12 +187,18 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     else
 
       # initialize pairwise transformations
-      register_node 'initdofs' \
+      if [ -n "$refid" ]; then
+
+        register_node 'regref' \
           -subjects "${subids[@]}" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
-          -dofdir   "$dofdir/1.1_sim" \
+          -dofdir   "$dofdir/1.1_ref" \
           -model    "Similarity" \
           -interp   "$interpolation" \
           -sim      "$similarity" \
@@ -201,11 +209,47 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "BS+CB" .33 \
-          -levels   4 2 \
-          -group    20
+          -maxstep  1 \
+          -levels   4 2
+
+        invert_dof_node "invref" -parent "regref" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.1_ref" \
+          -dofdir   "$dofdir/1.1_inv"
+
+        compose_dofs_node "initdofs" -parent "invref" \
+            -subjects "${subids[@]}" \
+            -dofin1   "$dofdir/1.1_inv" -dofid1 '$(target)' \
+            -dofin2   "$dofdir/1.1_ref" -dofid2 '$(source)' \
+            -dofdir   "$dofdir/1.1_sim" \
+            -noshearing
+
+      else
+
+        register_node "initdofs" \
+            -subjects "${subids[@]}" \
+            -imgdir   "$imgdir" \
+            -imgpre   "$imgpre" \
+            -imgsuf   "$imgsuf" \
+            -dofdir   "$dofdir/1.1_sim" \
+            -model    "Similarity" \
+            -interp   "$interpolation" \
+            -sim      "$similarity" \
+            -bins     "$bins" \
+            -radius   "$radius" \
+            -bgvalue  "$bgvalue" \
+            -inclbg   true \
+            -maxres   "$resolution" \
+            -segdir   "$segdir" \
+            -segmsk   "BS+CB" .33 \
+            -levels   4 2 \
+            -maxstep  1 \
+            -group    20
+
+      fi
 
       # pairwise affine registration
-      register_node 'regaff' -parent 'initdofs' \
+      register_node "regaff" -parent "initdofs" \
           -subjects "${subids[@]}" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
@@ -224,14 +268,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -group    20
 
       # average pairwise transformations
-      average_dofs_node 'avgdofs' -parent 'regaff' \
+      average_dofs_node "avgdofs" -parent "regaff" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_aff" \
           -dofdir   "$dofdir/1.3_avg" \
           -noshearing
 
       # pairwise affine refinement
-      register_node 'refine' -parent 'avgdofs' \
+      register_node "refine" -parent "avgdofs" \
           -subjects "${subids[@]}" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
@@ -247,18 +291,19 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
+          -maxstep  1 \
           -levels   2 \
           -group    20
 
       # average pairwise transformations
-      average_dofs_node 'avgres' -parent 'refine' \
+      average_dofs_node "avgres" -parent "refine" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.4_res" \
           -dofdir   "$dofdir/1.5_avg" \
           -noshearing
 
       # compose average transformations
-      compose_dofs_node 'compose' -parent 'avgres' \
+      compose_dofs_node "compose" -parent "avgres" \
           -subjects "${subids[@]}" \
           -dofin1   "$dofdir/1.3_avg" \
           -dofin2   "$dofdir/1.5_avg" \
