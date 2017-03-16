@@ -1536,7 +1536,7 @@ compose_dofs_node()
   [ -n "$dofin2" ] || error "compose_dofs_node: missing input -dofin2 argument"
   if [[ $dofid1 == '$(target)' ]] && [[ $dofid2 == '$(source)' ]]; then
     [ -z "$dofid" ] || [[ "$dofid" == '$(target)/$(source)' ]] || {
-      error "compose_dofs_node: output -dofid cannot be set when -dofid1 '$(target)' -dofid2 '$(source)'")
+      error "compose_dofs_node: output -dofid cannot be set when -dofid1 '$(target)' -dofid2 '$(source)'"
     }
     [ -z "$dofin3" ] || {
       error "compose_dofs_node: third transformation not allowed when -dofid1 '$(target)' -dofid2 '$(source)'"

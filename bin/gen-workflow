@@ -264,6 +264,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
           -maxres   "$resolution" \
+          -maxstep  1 \
           -levels   3 1 \
           -group    20
 
