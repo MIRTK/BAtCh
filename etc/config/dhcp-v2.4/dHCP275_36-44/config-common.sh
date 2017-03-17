@@ -30,7 +30,7 @@ clssuf="_tissues.nii.gz"
 tissues=9
 structures=87
 
-segdir="masks"
+segdir="seg"
 segpre=""
 segsuf=".nii.gz"
 

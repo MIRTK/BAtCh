@@ -24,28 +24,28 @@ pardir="${pardir/$topdir\//}"         # - make path relative to working director
 agelst="$pardir/ages.csv"             # CSV table of image IDs and associated ages
 sublst="$pardir/subjects.lst"         # List of image IDs, one per line
 
-imgdir='../images'                    # directory of anatomical brain images
-imgpre=''                             # brain image file name prefix
-imgsuf='.nii.gz'                      # brain image file name suffix
+imgdir="../images"                    # directory of anatomical brain images
+imgpre=""                             # brain image file name prefix
+imgsuf=".nii.gz"                      # brain image file name suffix
 bgvalue=0                             # background value of skull-stripped images
 
-lbldir='../labels'                    # base directory of available segmentations
-lblpre='structures/'                  # file name prefix of structural segmentation label image
-lblsuf='.nii.gz'                      # file name suffix of structural segmentation label image
-clspre='tissues/'                     # file name prefix of tissue segmentations
-clssuf='.nii.gz'                      # file name suffix of tissue segmentations
+lbldir="../labels"                    # base directory of available segmentations
+lblpre="structures/"                  # file name prefix of structural segmentation label image
+lblsuf=".nii.gz"                      # file name suffix of structural segmentation label image
+clspre="tissues/"                     # file name prefix of tissue segmentations
+clssuf=".nii.gz"                      # file name suffix of tissue segmentations
 tissues=9                             # no. of tissue classes
 structures=87                         # no. of structures
 
-segdir='../masks'                     # directory with binary segmentation masks
-segpre=''                             # file name prefix of binary segmentation masks
-segsuf='.nii.gz'                      # file name suffix of binary segmentation masks
+segdir="seg"                          # directory with binary segmentation masks
+segpre=""                             # file name prefix of binary segmentation masks
+segsuf=".nii.gz"                      # file name suffix of binary segmentation masks
 
 # global normalization
 refdir="etc/reference"                # directory of reference image
-refpre=''                             # reference image file name prefix
-refsuf='.nii.gz'                      # reference image file name suffix
-refid=''                              # ID of reference image (optional)
+refpre=""                             # reference image file name prefix
+refsuf=".nii.gz"                      # reference image file name suffix
+refid=""                              # ID of reference image (optional)
                                       # - set reference ID to empty string to compute
                                       #   population specific linear average
 refini=true                           # - false: use reference for global normalization
@@ -61,11 +61,11 @@ binlnk=true                           # link (true) or copy (false) job executab
 
 # registration parameters
 resolution=0.5                        # highest image resolution at final level in mm
-similarity='NMI'                      # image (dis-)similarity measure: SSD, NMI, NCC
+similarity="NMI"                      # image (dis-)similarity measure: SSD, NMI, NCC
 radius=3                              # radius of NCC in number of voxels (0: global NCC)
 bins=64                               # no. of bins to use for NMI
-model='SVFFD'                         # free-form deformation model
-mffd='None'                           # multi-level transformation model
+model="SVFFD"                         # free-form deformation model
+mffd="None"                           # multi-level transformation model
 levels=4                              # no. of resolution levels for deformable registration
 spacing=2.5                           # control point spacing on finest level
 bending=5e-3                          # weight of bending energy term
@@ -75,7 +75,7 @@ pairwise=true                         # true:  construct template using pairwise
                                       # false: use initial affine average as initial template
 refine=10                             # no. of subject to template deformation refinement steps
 inclbg=false                          # whether to include background during deformable registration
-interpolation='Linear'                # image interpolation mode
+interpolation="Linear"                # image interpolation mode
 [[ $inclbg == true ]] || interpolation="$interpolation with padding"
 
 # temporal kernel regression parameters
@@ -88,8 +88,8 @@ krnext="tsv"                          # kernel file name extension (excl. leadin
 
 # averaging options
 threshold=0.5                         # minimum accumulated normalized weight threshold
-normalization='zscore'                # input normalization option of mirtk average-images
-rescaling='1 100'                     # output rescaling option of mirtk average-images
+normalization="zscore"                # input normalization option of mirtk average-images
+rescaling="1 100"                     # output rescaling option of mirtk average-images
 sharpen=true                          # whether to enhance edges in average image
 
 # default output settings
@@ -97,15 +97,15 @@ libdir="lib"                          # shared libraries required by job executa
 bindir="$libdir/tools"                # symbolic links to / copy of job executable files
 dagdir="dag"                          # workflow description as DAG files for HTCondor DAGMan
 logdir="log"                          # directory of log files written by workflow jobs
-dofdir="../output/dofs"               # transformations computed during atlas construction
-evldir="../output/eval"               # directory of evaluation output files
-outdir="../output/atlas"              # atlas output directory
-tmpdir="../output/temp"               # directory of intermediate average images
+dofdir="../dofs"               # transformations computed during atlas construction
+evldir="../eval"               # directory of evaluation output files
+outdir="../atlas"              # atlas output directory
+tmpdir="../temp"               # directory of intermediate average images
 
 # HTCondor settings
-notify_user="${USER}@ic.ac.uk"
+notify_user=""
 notification="Error"
-requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 14 && Machine != "gingko.doc.ic.ac.uk"'
+requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 14'
 log="progress.log"
 
 # utility function to set pardir in custom configuration

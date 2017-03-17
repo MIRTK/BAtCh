@@ -5,7 +5,7 @@
 /bin/register
 /dag/
 /log/
-/masks/
+/seg/
 *.log
 .*.swo
 .*.swp

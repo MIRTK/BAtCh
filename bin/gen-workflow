@@ -148,7 +148,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
-          -segmsk   "BS+CB" .33 \
+          -segmsk   "bs+cb" .33 \
           -maxstep  1 \
           -levels   4 2
 
@@ -208,7 +208,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
-          -segmsk   "BS+CB" .33 \
+          -segmsk   "bs+cb" .33 \
           -maxstep  1 \
           -levels   4 2 \
           -group    20
@@ -239,7 +239,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -inclbg   true \
             -maxres   "$resolution" \
             -segdir   "$segdir" \
-            -segmsk   "BS+CB" .33 \
+            -segmsk   "bs+cb" .33 \
             -levels   4 2 \
             -maxstep  1 \
             -group    100

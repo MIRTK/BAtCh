@@ -6,22 +6,23 @@
 ##
 ## See etc/config/default.sh for documentation and full list of parameters
 
-# normalization
-refid='serag-40'
-refini=true
+set_pardir_from_file_path "$BASH_SOURCE"
 
 # input
-set_pardir_from_file_path "$BASH_SOURCE"
 agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
 
+# normalization
+refid="serag-40"
+refini=true
+
 # registration
-mffd='None'
-model='SVFFD'
+mffd="None"
+model="SVFFD"
 levels=4
 resolution=1
-interpolation='Linear'
-similarity='NMI'
+interpolation="Linear"
+similarity="NMI"
 bins=64
 inclbg=false
 bending=1e-3
@@ -37,16 +38,16 @@ epsilon=0.001
 kernel="$pardir/weights"
 
 # averaging options
-normalization='none'
-rescaling='none'
+normalization="none"
+rescaling="none"
 sharpen=false
 
 # output settings
 subdir="miccai14-stia"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
-dofdir="../output/$subdir/dofs"
-evldir="../output/$subdir/eval"
-outdir="../output/$subdir/atlas"
-tmpdir="../output/$subdir/temp"
+dofdir="../$subdir/dofs"
+evldir="../$subdir/eval"
+outdir="../$subdir/atlas"
+tmpdir="../$subdir/temp"
 log="$logdir/progress.log"
