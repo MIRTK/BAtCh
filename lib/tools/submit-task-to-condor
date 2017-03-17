@@ -10,6 +10,7 @@ if [[ "${workflow:0:4}" == 'dag/' ]]; then
 fi
 if [[ "${workflow:${#workflow}-4:4}" == '.dag' ]]; then
   task="$(basename "${workflow:0:-4}")"
+  workflow="$(dirname "$workflow")"
 else
   task="$2"
   shift
