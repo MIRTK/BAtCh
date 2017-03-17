@@ -213,18 +213,18 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -levels   4 2 \
           -group    20
 
-        invert_dof_node "invert" -parent "regref" \
+        invert_dof_node "invref" -parent "regref" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.1_ref" \
-          -dofdir   "$dofdir/1.1_inv" \
-          -group    20
+          -dofdir   "$dofdir/1.1_inv"
 
+        prev_node="invref"
         nrmdofs="$dofdir/1.1_inv"
         dofins="identity"
 
       else
 
-        register_node "initdofs" \
+        register_node "regini" \
             -subjects "${subids[@]}" \
             -imgdir   "$imgdir" \
             -imgpre   "$imgpre" \
@@ -244,13 +244,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -maxstep  1 \
             -group    100
 
+        prev_node="regini"
         nrmdofs=""
         dofins="$dofdir/1.1_sim"
 
       fi
 
       # pairwise affine registration
-      register_node "regaff" -parent "initdofs" \
+      register_node "regaff" -parent "$prev_node" \
           -subjects "${subids[@]}" \
           -imgdir   "$imgdir" \
           -imgpre   "$imgpre" \
@@ -285,7 +286,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -dofin1   "$nrmdofs" \
             -dofin2   "$dofdir/1.2_aff/average" \
             -dofdir   "$dofdir/1.2_aff/composite" \
-            -noshearing -group 20
+            -noshearing
         nrmdofs="$dofdir/1.2_aff/composite"
       else
         prev_node="avgdofs"
@@ -332,7 +333,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofin1   "$dofin1" \
           -dofin2   "$dofdir/1.3_res/average" \
           -dofdir   "$nrmdofs" \
-          -noshearing -group 20
+          -noshearing
 
     fi
 
