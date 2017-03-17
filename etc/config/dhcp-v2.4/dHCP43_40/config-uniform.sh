@@ -10,7 +10,7 @@ epsilon=0.1
 kernel="$pardir/uniform"
 
 # output settings
-subdir="dhcp-v2.4-term-uniform"
+subdir="dhcp-v2.4/dHCP43_40_uniform"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../output/$subdir/dofs"
