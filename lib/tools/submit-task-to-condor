@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ $# -eq 2 -o $# -eq 3 ] || { echo "usage: $0 [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
+[ $# -gt 0 ] || { echo "usage: $0 [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
 
 workflow=$1
 shift
