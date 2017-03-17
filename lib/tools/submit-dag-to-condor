@@ -26,7 +26,7 @@ log=
 nosubmit=
 rescue=true
 priority=0
-keytab="/homes/$USER/.krb5kt"
+keytab="$HOME/.krb5kt"
 [ -f "$keytab" ] || keytab=
 
 while [ $# -gt 0 ]; do

@@ -1,12 +1,25 @@
 #!/bin/bash
 
-[ $# -eq 2 -o $# -eq 3 ] || { echo "usage: $0 <workflow> <task> [i]" 1>&2; exit 1; }
+[ $# -eq 2 -o $# -eq 3 ] || { echo "usage: $0 [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
 
 workflow=$1
-workflow=${workflow/dag\//}
+shift
 
-task=$2
-i=${3:-1}
+if [[ "${workflow:0:4}" == 'dag/' ]]; then
+  workflow="${workflow:4}"
+fi
+if [[ "${workflow:${#workflow}-4:4}" == '.dag' ]]; then
+  task="$(basename "${workflow:0:-4}")"
+else
+  task="$2"
+  shift
+fi
+
+i=${1:-1}
+shift
+
+topdir="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+cd "$topdir" || exit 1
 
 mkdir -p "log/$workflow" || exit 1
-lib/tools/submit-dag-to-condor -d dag/$workflow/${task}.dag -l log/$workflow/${task}_${i}.log -k "$HOME/.krb5kt"
+lib/tools/submit-dag-to-condor -d dag/$workflow/${task}.dag -l log/$workflow/${task}_${i}.log
