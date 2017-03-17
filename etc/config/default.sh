@@ -97,10 +97,10 @@ libdir="lib"                          # shared libraries required by job executa
 bindir="$libdir/tools"                # symbolic links to / copy of job executable files
 dagdir="dag"                          # workflow description as DAG files for HTCondor DAGMan
 logdir="log"                          # directory of log files written by workflow jobs
-dofdir="../dofs"               # transformations computed during atlas construction
-evldir="../eval"               # directory of evaluation output files
-outdir="../atlas"              # atlas output directory
-tmpdir="../temp"               # directory of intermediate average images
+dofdir="../dofs"                      # transformations computed during atlas construction
+evldir="../eval"                      # directory of output files suitable for QC and evaluation
+outdir="../atlas"                     # atlas output directory
+tmpdir="../temp"                      # directory of intermediate average images
 
 # HTCondor settings
 notify_user=""
