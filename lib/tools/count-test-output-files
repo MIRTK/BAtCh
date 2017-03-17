@@ -1,0 +1,13 @@
+#!/bin/bash
+ext="$1"
+shift
+tests=($@)
+if [ ${#tests[@]} -eq 0 ]; then
+  tests=($(find . -maxdepth 1 -name 'test_???' | sed 's/.*_\([0-9]\+\)/\1/' | sort))
+fi
+
+for i in ${tests[@]}; do
+  d=$(printf test_%03d $i)
+  echo -n "$d: "
+  find $d -name "*$ext" -type f | wc -l
+done

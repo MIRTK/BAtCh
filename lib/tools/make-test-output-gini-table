@@ -1,0 +1,13 @@
+#!/bin/bash
+
+tests=($@)
+if [ ${#tests[@]} -eq 0 ]; then
+  tests=($(find . -maxdepth 1 -name 'test_???' | sed 's/.*_\([0-9]\+\)/\1/' | sort))
+fi
+
+echo "Test,Mean,StDev"
+for i in ${tests[@]}; do
+  echo -n "$i," || exit 1
+  mirtk calculate-element-wise $(printf test_%03d $i)/stats/gini.nii.gz -threshold-ge .25 -mean -sigma -delim , || exit 1
+  echo || exit 1
+done
