@@ -1,12 +1,9 @@
 ## See etc/config/default.sh for documentation and full list of parameters
+##
+## This atlas construction is based on the original spatio-temporal neonatal
+## atlas construction approach proposed by Serag et al.
 
-# normalization
-refid='serag-40'
-
-# input
-set_pardir_from_file_path "$BASH_SOURCE"
-agelst="$pardir/ages.csv"
-sublst="$pardir/subjects.lst"
+source "$(dirname "$BASH_SOURCE")/config-common.sh"
 
 # registration
 mffd='Sum'
@@ -30,7 +27,7 @@ epsilon=0.054
 kernel="$pardir/weights"
 
 # output settings
-subdir="dhcp-v2.4-term-serag"
+subdir="dhcp-v2.4/dHCP43_40_classic"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../output/$subdir/dofs"
