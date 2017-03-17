@@ -112,12 +112,12 @@ register_node()
   local parent=()
   local tgtdir=
   local tgtid=
-  local tgtpre=
-  local tgtsuf='.nii.gz'
+  local tgtpre='$imgpre'
+  local tgtsuf='$imgsuf'
   local srcdir=
   local srcid=
-  local srcpre=
-  local srcsuf='.nii.gz'
+  local srcpre='$imgpre'
+  local srcsuf='$imgsuf'
   local pairs=
   local ids=()
   local idlst=
@@ -346,12 +346,12 @@ register_node()
     dofins='Id'
   fi
   [ -n "$dofdir" ] || error "register_node: missing output -dofdir argument"
-  [ -n "$tgtdir"                ] || tgtdir="$imgdir"
-  [ -n "$tgtpre" -o -n "$tgtid" ] || tgtpre="$imgpre"
-  [ -n "$tgtsuf"                ] || tgtsuf="$imgsuf"
-  [ -n "$srcdir"                ] || srcdir="$imgdir"
-  [ -n "$srcpre" -o -n "$srcid" ] || srcpre="$imgpre"
-  [ -n "$srcsuf"                ] || srcsuf="$imgsuf"
+  [ -n "$tgtdir" ] || tgtdir="$imgdir"
+  [ -n "$srcdir" ] || srcdir="$imgdir"
+  [[ $tgtpre != '$imgpre' ]] || tgtpre="$imgpre"
+  [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$imgsuf"
+  [[ $srcpre != '$imgpre' ]] || srcpre="$imgpre"
+  [[ $srcsuf != '$imgsuf' ]] || srcsuf="$imgsuf"
   if [ -n "$dofid" ]; then
     if [ -z "$tgtid" -o -z "$srcid" ]; then
       error "register_node: -dofid requires a fixed -tgtid and -srcid"
@@ -827,8 +827,8 @@ transform_image_node()
   local tgtsuf='$imgsuf'
   local outdir=
   local outid=
-  local outpre='$imgpre'
-  local outsuf='$imgsuf'
+  local outpre='$srcpre'
+  local outsuf='$srcsuf'
   local ref=
   local refid=
   local refdir=
@@ -923,8 +923,8 @@ transform_image_node()
   [[ $tgtsuf != '$imgsuf' ]] || tgtsuf="$imgsuf"
   [[ $srcpre != '$imgpre' ]] || srcpre="$imgpre"
   [[ $srcsuf != '$imgsuf' ]] || srcsuf="$imgsuf"
-  [[ $outpre != '$imgpre' ]] || outpre="$imgpre"
-  [[ $outsuf != '$imgsuf' ]] || outsuf="$imgsuf"
+  [[ $outpre != '$srcpre' ]] || outpre="$srcpre"
+  [[ $outsuf != '$srcsuf' ]] || outsuf="$srcsuf"
   if [ -z "$ref" -a -n "$refid" ]; then
     ref="$refdir/$refpre$refid$refsuf"
   fi
@@ -940,7 +940,7 @@ transform_image_node()
   local N=1
   if [ -n "$tgtid" -a -n "$srcid" ]; then
     N=1
-  elif [ -n "$tgtid" -o -n "$srcid" ]; then
+  elif [ -n "$tgtid$srcid" ]; then
     N=${#ids[@]}
     if [[ $resample != true ]]; then
       id2="$tgtid"
@@ -1078,7 +1078,7 @@ transform_image_node()
           job_node="resample_$id1"
           add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         else
-          job_node="transform_$id1,$id2"
+          job_node="transform_$id2"
           add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
         [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
@@ -1093,7 +1093,7 @@ transform_image_node()
           job_node="resample_$id1"
           add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         else
-          job_node="transform_$id1,$id2"
+          job_node="transform_$id2"
           add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         fi
         [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
