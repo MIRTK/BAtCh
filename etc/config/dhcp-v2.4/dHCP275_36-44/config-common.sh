@@ -1,7 +1,8 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 
-# input
 set_pardir_from_file_path "$BASH_SOURCE"
+
+# input
 agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
 
