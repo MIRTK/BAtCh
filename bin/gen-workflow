@@ -538,7 +538,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -sublst    "$kernel/$krnpre${t}.$krnext" \
                 -imgdir    "$imgdir" \
                 -imgpre    "$imgpre" \
-                -imgsuf    ".nii.gz" \
+                -imgsuf    "$imgsuf" \
                 -refid     "$nrmref" \
                 -refdir    "$nrmdir" \
                 -refpre    "$nrmpre" \
@@ -634,7 +634,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -sublst    "$kernel/$krnpre${t}.$krnext" \
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
-          -imgsuf    ".nii.gz" \
+          -imgsuf    "$imgsuf" \
           -refid     "$nrmref" \
           -refdir    "$nrmdir" \
           -refpre    "$nrmpre" \
