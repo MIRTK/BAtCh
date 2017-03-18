@@ -772,6 +772,7 @@ register_node()
         else
           # add nodes of individual jobs to register id1 and id2
           s=0
+          local id2s=()
           for id2 in "${ids[@]}"; do
             let s++
             if [[ $ic == true ]]; then
@@ -787,52 +788,34 @@ register_node()
                                      -var     "source=\"$id2\""
             add_edge "reg_$id1,$id2" 'mkdirs'
             [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "reg_$id1,$id2"
+            id2s=("${id2s[@]}" "$id2")
           done
           # add nodes of jobs to invert inverse-consistent transformations
           if [[ $ic == true ]] && [ -n "$dofdir" ]; then
             if [ $invgrp -gt 1 ]; then
-              i=0
-              s1=1
-              let S="$t-1"
-              while [ $s1 -le $S ]; do
-                s=$s1
-                srcids=()
-                let s2="$s1+$invgrp-1"
-                while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
-                  [ $s -ge $t ] || {
-                    id2="${ids[$s-1]}"
-                    if [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ]; then
-                      srcids=("${srcids[@]}" "$id2")
-                    fi
-                  }
-                  let s++
+              i=0; j=0
+              while [ $j -lt ${#id2s[@]} ]; do
+                let i++
+                srcids=("${id2s[@]:$j:$invgrp}")
+                add_node "inv_$id1-$i" -subfile "invert.sub" \
+                                       -var     "target=\"$id1\"" \
+                                       -grpvar  "source" \
+                                       -grpval  "${srcids[@]}"
+                for id2 in ${srcids[@]}; do
+                  add_edge "inv_$id1-$i" "reg_$id1,$id2"
                 done
-                if [ ${#srcids[@]} -gt 0 ]; then
-                  let i++
-                  add_node "inv_$id1-$i" -subfile "invert.sub" \
-                                         -var     "target=\"$id1\"" \
-                                         -grpvar  "source" \
-                                         -grpval  "${srcids[@]}"
-                  for id2 in ${srcids[@]}; do
-                    add_edge "inv_$id1-$i" "reg_$id1,$id2"
-                  done
-                  is_done='true'
-                  for id2 in ${srcids[@]}; do
-                    if [ ! -f "$dofdir/$id2/$id1$dofsuf" ]; then
-                      is_done='false'
-                      break
-                    fi
-                  done
-                  [[ $is_done == false ]] || node_done "inv_$id1-$i"
-                fi
-                let s1="$s2+1"
+                is_done=true
+                for id2 in ${srcids[@]}; do
+                  if [ ! -f "$dofdir/$id2/$id1$dofsuf" ]; then
+                    is_done=false
+                    break
+                  fi
+                done
+                [[ $is_done == false ]] || node_done "inv_$id1-$i"
+                let j="$j + $invgrp"
               done
             else
-              s=0
-              for id2 in "${ids[@]}"; do
-                let s++
-                [ $t -lt $s ] || continue
-                [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ] || continue
+              for id2 in "${id2s[@]}"; do
                 add_node "inv_$id1,$id2" -subfile "invert.sub" \
                                          -var     "target=\"$id1\"" \
                                          -var     "source=\"$id2\""
