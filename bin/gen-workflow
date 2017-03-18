@@ -472,7 +472,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -dofdir    "$dofdir/2.1_def" \
           -domain    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
           -maxres    "$resolution" \
-          -levels    "$levels"
+          -levels    "$levels" \
+          -group-inv 100
 
       # for each atlas time point...
       for t in ${timepoints[@]}; do

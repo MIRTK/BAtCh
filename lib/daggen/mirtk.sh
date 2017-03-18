@@ -106,7 +106,7 @@ init_dof_node()
 # add node for pairwise image registration
 register_node()
 {
-  local args w i j t s n lvl res blr is_done segment
+  local args w i j t s lvl res blr is_done segment
 
   local node=
   local parent=()
@@ -146,6 +146,7 @@ register_node()
   local ic='false'
   local sym='false'
   local group=1
+  local invgrp=0
   local params=
   local maxstep=0
 
@@ -320,6 +321,9 @@ register_node()
       -group)
         optarg group $1 "$2"
         shift; ;;
+      -group-inv)
+        optarg invgrp $1 "$2"
+        shift; ;;
       -*)
         error "register_node: invalid option: $1"; ;;
       *)
@@ -370,6 +374,7 @@ register_node()
   if [ -n "$pairs" ] && [ -z "$tgtid$srcid" ] && [ ! -f "$pairs" ]; then
     error "register_node: specified -pairs file does not exist: $pairs"
   fi
+  [ $invgrp -gt 0 ] || invgrp=$group
 
   local nlevels=${levels[0]}
   if [ -n "$resolution" ]; then
@@ -410,8 +415,10 @@ register_node()
   elif [ -n "$tgtid" -o -n "$srcid" ]; then
     N=${#ids[@]}
   elif [ -n "$pairs" ]; then
-    N=$(wc -l "$pairs" | cut -d ' ' -f 1)
+    N=($(wc -l "$pairs"))
     [ $? -eq 0 ] || error "Failed to determine number of unique image pairs!"
+    N=${N[0]}
+    [ $N -gt 0 ] || error "Invalid number of unique image pairs!"
     [[ $ic == true ]] || let N="$N * 2"
   else
     let N="${#ids[@]} * (${#ids[@]} - 1)"
@@ -598,7 +605,7 @@ register_node()
     make_sub_script "register.sub" "$sub" -executable register
 
     # create generic dofinvert submission script
-    if [[ $ic == true ]] && [ -z "$tgtid" -a -z "$srcid" ] ; then
+    if [[ $ic == true ]] && [ -z "$tgtid$srcid" ] ; then
       # command used to invert inverse-consistent transformation
       local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
       sub="$sub\noutput       = $_dagdir/\$(target)/inv_\$(source).log"
@@ -634,7 +641,6 @@ register_node()
 
     # add node to register target to source
     if [ -n "$tgtid" -a -n "$srcid" ]; then
-      n=1
       add_node "reg_$tgtid,$srcid" -subfile "register.sub"
       [ -z "$pre" ] || add_edge "reg_$tgtid,$srcid" 'mkdirs'
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "reg_$tgtid,$srcid"
@@ -657,9 +663,7 @@ register_node()
           let i="$j+1"
         done
       else
-        n=0
         for id in "${ids[@]}"; do
-          let n++
           add_node "reg_$id" -subfile "register.sub" -var "source=\"$id\""
           [ -z "$pre" ] || add_edge "reg_$id" 'mkdirs'
           [ ! -f "$dofdir/$id$dofsuf" ] || node_done "reg_$id"
@@ -684,22 +688,19 @@ register_node()
           let i="$j+1"
         done
       else
-        n=0
         for id in "${ids[@]}"; do
-          let n++
           add_node "reg_$id" -subfile "register.sub" -var "target=\"$id\""
           [ -z "$pre" ] || add_edge "reg_$id" 'mkdirs'
           [ ! -f "$dofdir/$id$dofsuf" ] || node_done "reg_$id"
         done
       fi
-    # add pairwise registration nodes
+    # register all pairs of images
     else
-      n=0
       t=0
       local s1 s2 S grpids srcids id1 id2
       for id1 in "${ids[@]}"; do
         let t++
-        # register all other images to image of subject id1
+        # register all other images to image with id1
         if [ $group -gt 1 ]; then
           s1=1
           if [[ $ic == true ]]; then
@@ -735,8 +736,7 @@ register_node()
             fi
             if [ ${#srcids[@]} -gt 0 ]; then
               let i++
-              let n++
-              # node to register id1 and id2
+              # node of n grouped jobs to register source images to image with id1
               add_node "reg_$id1-$i" -subfile "register.sub" \
                                      -var     "target=\"$id1\"" \
                                      -grpvar  "source" \
@@ -750,7 +750,7 @@ register_node()
                 fi
               done
               [[ $is_done == false ]] || node_done "reg_$id1-$i"
-              # node to invert inverse-consistent transformation
+              # node of n grouped jobs to invert inverse-consistent transformations
               if [[ $ic == true ]] && [ -n "$dofdir" ]; then
                 add_node "inv_$id1-$i" -subfile "invert.sub" \
                                        -var     "target=\"$id1\"" \
@@ -770,6 +770,7 @@ register_node()
             let s1="$s2+1"
           done
         else
+          # add nodes of individual jobs to register id1 and id2
           s=0
           for id2 in "${ids[@]}"; do
             let s++
@@ -781,22 +782,65 @@ register_node()
             if [ -n "$pairs" ] && [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -eq 0 ]; then
               continue
             fi
-            let n++
-            # node to register id1 and id2
             add_node "reg_$id1,$id2" -subfile "register.sub" \
                                      -var     "target=\"$id1\"" \
                                      -var     "source=\"$id2\""
             add_edge "reg_$id1,$id2" 'mkdirs'
             [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "reg_$id1,$id2"
-            # node to invert inverse-consistent transformation
-            if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-              add_node "inv_$id1,$id2" -subfile "invert.sub" \
-                                       -var     "target=\"$id1\"" \
-                                       -var     "source=\"$id2\""
-              add_edge "inv_$id1,$id2" "reg_$id1,$id2"
-              [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "inv_$id1,$id2"
-            fi
           done
+          # add nodes of jobs to invert inverse-consistent transformations
+          if [[ $ic == true ]] && [ -n "$dofdir" ]; then
+            if [ $invgrp -gt 1 ]; then
+              i=0
+              s1=1
+              let S="$t-1"
+              while [ $s1 -le $S ]; do
+                s=$s1
+                srcids=()
+                let s2="$s1+$invgrp-1"
+                while [ $s -le $s2 ] && [ $s -le ${#ids[@]} ]; do
+                  [ $s -ge $t ] || {
+                    id2="${ids[$s-1]}"
+                    if [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ]; then
+                      srcids=("${srcids[@]}" "$id2")
+                    fi
+                  }
+                  let s++
+                done
+                if [ ${#srcids[@]} -gt 0 ]; then
+                  let i++
+                  add_node "inv_$id1-$i" -subfile "invert.sub" \
+                                         -var     "target=\"$id1\"" \
+                                         -grpvar  "source" \
+                                         -grpval  "${srcids[@]}"
+                  for id2 in ${srcids[@]}; do
+                    add_edge "inv_$id1-$i" "reg_$id1,$id2"
+                  done
+                  is_done='true'
+                  for id2 in ${srcids[@]}; do
+                    if [ ! -f "$dofdir/$id2/$id1$dofsuf" ]; then
+                      is_done='false'
+                      break
+                    fi
+                  done
+                  [[ $is_done == false ]] || node_done "inv_$id1-$i"
+                fi
+                let s1="$s2+1"
+              done
+            else
+              s=0
+              for id2 in "${ids[@]}"; do
+                let s++
+                [ $t -lt $s ] || continue
+                [ -z "$pairs" ] || [ $(egrep "^($id1,$id2|$id2,$id1)$" "$pairs" | wc -l) -ne 0 ] || continue
+                add_node "inv_$id1,$id2" -subfile "invert.sub" \
+                                         -var     "target=\"$id1\"" \
+                                         -var     "source=\"$id2\""
+                add_edge "inv_$id1,$id2" "reg_$id1,$id2"
+                [ ! -f "$dofdir/$id2/$id1$dofsuf" ] || node_done "inv_$id1,$id2"
+              done
+            fi
+          fi
         fi
       done
     fi

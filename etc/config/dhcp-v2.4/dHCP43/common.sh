@@ -38,38 +38,5 @@ segsuf=".nii.gz"
 refdir="etc/reference"
 refpre=""
 refsuf=".nii.gz"
-refid="serag-40"
+refid="serag-t40"
 refini=true
-
-# registration
-mffd="None"
-model="SVFFD"
-levels=4
-resolution=0.5
-interpolation="Linear with padding"
-similarity="NMI"
-bins=64
-inclbg=false
-bending=5e-3
-jacobian=1e-4
-symmetric=true
-pairwise=true
-refine=10
-
-# regression
-means=({36..44})
-sigma=0.50
-epsilon=0.001
-kernel="$pardir/weights_constant_sigma=$sigma"
-krnpre="t"
-krnext="tsv"
-
-# output settings
-subdir="dHCP275_36-44_sigma_${sigma}_const"
-dagdir="dag/$subdir"
-logdir="log/$subdir"
-dofdir="../$subdir/dofs"
-evldir="../$subdir/eval"
-outdir="../$subdir/atlas"
-tmpdir="../$subdir/temp"
-log="$logdir/progress.log"

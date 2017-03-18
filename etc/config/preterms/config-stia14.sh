@@ -33,9 +33,9 @@ refine=0
 
 # regression
 means=({28..44})
-sigma=1
+sigma=1.00
 epsilon=0.001
-kernel="$pardir/weights"
+kernel="$pardir/constant-sigma_$sigma"
 
 # averaging options
 normalization="none"

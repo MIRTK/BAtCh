@@ -1,1 +1,1 @@
-dhcp-v2.4/dHCP275_36-44/config-adaptive-sigma=0.50.sh
+dhcp-v2.4/dHCP275/adaptive-sigma.sh
