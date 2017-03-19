@@ -30,7 +30,7 @@ lbldir="$dhcp_structural_pipeline/segmentations"
 lblpre=""
 lblsuf="_all_labels.nii.gz"
 clspre=""
-clssuf="_tissues.nii.gz"
+clssuf="_tissue_labels.nii.gz"
 tissues=9
 structures=87
 
