@@ -8,9 +8,6 @@ source "$appdir/lib/daggen/mirtk.sh" || {
   echo "Failed to import daggen/mirtk module!" 1>&2
   exit 1
 }
-source "$appdir/etc/config/default.sh" || {
-  error "Failed to load default configuration"
-}
 
 # ==============================================================================
 # help
@@ -43,6 +40,11 @@ Options:
   -t <t1>...
       Time points for which to construct an atlas.
       (default: all time points found in $kernel/ directory)
+  -sigma, -stdev <value>
+      Standard deviation of temporal Gaussian kernels.
+      This value is set before the configuration is loaded.
+      It will only have an effect if the configuration file does
+      not override it, unless the 'sigma' variable is not set.
   -u, -update
       Overwrite existing DAGMan files.
   -h, -help
@@ -55,6 +57,25 @@ HELP
 # ==============================================================================
 # configuration
 # ==============================================================================
+
+# sigma value specified as command argument
+# Note: Only used when not overridden by configuration file.
+sigma=0
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -stdev|-sigma)
+      let a=o+1
+      optarg sigma ${!o} "${!a}";
+      ;;
+  esac
+  let o++
+done
+
+# load default configuration (including etc/config/custom.sh if present)
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
 
 # load custom configuration
 o=0
@@ -99,6 +120,7 @@ while [ $# -gt 0 ]; do
       ;;
     -u|-update) update='true'; ;;
     -c|-config) shift; ;; # already loaded
+    -stdev|-sigma) shift; ;; # already set
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose) let verbose++; ;;
     *) error "Unknown argument: $1"; ;;
@@ -115,6 +137,14 @@ read_sublst subids "$sublst"
 
 # change to working directory
 cd "$topdir" || error "Failed to change to working directory!"
+
+if [ $verbose -gt 0 ]; then
+  echo "No. of subjects/images   = ${#subids[@]}"
+  echo "Atlas time points        = ${timepoints[@]}"
+  echo "Temporal kernel sigma    = $sigma"
+  echo "Temporal kernel weights  = $kernel"
+  echo "Update existing workflow = $update"
+fi
 
 # ==============================================================================
 # workflow

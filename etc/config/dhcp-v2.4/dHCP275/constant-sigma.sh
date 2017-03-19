@@ -3,9 +3,7 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
 
-sigma=0.50
 kernel="$pardir/constant-sigma_$sigma"
-
 subdir="dHCP275/constant-sigma_$sigma"
 dagdir="dag/$subdir"
 logdir="log/$subdir"

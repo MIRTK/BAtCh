@@ -81,7 +81,7 @@ interpolation="Linear"                # image interpolation mode
 # temporal kernel regression parameters
 epsilon=0.001                         # kernel weight threshold
 means=()                              # default list of atlas time points
-sigma=1                               # default standard deviation of temporal kernel
+[ -n "$sigma" ] || sigma=1            # default standard deviation of temporal kernel
 kernel="$pardir/weights"              # directory containing temporal kernel files
 krnpre="t"                            # kernel file name prefix
 krnext="tsv"                          # kernel file name extension (excl. leading dot)

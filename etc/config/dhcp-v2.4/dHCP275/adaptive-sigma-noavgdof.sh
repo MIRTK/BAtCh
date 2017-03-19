@@ -5,10 +5,7 @@ source "$topdir/$pardir/common.sh"
 
 pairwise=false
 refine=10
-
-sigma=0.50
 kernel="$pardir/adaptive-sigma_$sigma"
-
 subdir="dHCP275/adaptive-sigma_$sigma-noavgdof"
 dagdir="dag/$subdir"
 logdir="log/$subdir"

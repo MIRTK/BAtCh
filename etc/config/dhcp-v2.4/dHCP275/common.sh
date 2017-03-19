@@ -58,7 +58,8 @@ refine=10
 
 # regression
 means=({36..44})
-sigma=0.50
+[ -n "$sigma" ] || sigma=0.5
+sigma=$(printf '%.2f' $sigma)
 epsilon=0.001
 kernel="$pardir/constant_sigma=$sigma"
 krnpre="t"
