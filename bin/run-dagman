@@ -1,6 +1,6 @@
 #!/bin/bash
 
-[ $# -gt 0 ] || { echo "usage: $0 [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
+[ $# -gt 0 ] || { echo "usage: $(basename "$0") [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
 
 workflow=$1
 shift
@@ -19,7 +19,7 @@ fi
 i=${1:-1}
 shift
 
-topdir="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
 cd "$topdir" || exit 1
 
 mkdir -p "log/$workflow" || exit 1
