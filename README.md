@@ -1,6 +1,9 @@
 HTCondor DAGMan application for the construction of a spatio-temporal brain atlas
 and growth model from cross-sectional brain MR images.
 
+**This workflow has been tested with MIRTK master branch revision c18e1ac.**
+
+
 Initial Setup
 =============
 
