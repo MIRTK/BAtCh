@@ -186,81 +186,84 @@ begin_dag "compare_affine_atlas_constructions"
     for imgid in ${tgtids[@]:0:5}; do
 
       info "\nInitial reference template: $imgid"
+      begin_dag "reference_$imgid"
 
-      prev_node=""
+        prev_node=""
 
-      tgtid="$imgid"
-      tgtdir="$imgdir"
-      tgtpre="$imgpre"
-      tgtsuf="$imgsuf"
+        tgtid="$imgid"
+        tgtdir="$imgdir"
+        tgtpre="$imgpre"
+        tgtsuf="$imgsuf"
 
-      i=1
-      while [ $i -le $refine ]; do
+        i=1
+        while [ $i -le $refine ]; do
 
-        register_node "compute_dofs_$i" -parent "$prev_node" \
-            -subjects "${subids[@]}" \
-            -tgtid    "$tgtid" \
-            -tgtdir   "$tgtdir" \
-            -tgtpre   "$tgtpre" \
-            -tgtsuf   "$tgtsuf" \
-            -imgdir   "$imgdir" \
-            -imgpre   "$imgpre" \
-            -imgsuf   "$imgsuf" \
-            -hdrdofs  "$nrmdofs" \
-            -dofins   "identity" \
-            -dofdir   "$dofdir/1.${i}_aff/$imgid" \
-            -model    "Affine" \
-            -interp   "$interpolation" \
-            -sim      "$similarity" \
-            -bins     "$bins" \
-            -radius   "$radius" \
-            -bgvalue  "$bgvalue" \
-            -inclbg   "$inclbg" \
-            -maxres   "$resolution" \
-            -levels   "$levels" \
-            -maxstep  1 \
-            -group    $group
+          register_node "compute_dofs_$i" -parent "$prev_node" \
+              -subjects "${subids[@]}" \
+              -tgtid    "$tgtid" \
+              -tgtdir   "$tgtdir" \
+              -tgtpre   "$tgtpre" \
+              -tgtsuf   "$tgtsuf" \
+              -imgdir   "$imgdir" \
+              -imgpre   "$imgpre" \
+              -imgsuf   "$imgsuf" \
+              -hdrdofs  "$nrmdofs" \
+              -dofins   "identity" \
+              -dofdir   "$dofdir/1.${i}_aff/$imgid" \
+              -model    "Affine" \
+              -interp   "$interpolation" \
+              -sim      "$similarity" \
+              -bins     "$bins" \
+              -radius   "$radius" \
+              -bgvalue  "$bgvalue" \
+              -inclbg   "$inclbg" \
+              -maxres   "$resolution" \
+              -levels   "$levels" \
+              -maxstep  1 \
+              -group    $group
 
-        invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
-            -subjects "${subids[@]}" \
-            -dofins   "$dofdir/1.${i}_aff/$imgid" \
-            -dofdir   "$dofdir/1.${i}_inv/$imgid" \
-            -group    $group
+          invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
+              -subjects "${subids[@]}" \
+              -dofins   "$dofdir/1.${i}_aff/$imgid" \
+              -dofdir   "$dofdir/1.${i}_inv/$imgid" \
+              -group    $group
 
-        average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
-            -subjects "${subids[@]}" \
-            -dofins   "$dofdir/1.${i}_aff/$imgid" \
-            -dofdir   "$dofdir/1.${i}_aff/$imgid" \
-            -dofid    "average"
+          average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+              -subjects "${subids[@]}" \
+              -dofins   "$dofdir/1.${i}_aff/$imgid" \
+              -dofdir   "$dofdir/1.${i}_aff/$imgid" \
+              -dofid    "average"
 
-        average_images_node "average_images_$i" -parent "average_dofs_$i" \
-            -subjects  "${subids[@]}" \
-            -refdir    "$nrmdir" \
-            -refpre    "$nrmpre" \
-            -refid     "$nrmref" \
-            -refsuf    "$nrmsuf" \
-            -imgdir    "$imgdir" \
-            -imgpre    "$imgpre" \
-            -imgsuf    "$imgsuf" \
-            -dofin1    "$nrmdofs" \
-            -dofin2    "$dofdir/1.${i}_inv/$imgid" \
-            -dofin3    "$dofdir/1.${i}_aff/$imgid" -dofid3 "average" \
-            -output    "$outdir/atlas_with_${imgid}_as_initial_template/template_$i.nii.gz" \
-            -padding   "$bgvalue" \
-            -threshold "$threshold" \
-            -normalize "$normalization" \
-            -rescale   "$rescaling" \
-            -sharpen   "$sharpen"
+          average_images_node "average_images_$i" -parent "average_dofs_$i" \
+              -subjects  "${subids[@]}" \
+              -refdir    "$nrmdir" \
+              -refpre    "$nrmpre" \
+              -refid     "$nrmref" \
+              -refsuf    "$nrmsuf" \
+              -imgdir    "$imgdir" \
+              -imgpre    "$imgpre" \
+              -imgsuf    "$imgsuf" \
+              -dofin1    "$nrmdofs" \
+              -dofin2    "$dofdir/1.${i}_inv/$imgid" \
+              -dofin3    "$dofdir/1.${i}_aff/$imgid" -dofid3 "average" \
+              -output    "$outdir/atlas_with_${imgid}_as_initial_template/template_$i.nii.gz" \
+              -padding   "$bgvalue" \
+              -threshold "$threshold" \
+              -normalize "$normalization" \
+              -rescale   "$rescaling" \
+              -sharpen   "$sharpen"
 
-        prev_node="average_images_$i"
+          prev_node="average_images_$i"
 
-        tgtid="template_$i"
-        tgtdir="$outdir/atlas_with_${imgid}_as_initial_template"
-        tgtpre=""
-        tgtsuf=".nii.gz"
+          tgtid="template_$i"
+          tgtdir="$outdir/atlas_with_${imgid}_as_initial_template"
+          tgtpre=""
+          tgtsuf=".nii.gz"
 
-        let i++
-      done  # for i
+          let i++
+        done  # for i
+
+      end_dag
 
     done  # for tgtid
 
