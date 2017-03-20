@@ -77,6 +77,7 @@ init_dof_node()
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [ ! -d "$dofdir" ] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
@@ -619,24 +620,41 @@ register_node()
     # than a PRE script for each registration job, which would require
     # the -maxpre option to avoid memory issues
     local pre=
+    is_done=true
     if [ -n "$tgtid" -o -n "$srcid" ]; then
       # directory for output files
       pre="$pre\nmkdir -p '$dofdir' || exit 1"
+      [ -d "$dofdir" ] || is_done=false
     else
       # directory for log files
       for id in "${ids[@]}"; do
         pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
+      done
+      for id in "${ids[@]}"; do
+        if [ ! -d "$_dagdir/$id" ]; then
+          is_done=false
+          break
+        fi
       done
       # directory for output files
       pre="$pre\n"
       for id in "${ids[@]}"; do
         pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
       done
+      if [[ is_done == true ]]; then
+        for id in "${ids[@]}"; do
+          if [ ! -d "$dofdir/$id" ]; then
+            is_done=false
+            break
+          fi
+        done
+      fi
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [[ is_done == false ]] || node_done "mkdirs"
     fi
 
     # add node to register target to source
@@ -1061,21 +1079,38 @@ transform_image_node()
 
     # job to create output directories
     local pre=''
+    local is_done=true
     if [ -z "$tgtid$srcid" ]; then
       for id in "${ids[@]}"; do
         pre="$pre\nmkdir -p '$_dagdir/$id' || exit 1"
+      done
+      for id in "${ids[@]}"; do
+        if [ ! -d "$_dagdir/$id" ]; then
+          is_done=false
+          break
+        fi
       done
       pre="$pre\n"
       for id in "${ids[@]}"; do
         pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
       done
+      if [[ $is_done == true ]]; then
+        for id in "${ids[@]}"; do
+          if [ ! -d "$outdir/$id" ]; then
+            is_done=false
+            break
+          fi
+        done
+      fi
     elif [ -n "$outdir" ] && [[ $outdir != '.' ]]; then
       pre="$pre\nmkdir -p '$outdir' || exit 1"
+      [ -d "$outdir" ] || is_done=false
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [[ is_done == false ]] || node_done "mkdirs"
     fi
 
     # add job nodes
@@ -1265,26 +1300,36 @@ evaluate_overlap_node()
 
     # job to create output directories
     local pre=''
+    local is_done=true
     if [ -n "$tgtid" ]; then
       if [ -n "$table" ]; then
         local csvdir="$(dirname "$table")"
         if [[ $csvdir != '.' ]]; then
           pre="$pre\nmkdir -p '$csvdir' || exit 1"
+          [ -d "$csvdir" ] || is_done=false
         fi
       elif [ -n "$outdir" ]; then
         if [[ $outdir != '.' ]]; then
           pre="$pre\nmkdir -p '$outdir' || exit 1"
+          [ -d "$outdir" ] || is_done=false
         fi
       fi
     elif [ -n "$outdir" ]; then
       for id in ${ids[@]}; do
         pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
       done
+      for id in ${ids[@]}; do
+        if [ ! -d "$outdir/$id" ]; then
+          is_done=false
+          break
+        fi
+      done
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [[ is_done == false ]] || node_done "mkdirs"
     fi
 
     # add job nodes
@@ -1342,6 +1387,7 @@ invert_dof_node()
   local dofins=
   local dofdir=
   local dofsuf='.dof.gz'
+  local group=1
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1351,6 +1397,7 @@ invert_dof_node()
       -dofins) optarg dofins $1 "$2"; shift; ;;
       -dofdir) optarg dofdir $1 "$2"; shift; ;;
       -dofsuf) optarg dofsuf $1 "$2"; shift; ;;
+      -group) optarg group $1 "$2"; shift; ;;
       -*) error "invert_dof_node: invalid option: $1"; ;;
       *)
         [ -z "$node" ] || error "invert_dof_node: too many arguments"
@@ -1381,17 +1428,39 @@ invert_dof_node()
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [ ! -d "$dofdir" ] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
     # add invert-dof nodes to DAG
-    for id in "${ids[@]}"; do
-      add_node "invert_$id" -subfile "invert.sub" -var "id=\"$id\""
-      for dep in ${deps[@]}; do
-        add_edge "invert_$id" "$dep"
+    if [ $group -gt 1 ]; then
+      local grpids i=0
+      while [ $i -lt ${#ids[@]} ]; do
+        grpids=("${ids[@]:$i:$group}")
+        let j="$i + ${#grpids[@]} - 1"
+        add_node "invert_$i-$j" -subfile "invert.sub" -grpvar "id" -grpval "${grpids[@]}"       
+        for dep in ${deps[@]}; do
+          add_edge "invert_$i-$j" "$dep"
+        done
+        is_done=true
+        for id in ${grpids[@]}; do
+          if [ ! -f "$dofdir/$id.dof.gz" ]; then
+            is_done=false
+            break
+          fi
+        done
+        [[ is_done == false ]] || node_done "invert_$i-$j"
+        let i="$j + 1"
       done
-      [ ! -f "$dofdir/$id.dof.gz" ] || node_done "invert_$id"
-    done
+    else
+      for id in ${ids[@]}; do
+        add_node "invert_$id" -subfile "invert.sub" -var "id=\"$id\""
+        for dep in ${deps[@]}; do
+          add_edge "invert_$id" "$dep"
+        done
+        [ ! -f "$dofdir/$id.dof.gz" ] || node_done "invert_$id"
+      done
+    fi
 
   }; end_dag
   add_edge $node ${parent[@]}
@@ -1414,6 +1483,7 @@ average_dofs_node()
   local outpre=
   local outsuf=
   local options='-v -all'
+  local group=1
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1436,6 +1506,7 @@ average_dofs_node()
       -noscaling)     options="$options -noscaling";  ;;
       -noshearing)    options="$options -noshearing";  ;;
       -dofs)          options="$options -dofs"; ;;
+      -group)         optarg group $1 "$2"; shift; ;;
       -*)             error "average_dofs_node: invalid option: $1"; ;;
       *)              [ -z "$node" ] || error "average_dofs_node: too many arguments"
                       node=$1; ;;
@@ -1486,6 +1557,7 @@ average_dofs_node()
       make_script "mkdirs.sh" "mkdir -p '$dofdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [ ! -d "$dofdir" ] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
@@ -1497,16 +1569,35 @@ average_dofs_node()
       done
       [ ! -f "$dofdir/$dofid$dofsuf" ] || node_done "dofavg_$dofid"
     else
-      if [ ${#ids[@]} -eq 0 ]; then
-        read_sublst ids "$doflst"
-      fi
-      for id in "${ids[@]}"; do
-        add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
-        for dep in ${deps[@]}; do
-          add_edge "dofavg_$id" "$dep"
+      [ ${#ids[@]} -gt 0 ] || read_sublst ids "$doflst"
+      if [ $group -gt 1 ]; then
+        local grpids i=0
+        while [ $i -lt ${#ids[@]} ]; do
+          grpids=("${ids[@]:$i:$group}")
+          let j="$i + ${#grpids[@]} - 1"
+          add_node "dofavg_$i-$j" -subfile "dofavg.sub" -grpvar "id" -grpval "${grpids[@]}"
+          for dep in ${deps[@]}; do
+            add_edge "dofavg_$i-$j" "$dep"
+          done
+          is_done=true
+          for id in ${grpids[@]}; do
+            if [ ! -f "$dofdir/$id$dofsuf" ]; then
+              is_done=false
+              break
+            fi
+          done
+          [[ is_done == false ]] || node_done "dofavg_$i-$j"
+          let i="$j + 1"
         done
-        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofavg_$id"
-      done
+      else
+        for id in "${ids[@]}"; do
+          add_node "dofavg_$id" -subfile "dofavg.sub" -var "id=\"$id\""
+          for dep in ${deps[@]}; do
+            add_edge "dofavg_$id" "$dep"
+          done
+          [ ! -f "$dofdir/$id$dofsuf" ] || node_done "dofavg_$id"
+        done
+      fi
     fi
 
   }; end_dag
@@ -1532,6 +1623,7 @@ compose_dofs_node()
   local dofin3=
   local dofsuf='.dof.gz'
   local options=''
+  local group=1
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -1551,6 +1643,7 @@ compose_dofs_node()
       -norotation)    options="$options -norotation";  ;;
       -noscaling)     options="$options -noscaling";  ;;
       -noshearing)    options="$options -noshearing";  ;;
+      -group) optarg group $1 "$2"; shift; ;;
       -*)        error "compose_dofs_node: invalid option: $1"; ;;
       *)         [ -z "$node" ] || error "compose_dofs_node: too many arguments"
                  node=$1; ;;
@@ -1596,18 +1689,27 @@ compose_dofs_node()
     # node to create output directories
     local deps=()
     local pre=
+    local is_done=true
     if [[ $dofid == '$(target)/$(source)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id in "${ids[@]}"; do
         pre="$pre\nmkdir -p '$dofdir/$id' || exit 1"
       done
+      for id in "${ids[@]}"; do
+        if [ ! -d "$dofdir/$id" ]; then
+          is_done=false
+          break
+        fi
+      done
     elif [ -n "$dofdir" ] && [[ "$dofdir" != '.' ]]; then
       pre="mkdir -p '$dofdir' || exit 1"
+      [ -d "$dofdir" ] || is_done=false
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [[ is_done == false ]] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
@@ -1615,24 +1717,74 @@ compose_dofs_node()
     if [[ "$dofid" == '$(target)/$(source)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
       for id1 in "${ids[@]}"; do
-        for id2 in "${ids[@]}"; do
-          [[ $id1 != $id2 ]] || continue
-          add_node "compose_$id1,$id2" -subfile "compose.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
-          for dep in ${deps[@]}; do
-            add_edge "compose_$id1,$id2" "$dep"
+        if [ $group -gt 1 ]; then
+          local i=0 j k grpids
+          while [ $i -lt ${#ids[@]} ]; do
+            grpids=("${ids[@]:$i:$group}")
+            let j="$i + ${#grpids[@]} - 1"
+            k=0
+            while [ $k -lt ${#grpids[@]} ]; do
+              if [[ ${grpids[k]} == $id1 ]]; then
+                unset grpids[k]
+                grpids=("${grpids[@]}")
+                break
+              fi
+            done
+            add_node "compose_$id1,$i-$j" -subfile "compose.sub" -var "target=\"$id1\"" -grpvar "source" -grpval "${grpids[@]}"
+            for dep in ${deps[@]}; do
+              add_edge "compose_$id1,$i-$j" "$dep"
+            done
+            is_done=true
+            for id2 in ${grpids[@]}; do
+              if [ ! -f "$dofdir/$id1/$id2$dofsuf" ]; then
+                is_done=false
+                break
+              fi
+            done
+            [[ is_done == false ]] || node_done "compose_$id1,$i-$j"
+            let i="$j + 1"
           done
-          [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "compose_$id1,$id2"
-        done
+        else
+          for id2 in "${ids[@]}"; do
+            [[ $id1 != $id2 ]] || continue
+            add_node "compose_$id1,$id2" -subfile "compose.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
+            for dep in ${deps[@]}; do
+              add_edge "compose_$id1,$id2" "$dep"
+            done
+            [ ! -f "$dofdir/$id1/$id2$dofsuf" ] || node_done "compose_$id1,$id2"
+          done
+        fi
       done
     elif [[ "$dofid" == '$(id)' ]]; then
       [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
-      for id in "${ids[@]}"; do
-        add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""
-        for dep in ${deps[@]}; do
-          add_edge "compose_$id" "$dep"
+      if [ $group -gt 1 ]; then
+        local grpids i=0
+        while [ $i -lt ${#ids[@]} ]; do
+          grpids=("${ids[@]:$i:$group}")
+          let j="$i + ${#grpids[@]} - 1"
+          add_node "compose_$i-$j" -subfile "compose.sub" -grpvar "id" -grpval "${grpids[@]}"
+          for dep in ${deps[@]}; do
+            add_edge "compose_$i-$j" "$dep"
+          done
+          is_done=true
+          for id in ${grpids[@]}; do
+            if [ ! -f "$dofdir/$id$dofsuf" ]; then
+              is_done=false
+              break
+            fi
+          done
+          [[ is_done == false ]] || node_done "compose_$i-$j"
+          let i="$j + 1"
         done
-        [ ! -f "$dofdir/$id$dofsuf" ] || node_done "compose_$id"
-      done
+      else
+        for id in "${ids[@]}"; do
+          add_node "compose_$id" -subfile "compose.sub" -var "id=\"$id\""
+          for dep in ${deps[@]}; do
+            add_edge "compose_$id" "$dep"
+          done
+          [ ! -f "$dofdir/$id$dofsuf" ] || node_done "compose_$id"
+        done
+      fi
     else
       add_node "compose_$dofid" -subfile "compose.sub"
       for dep in ${deps[@]}; do
@@ -1807,17 +1959,21 @@ average_images_node()
     local deps=()
     local pre=
     local avgdir="$(dirname "$average")"
+    local is_done=true
     if [[ "$avgdir" != '.' ]]; then
       pre="mkdir -p '$avgdir' || exit 1"
+      [ -d "$avgdir" ] || is_done=false
     fi
     local stddir="$(dirname "$stdev")"
     if [[ "$stddir" != '.' ]]; then
       pre="mkdir -p '$stddir' || exit 1"
+      [ -d "$stddir" ] || is_done=false
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [[ is_done == false ]] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
@@ -1906,6 +2062,7 @@ aggregate_images_node()
       make_script "mkdirs.sh" "mkdir -p '$outdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [ ! -d "$outdir" ] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
@@ -2012,6 +2169,7 @@ edit_image_node()
       make_script "mkdirs.sh" "mkdir -p '$outdir' || exit 1"
       add_node "mkdirs" -executable "$topdir/$_dagdir/mkdirs.sh" \
                         -sub        "error = $_dagdir/mkdirs.log\nqueue"
+      [ ! -d "$outdir" ] || node_done "mkdirs"
       deps=('mkdirs')
     fi
 
