@@ -406,11 +406,15 @@ register_node()
     let j="$i + 1"
     let t="$i + 3"
     let s="$i + 4"
-    if [[ $sym == true ]]; then
-      fidelity="$fidelity + ${segments[j]} SSD[${segments[i]} difference](I($t) o T^-.5, I($s) o T^.5)"
-    elif [[ $ic == true ]]; then
-      fidelity="$fidelity + ${segments[j]} SSD[Fwd ${segments[i]} difference](I($t), I($s) o T)"
-      fidelity="$fidelity + ${segments[j]} SSD[Bwd ${segments[i]} difference](I($t) o T^-1, I($s))"
+    if [[ $register_tool == 'register' ]]; then
+      if [[ $sym == true ]]; then
+        fidelity="$fidelity + ${segments[j]} SSD[${segments[i]} difference](I($t) o T^-.5, I($s) o T^.5)"
+      elif [[ $ic == true ]]; then
+        fidelity="$fidelity + ${segments[j]} SSD[Fwd ${segments[i]} difference](I($t), I($s) o T)"
+        fidelity="$fidelity + ${segments[j]} SSD[Bwd ${segments[i]} difference](I($t) o T^-1, I($s))"
+      else
+        fidelity="$fidelity + ${segments[j]} SSD[${segments[i]} difference](I($t), I($s) o T)"
+      fi
     else
       fidelity="$fidelity + ${segments[j]} SSD[${segments[i]} difference](I($t), I($s) o T)"
     fi
