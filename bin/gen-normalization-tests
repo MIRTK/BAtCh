@@ -1,0 +1,531 @@
+#! /bin/bash
+
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/mirtk.sh" || {
+  echo "Failed to import daggen/mirtk module!" 1>&2
+  exit 1
+}
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $appid [options]
+
+This script generates the DAGMan worflow for evaluation of different global
+normalization methods (affine atlas construction). The workflow can then
+be submitted to the batch queuing system HTCondor for distributed parallel
+execution. Alternatively, the workflow can be executed sequentially on the local
+machine or submitted to another supported batch queuing system (e.g., SLURM).
+
+Options:
+  -c, -config <config.sh>
+      Custom configuration file. (default: none)
+  -a, -agelst <age.csv>
+      Comma/space-separated CSV file, where the first column contains
+      the image ID and the second column the associated age.
+      (default: $agelst)
+  -s, -sublst <sub.lst>
+      Text file listing the IDs of the images to use for the atlas construction.
+      If not specified, the IDs are read from the -agelst.
+      (default: $sublst)
+  -u, -update
+      Overwrite existing DAGMan files.
+  -h, -help
+      Print help and exit.
+  -v, -verbose
+      Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# configuration
+# ==============================================================================
+
+# load default configuration (including etc/config/custom.sh if present)
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
+
+# load custom configuration
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
+  esac
+  let o++
+done
+
+[ -z "$agelst" ] || agelst="$topdir/$agelst"
+[ -z "$sublst" ] || sublst="$topdir/$sublst"
+
+# parse remaining options
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -s|-sublst) optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst) optarg agelst $1 "$2"; shift; ;;
+    -u|-update) update=true; ;;
+    -c|-config) shift; ;; # already loaded
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose) let verbose++; ;;
+    *) error "Unknown argument: $1"; ;;
+  esac
+  shift
+done
+
+# read subject IDs
+if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
+  error "Missing CSV file with subject IDs and corresponding ages!"
+fi
+[ -n "$sublst" ] || sublst="$agelst"
+read_sublst subids "$sublst"
+
+# change to working directory
+cd "$topdir" || error "Failed to change to working directory!"
+
+
+# ==============================================================================
+# workflow
+# ==============================================================================
+
+nrmdir="$tmpdir"
+nrmpre=""
+nrmref="template_0"
+nrmsuf=".nii.gz"
+nrmdofs="$dofdir/0.2_inv"
+
+begin_dag "compare_affine_atlas_constructions"
+
+  # ----------------------------------------------------------------------------
+  # initial rigid alignment
+
+  info "\nAdding DAG for initial rigid normalization"
+  begin_dag "rigid_normalization" -splice
+
+    register_node "register" \
+        -subjects "${subids[@]}" \
+        -tgtid    "$refid" \
+        -tgtdir   "$refdir" \
+        -tgtpre   "$refpre" \
+        -tgtsuf   "$refsuf" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -dofdir   "$dofdir/0.1_ref" \
+        -model    "Rigid" \
+        -interp   "$interpolation" \
+        -sim      "$similarity" \
+        -bins     "$bins" \
+        -radius   "$radius" \
+        -bgvalue  "$bgvalue" \
+        -inclbg   true \
+        -segdir   "$segdir" \
+        -segmsk   "bs+cb" .33 \
+        -maxres   "$resolution" \
+        -maxstep  1 \
+        -group    100
+
+    invert_dof_node "invert" -parent "register" \
+        -subjects "${subids[@]}" \
+        -dofins   "$dofdir/0.1_ref" \
+        -dofdir   "$nrmdofs" \
+        -group    100
+
+    average_images_node "average" -parent "invert" \
+        -subjects  "${subids[@]}" \
+        -refdir    "$refdir" \
+        -refpre    "$refpre" \
+        -refid     "$refid" \
+        -refsuf    "$refsuf" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -dofdir    "$nrmdofs" \
+        -output    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+        -spacing   "$resolution" \
+        -padding   "$bgvalue" \
+        -threshold "$threshold" \
+        -normalize "$normalization" \
+        -rescale   "$rescaling" \
+        -sharpen   "$sharpen" \
+        -margin    5
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # 1. Iterative template construction using different images as initial reference
+
+  info "\nAdding DAG for iterative atlas construction with random subject as initial reference"
+  begin_dag "iterative_atlas_construction_with_single_reference" -parent "rigid_normalization" -splice
+
+    seed="0"  # or use "datetime.now()" if it should not always be the same (not good for reproducibility, though)
+    tgtids=($(python -c "import sys; import random; from datetime import datetime; random.seed($seed); ids = sys.stdin.readlines(); random.shuffle(ids); print(''.join(ids))" < "$sublst"))
+
+    for imgid in ${tgtids[@]:0:5}; do
+
+      info "\nInitial reference template: $imgid"
+
+      prev_node=""
+
+      tgtid="$imgid"
+      tgtdir="$imgdir"
+      tgtpre="$imgpre"
+      tgtsuf="$imgsuf"
+
+      i=1
+      while [ $i -le $refine ]; do
+
+        register_node "compute_dofs_$i" -parent "$prev_node" \
+            -subjects "${subids[@]}" \
+            -tgtid    "$tgtid" \
+            -tgtdir   "$tgtdir" \
+            -tgtpre   "$tgtpre" \
+            -tgtsuf   "$tgtsuf" \
+            -imgdir   "$imgdir" \
+            -imgpre   "$imgpre" \
+            -imgsuf   "$imgsuf" \
+            -hdrdofs  "$nrmdofs" \
+            -dofins   "identity" \
+            -dofdir   "$dofdir/1.${i}_aff/$imgid/$tgtid" \
+            -model    "Affine" \
+            -interp   "$interpolation" \
+            -sim      "$similarity" \
+            -bins     "$bins" \
+            -radius   "$radius" \
+            -bgvalue  "$bgvalue" \
+            -inclbg   "$inclbg" \
+            -maxres   "$resolution" \
+            -levels   "$levels" \
+            -maxstep  1 \
+            -group    100
+
+        average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+            -subjects "${subids[@]}" \
+            -dofins   "$dofdir/1.${i}_aff/$imgid/$tgtid" \
+            -dofdir   "$dofdir/1.${i}_aff/$imgid/$tgtid" \
+            -dofid    "average"
+
+        average_images_node "average_images_$i" -parent "average_dofs_$i" \
+            -subjects  "${subids[@]}" \
+            -refdir    "$nrmdir" \
+            -refpre    "$nrmpre" \
+            -refid     "$nrmref" \
+            -refsuf    "$nrmsuf" \
+            -imgdir    "$imgdir" \
+            -imgpre    "$imgpre" \
+            -imgsuf    "$imgsuf" \
+            -dofin1    "$nrmdofs" \
+            -dofin2    "$dofdir/1.${i}_aff/$imgid/$tgtid" -dofid2 "average" \
+            -output    "$outdir/atlas_with_${imgid}_as_initial_template/template_$i.nii.gz" \
+            -spacing   "$resolution" \
+            -padding   "$bgvalue" \
+            -threshold "$threshold" \
+            -normalize "$normalization" \
+            -rescale   "$rescaling" \
+            -sharpen   "$sharpen" \
+            -margin    5
+
+        prev_node="average_images_$i"
+
+        tgtid="template_$i"
+        tgtdir="$outdir/atlas_with_${imgid}_as_initial_template"
+        tgtpre=""
+        tgtsuf=".nii.gz"
+
+        let i++
+      done  # for i
+
+    done  # for tgtid
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # 2. Iterative template construction using rigid template as initial reference
+
+  info "\nAdding DAG for iterative atlas construction with rigid template as initial reference"
+  begin_dag "iterative_atlas_construction_with_rigid_reference" -parent "rigid_normalization" -splice
+
+    subdir="atlas_with_rigid_average_as_initial_template"
+
+    tgtid="$nrmref"
+    tgtdir="$nrmdir"
+    tgtpre="$nrmpre"
+    tgtsuf="$nrmsuf"
+
+    prev_node=""
+
+    i=1
+    while [ $i -le $refine ]; do
+
+      register_node "compute_dofs_$i" -parent "$prev_node" \
+          -subjects "${subids[@]}" \
+          -tgtid    "$tgtid" \
+          -tgtdir   "$tgtdir" \
+          -tgtpre   "$tgtpre" \
+          -tgtsuf   "$tgtsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -hdrdofs  "$nrmdofs" \
+          -dofins   "identity" \
+          -dofdir   "$dofdir/2.${i}_aff/$tgtid" \
+          -model    "Affine" \
+          -interp   "$interpolation" \
+          -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   "$inclbg" \
+          -maxres   "$resolution" \
+          -levels   "$levels" \
+          -maxstep  1 \
+          -group    100
+
+      average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/2.${i}_aff/$tgtid" \
+          -dofdir   "$dofdir/2.${i}_aff/$tgtid" \
+          -dofid    "average"
+
+      average_images_node "average_images_$i" -parent "average_dofs_$i" \
+          -subjects  "${subids[@]}" \
+          -refdir    "$nrmdir" \
+          -refpre    "$nrmpre" \
+          -refid     "$nrmref" \
+          -refsuf    "$nrmsuf" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -dofin1    "$nrmdofs" \
+          -dofin2    "$dofdir/2.${i}_aff/$tgtid" -dofid2 "average" \
+          -output    "$outdir/$subdir/template_$i.nii.gz" \
+          -spacing   "$resolution" \
+          -padding   "$bgvalue" \
+          -threshold "$threshold" \
+          -normalize "$normalization" \
+          -rescale   "$rescaling" \
+          -sharpen   "$sharpen" \
+          -margin    5
+
+      prev_node="average_images_$i"
+
+      tgtid="template_$i"
+      tgtdir="$outdir/$subdir"
+      tgtpre=""
+      tgtsuf=".nii.gz"
+
+      let i++
+    done  # for i
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # 3. Iterative Log-Euclidean mean of all pairwise transformations
+
+  info "\nAdding DAG for reference-free atlas construction using Log-Euclidean mean of pairwise transformations"
+  begin_dag "atlas_construction_with_iterative_mean_of_pairwise_dofs" -parent "rigid_normalization" -splice
+
+    subdir="atlas_construction_with_iterative_mean_of_pairwise_dofs"
+    hdrdofs="$nrmdofs"
+    prev_node=""
+
+    i=1
+    while [ $i -le $refine ]; do
+
+      register_node "compute_dofs_$i" -parent "$prev_node" \
+          -subjects "${subids[@]}" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -hdrdofs  "$hdrdofs" \
+          -dofins   "identity" \
+          -dofdir   "$dofdir/3.${i}_aff" \
+          -model    "Affine" \
+          -interp   "$interpolation" \
+          -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   "$inclbg" \
+          -maxres   "$resolution" \
+          -levels   "$levels" \
+          -maxstep  1 \
+          -group    100
+
+      average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/3.${i}_aff" \
+          -dofdir   "$dofdir/3.${i}_aff/average" \
+          -group    100
+
+      compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofin1   "$hdrdofs" \
+          -dofin2   "$dofdir/3.${i}_aff/average" \
+          -dofdir   "$dofdir/3.${i}_aff/composite" \
+          -group    100
+
+      hdrdofs="$dofdir/3.${i}_aff/composite"
+
+      average_images_node "average_images_$i" -parent "compose_dofs_$i" \
+          -subjects  "${subids[@]}" \
+          -refdir    "$nrmdir" \
+          -refpre    "$nrmpre" \
+          -refid     "$nrmref" \
+          -refsuf    "$nrmsuf" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -dofdir    "$hdrdofs" \
+          -output    "$outdir/$subdir/template_$i.nii.gz" \
+          -spacing   "$resolution" \
+          -padding   "$bgvalue" \
+          -threshold "$threshold" \
+          -normalize "$normalization" \
+          -rescale   "$rescaling" \
+          -sharpen   "$sharpen" \
+          -margin    5
+
+      prev_node="average_images_$i"
+
+      let i++
+    done  # for i
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # 4. Log-Euclidean mean of all pairwise transformations as initial reference
+
+  info "\nAdding DAG for iterative atlas construction with Log-Euclidean mean as initial reference"
+  begin_dag "iterative_atlas_construction_with_mean_of_pairwise_dofs" -parent "rigid_normalization" -splice
+
+    subdir="iterative_atlas_construction_with_mean_of_pairwise_dofs"
+
+    register_node "compute_dofs_0" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -hdrdofs  "$nrmdofs" \
+        -dofins   "identity" \
+        -dofdir   "$dofdir/4.0_aff" \
+        -model    "Affine" \
+        -interp   "$interpolation" \
+        -sim      "$similarity" \
+        -bins     "$bins" \
+        -radius   "$radius" \
+        -bgvalue  "$bgvalue" \
+        -inclbg   "$inclbg" \
+        -maxres   "$resolution" \
+        -levels   "$levels" \
+        -maxstep  1 \
+        -group    100
+
+    average_dofs_node "average_dofs_0" -parent "compute_dofs_0" \
+        -subjects "${subids[@]}" \
+        -dofins   "$dofdir/4.0_aff" \
+        -dofdir   "$dofdir/4.0_aff/average" \
+        -group    100
+
+    tgtdir="$outdir/$subdir"
+    tgtpre=""
+    tgtid="template_0"
+    tgtsuf=".nii.gz"
+
+    average_images_node "average_images_0" -parent "average_dofs_0" \
+        -subjects  "${subids[@]}" \
+        -refdir    "$nrmdir" \
+        -refpre    "$nrmpre" \
+        -refid     "$nrmref" \
+        -refsuf    "$nrmsuf" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -dofin1    "$nrmdofs" \
+        -dofin2    "$dofdir/4.0_aff/average" \
+        -output    "$tgtdir/$tgtpre$tgtid$tgtsuf" \
+        -spacing   "$resolution" \
+        -padding   "$bgvalue" \
+        -threshold "$threshold" \
+        -normalize "$normalization" \
+        -rescale   "$rescaling" \
+        -sharpen   "$sharpen" \
+        -margin    5
+
+    prev_node="average_images_0"
+
+    i=1
+    while [ $i -le $refine ]; do
+
+      register_node "compute_dofs_$i" -parent "$prev_node" \
+          -subjects "${subids[@]}" \
+          -tgtdir   "$tgtdir" \
+          -tgtpre   "$tgtpre" \
+          -tgtid    "$tgtid" \
+          -tgtsuf   "$tgtsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -hdrdofs  "$nrmdofs" \
+          -dofins   "identity" \
+          -dofdir   "$dofdir/4.${i}_aff/$tgtid" \
+          -model    "Affine" \
+          -interp   "$interpolation" \
+          -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   "$inclbg" \
+          -maxres   "$resolution" \
+          -levels   "$levels" \
+          -maxstep  1 \
+          -group    100
+
+      average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/4.${i}_aff/$tgtid" \
+          -dofdir   "$dofdir/4.${i}_aff/$tgtid" \
+          -dofid    "average"
+
+      average_images_node "average_images_$i" -parent "average_dofs_$i" \
+          -subjects  "${subids[@]}" \
+          -refdir    "$nrmdir" \
+          -refpre    "$nrmpre" \
+          -refid     "$nrmref" \
+          -refsuf    "$nrmsuf" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -dofin1    "$nrmdofs" \
+          -dofin2    "$dofdir/4.${i}_aff/$tgtid" -dofid2 "average" \
+          -output    "$outdir/$subdir/template_$i.nii.gz" \
+          -spacing   "$resolution" \
+          -padding   "$bgvalue" \
+          -threshold "$threshold" \
+          -normalize "$normalization" \
+          -rescale   "$rescaling" \
+          -sharpen   "$sharpen" \
+          -margin    5
+
+      prev_node="average_images_$i"
+      tgtid="template_$i"
+
+      let i++
+    done  # for i
+
+  end_dag
+ 
+end_dag
