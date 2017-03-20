@@ -904,7 +904,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
     ]
     if isinstance(job, JobArray):
         ranges = []
-        i = 0
+        i = -1
         for k in range(len(job)):
             if job[k].done:
                 if i + 1 <= k - 1:
@@ -912,6 +912,8 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
                 i = k
         if i + 1 <= len(job) - 1:
             ranges.append((i + 1, len(job) - 1))
+        if len(ranges) == 0:
+            raise Exception("JobArray not marked as done but ranges list is empty!")
         sbatch_argv.append('--array=' + ','.join(['{}-{}'.format(r[0] + 1, r[1] + 1) for r in ranges]))
     if deps:
         if _try_run:
