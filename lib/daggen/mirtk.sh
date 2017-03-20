@@ -667,8 +667,9 @@ register_node()
       if [ $group -gt 1 ]; then
         i=1
         while [ $i -le ${#ids[@]} ]; do
-          let j=$i+$group-1
-          add_node "reg_$i-$j" -subfile "register.sub" -grpvar 'source' -grpval "${ids[@]:$i-1:$group}"
+          srcids=("${ids[@]:$i-1:$group}")
+          let j="$i + ${#srcids[@]} - 1"
+          add_node "reg_$i-$j" -subfile "register.sub" -grpvar 'source' -grpval "${srcids[@]}"
           [ -z "$pre" ] || add_edge "reg_$i-$j" 'mkdirs'
           is_done='true'
           for id in ${ids[@]:$i:$group}; do
@@ -678,7 +679,7 @@ register_node()
             fi
           done
           [[ $is_done == false ]] || node_done "reg_$i-$j"
-          let i="$j+1"
+          let i="$j + 1"
         done
       else
         for id in "${ids[@]}"; do
@@ -692,8 +693,9 @@ register_node()
       if [ $group -gt 1 ]; then
         i=1
         while [ $i -le ${#ids[@]} ]; do
-          let j=$i+$group-1
-          add_node "reg_$i-$j" -subfile "register.sub" -grpvar 'target' -grpval "${ids[@]:$i-1:$group}"
+          srcids=("${ids[@]:$i-1:$group}")
+          let j="$i + ${#srcids[@]} - 1"
+          add_node "reg_$i-$j" -subfile "register.sub" -grpvar 'target' -grpval "${srcids[@]}"
           [ -z "$pre" ] || add_edge "reg_$i-$j" 'mkdirs'
           is_done='true'
           for id in ${ids[@]:$i:$group}; do
@@ -703,7 +705,7 @@ register_node()
             fi
           done
           [[ $is_done == false ]] || node_done "reg_$i-$j"
-          let i="$j+1"
+          let i="$j + 1"
         done
       else
         for id in "${ids[@]}"; do
@@ -754,12 +756,13 @@ register_node()
             fi
             if [ ${#srcids[@]} -gt 0 ]; then
               let i++
+              let j="$i + ${#srcids[@]} - 1"
               # node of n grouped jobs to register source images to image with id1
-              add_node "reg_$id1-$i" -subfile "register.sub" \
-                                     -var     "target=\"$id1\"" \
-                                     -grpvar  "source" \
-                                     -grpval  "${srcids[@]}"
-              add_edge "reg_$id1-$i" 'mkdirs'
+              add_node "reg_$id1,$i-$j" -subfile "register.sub" \
+                                        -var     "target=\"$id1\"" \
+                                        -grpvar  "source" \
+                                        -grpval  "${srcids[@]}"
+              add_edge "reg_$id1,$i-$j" 'mkdirs'
               is_done='true'
               for id2 in ${srcids[@]}; do
                 if [ ! -f "$dofdir/$id1/$id2$dofsuf" ]; then
@@ -767,14 +770,14 @@ register_node()
                   break
                 fi
               done
-              [[ $is_done == false ]] || node_done "reg_$id1-$i"
+              [[ $is_done == false ]] || node_done "reg_$id1,$i-$j"
               # node of n grouped jobs to invert inverse-consistent transformations
               if [[ $ic == true ]] && [ -n "$dofdir" ]; then
-                add_node "inv_$id1-$i" -subfile "invert.sub" \
-                                       -var     "target=\"$id1\"" \
-                                       -grpvar  "source" \
-                                       -grpval  "${srcids[@]}"
-                add_edge "inv_$id1-$i" "reg_$id1-$i"
+                add_node "inv_$id1,$i-$j" -subfile "invert.sub" \
+                                          -var     "target=\"$id1\"" \
+                                          -grpvar  "source" \
+                                          -grpval  "${srcids[@]}"
+                add_edge "inv_$id1,$i-$j" "reg_$id1,$i-$j"
                 is_done='true'
                 for id2 in ${srcids[@]}; do
                   if [ ! -f "$dofdir/$id2/$id1$dofsuf" ]; then
@@ -782,10 +785,10 @@ register_node()
                     break
                   fi
                 done
-                [[ $is_done == false ]] || node_done "inv_$id1-$i"
+                [[ $is_done == false ]] || node_done "inv_$id1,$i-$j"
               fi
             fi
-            let s1="$s2+1"
+            let s1="$s2 + 1"
           done
         else
           # add nodes of individual jobs to register id1 and id2
@@ -811,16 +814,16 @@ register_node()
           # add nodes of jobs to invert inverse-consistent transformations
           if [[ $ic == true ]] && [ -n "$dofdir" ]; then
             if [ $invgrp -gt 1 ]; then
-              i=0; j=0
-              while [ $j -lt ${#id2s[@]} ]; do
-                let i++
-                srcids=("${id2s[@]:$j:$invgrp}")
-                add_node "inv_$id1-$i" -subfile "invert.sub" \
-                                       -var     "target=\"$id1\"" \
-                                       -grpvar  "source" \
-                                       -grpval  "${srcids[@]}"
+              i=1
+              while [ $i -le ${#id2s[@]} ]; do
+                srcids=("${id2s[@]:$i-1:$invgrp}")
+                let j="$i + ${#srcids[@]} - 1"
+                add_node "inv_$id1,$i-$j" -subfile "invert.sub" \
+                                          -var     "target=\"$id1\"" \
+                                          -grpvar  "source" \
+                                          -grpval  "${srcids[@]}"
                 for id2 in ${srcids[@]}; do
-                  add_edge "inv_$id1-$i" "reg_$id1,$id2"
+                  add_edge "inv_$id1,$i-$j" "reg_$id1,$id2"
                 done
                 is_done=true
                 for id2 in ${srcids[@]}; do
@@ -829,8 +832,8 @@ register_node()
                     break
                   fi
                 done
-                [[ $is_done == false ]] || node_done "inv_$id1-$i"
-                let j="$j + $invgrp"
+                [[ $is_done == false ]] || node_done "inv_$id1,$i-$j"
+                let i="$j + 1"
               done
             else
               for id2 in "${id2s[@]}"; do
