@@ -90,7 +90,7 @@ make_sub_script()
   makedir "$(dirname "$topdir/$_dagdir/$file")"
   cat --<<EOF > "$topdir/$_dagdir/$file"
 universe     = $universe
-environment  = LD_LIBRARY_PATH=$topdir/$libdir:$LD_LIBRARY_PATH
+environment  = "LD_LIBRARY_PATH='$topdir/$libdir:$LD_LIBRARY_PATH' PYTHONPATH='$PYTHONPATH'"
 initialdir   = $topdir
 executable   = $executable
 log          = $topdir/$log

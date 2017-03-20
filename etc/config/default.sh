@@ -10,8 +10,9 @@ fi
 
 PATH="$appdir/bin:$MIRTK_DIR/lib/tools:$MIRTK_DIR/lib/mirtk/tools:$PATH"
 LD_LIBRARY_PATH="$appdir/lib:$MIRTK_DIR/lib:$MIRTK_DIR/lib/mirtk:$LD_LIBRARY_PATH"
+PYTHONPATH="$MIRTK_DIR/lib/python:$PYTHONPATH"
 
-export PATH LD_LIBRARY_PATH
+export PATH LD_LIBRARY_PATH PYTHONPATH
 
 
 # input settings
