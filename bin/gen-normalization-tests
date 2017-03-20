@@ -37,6 +37,12 @@ Options:
       Text file listing the IDs of the images to use for the atlas construction.
       If not specified, the IDs are read from the -agelst.
       (default: $sublst)
+  -g, -group <n>
+      Maximum number of related jobs to group. When workflow is executed
+      on HTCondor using DAGMan it is more efficient to have each short job
+      represented by a single node in the dependency graph. Otherwise,
+      it is best to use -group 1 because the run-workflow script groups
+      nodes itself and submits these to SLURM as job arrays. (default: 1)
   -u, -update
       Overwrite existing DAGMan files.
   -h, -help
@@ -73,18 +79,21 @@ done
 [ -z "$sublst" ] || sublst="$topdir/$sublst"
 
 # parse remaining options
+group=1
 while [ $# -gt 0 ]; do
   case "$1" in
     -s|-sublst) optarg sublst $1 "$2"; shift; ;;
     -a|-agelst) optarg agelst $1 "$2"; shift; ;;
     -u|-update) update=true; ;;
     -c|-config) shift; ;; # already loaded
+    -g|-group) optarg group $1 "$2"; shift; ;;
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose) let verbose++; ;;
     *) error "Unknown argument: $1"; ;;
   esac
   shift
 done
+[ $group -gt 0 ] || group=1
 
 # read subject IDs
 if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
@@ -136,13 +145,13 @@ begin_dag "compare_affine_atlas_constructions"
         -segmsk   "bs+cb" .33 \
         -maxres   "$resolution" \
         -maxstep  1 \
-        -group    100
+        -group    $group
 
     invert_dof_node "invert" -parent "register" \
         -subjects "${subids[@]}" \
         -dofins   "$dofdir/0.1_ref" \
         -dofdir   "$nrmdofs" \
-        -group    100
+        -group    $group
 
     average_images_node "average" -parent "invert" \
         -subjects  "${subids[@]}" \
@@ -210,7 +219,7 @@ begin_dag "compare_affine_atlas_constructions"
             -maxres   "$resolution" \
             -levels   "$levels" \
             -maxstep  1 \
-            -group    100
+            -group    $group
 
         average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
             -subjects "${subids[@]}" \
@@ -292,7 +301,7 @@ begin_dag "compare_affine_atlas_constructions"
           -maxres   "$resolution" \
           -levels   "$levels" \
           -maxstep  1 \
-          -group    100
+          -group    $group
 
       average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
@@ -363,20 +372,20 @@ begin_dag "compare_affine_atlas_constructions"
           -maxres   "$resolution" \
           -levels   "$levels" \
           -maxstep  1 \
-          -group    100
+          -group    $group
 
       average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/3.${i}_aff" \
           -dofdir   "$dofdir/3.${i}_aff/average" \
-          -group    100
+          -group    $group
 
       compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
           -subjects "${subids[@]}" \
           -dofin1   "$hdrdofs" \
           -dofin2   "$dofdir/3.${i}_aff/average" \
           -dofdir   "$dofdir/3.${i}_aff/composite" \
-          -group    100
+          -group    $group
 
       hdrdofs="$dofdir/3.${i}_aff/composite"
 
@@ -432,13 +441,13 @@ begin_dag "compare_affine_atlas_constructions"
         -maxres   "$resolution" \
         -levels   "$levels" \
         -maxstep  1 \
-        -group    100
+        -group    $group
 
     average_dofs_node "average_dofs_0" -parent "compute_dofs_0" \
         -subjects "${subids[@]}" \
         -dofins   "$dofdir/4.0_aff" \
         -dofdir   "$dofdir/4.0_aff/average" \
-        -group    100
+        -group    $group
 
     tgtdir="$outdir/$subdir"
     tgtpre=""
@@ -492,7 +501,7 @@ begin_dag "compare_affine_atlas_constructions"
           -maxres   "$resolution" \
           -levels   "$levels" \
           -maxstep  1 \
-          -group    100
+          -group    $group
 
       average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
