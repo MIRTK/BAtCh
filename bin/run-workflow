@@ -606,7 +606,7 @@ class JobArray(TreeNode):
                 script += "if [ {} -eq {} ]; then\n".format(taskid, i + 1)
                 for k, v in self.jobs[i].macros.items():
                     script += "  {}='{}'\n".format(k, v)
-                    macros[k] = '$' + k
+                    macros[k] = '${' + k + '}'
             script += "fi\n\n"
             script += self.desc.script(jobid=jobid, hostid=hostid, macros=macros)
         return script
