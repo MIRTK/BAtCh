@@ -386,12 +386,20 @@ register_node()
   fi
 
   local fidelity
-  if [[ $sym == true ]]; then
-    fidelity='SIM[Image similarity](I(1) o T^-.5, I(2) o T^.5)'
-  elif [[ $ic == true ]]; then
-    fidelity='SIM[Fwd image similarity](I(1), I(2) o T) + SIM[Bwd image similarity](I(1) o T^-1, I(2))'
-  else
+  local register_tool="register"
+  if [[ $model == 'Rigid' ]] || [[ $model == 'Similarity' ]] || [[ $model == 'Affine' ]]; then
     fidelity='SIM[Image similarity](I(1), I(2) o T)'
+    if [[ $ic == true ]]; then
+      register_tool="register-affine-ic"
+    fi
+  else
+    if [[ $sym == true ]]; then
+      fidelity='SIM[Image similarity](I(1) o T^-.5, I(2) o T^.5)'
+    elif [[ $ic == true ]]; then
+      fidelity='SIM[Fwd image similarity](I(1), I(2) o T) + SIM[Bwd image similarity](I(1) o T^-1, I(2))'
+    else
+      fidelity='SIM[Image similarity](I(1), I(2) o T)'
+    fi
   fi
   i=0
   while [ $i -lt ${#segments[@]} ]; do
@@ -603,7 +611,7 @@ register_node()
       sub="$sub\nerror        = $_dagdir/\$(target)/reg_\$(source).log"
     fi
     sub="$sub\nqueue"
-    make_sub_script "register.sub" "$sub" -executable register
+    make_sub_script "register.sub" "$sub" -executable "$register_tool"
 
     # create generic dofinvert submission script
     if [[ $ic == true ]] && [ -z "$tgtid$srcid" ] ; then

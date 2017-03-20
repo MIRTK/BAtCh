@@ -1,0 +1,73 @@
+#!/usr/bin/python
+
+"""Inverse-consistent affine registration."""
+
+import os
+import argparse
+import tempfile
+from mirtk.subprocess import run
+
+
+def register(target, source, dofout, dofin=None, parin=None, parout=None, model='Affine', threads=0, verbose=0):
+    """Perform affine registration in both directions and average result."""
+    if model != 'Rigid' and model != 'Similarity' and model != 'Affine':
+        raise ValueError("Transformation model must be Rigid, Similarity, or Affine!")
+    opts = {'model': model}
+    if parin:
+        opts['parin'] = parin
+    if parout:
+        opts['parout'] = parout
+    tmpdir = None
+    t2sdof = None
+    s2tdof = None
+    try:
+        # create temporary directory for temporary files
+        tmpdir = tempfile.mkdtemp(prefix='mirtk_register-affine-ic_')
+        # compute target to source mapping
+        print("Computing forward mapping...\n")
+        if dofin:
+            opts['dofin'] = dofin
+        opts['dofout'] = os.path.join(tmpdir, 'target2source.dof')
+        run("register", args=[target, source], opts=opts, verbose=verbose, threads=threads)
+        t2sdof = opts['dofout']
+        opts.pop('parout', None)
+        # compute source to target mapping
+        print("\nComputing forward mapping... done")
+        print("Computing backward mapping...\n")
+        opts['dofout'] = os.path.join(tmpdir, 'source2target.dof')
+        if dofin and not dofin.lower() in ('id', 'identity'):
+            run("invert-dof", args=[dofin, opts['dofout']], verbose=verbose, threads=threads)
+            opts['dofin'] = opts['dofout']
+        run("register", args=[source, target], opts=opts, verbose=verbose, threads=threads)
+        s2tdof = opts['dofout']
+        print("\nComputing backward mapping... done")
+        # invert source to target mapping and average transformations
+        print("Averaging forward and inverse backward mappings...")
+        run("invert-dof", args=[s2tdof, s2tdof], verbose=verbose, threads=threads)
+        run("average-dofs", args=[dofout, t2sdof, s2tdof], opts={'all': None}, verbose=verbose, threads=threads)
+        print("Averaging forward and inverse backward mappings... done")
+    finally:
+        # remove temporary files
+        if tmpdir:
+            if t2sdof:
+                os.remove(t2sdof)
+            if s2tdof:
+                os.remove(s2tdof)
+            os.rmdir(tmpdir)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('target', help="Target image")
+    parser.add_argument('source', help="Source image")
+    parser.add_argument('-model', default='Affine', help="Affine transformation model")
+    parser.add_argument('-dofin', help="Input transformation file")
+    parser.add_argument('-dofout', help="Output transformation file", required=True)
+    parser.add_argument('-parin', help="Input configuration file")
+    parser.add_argument('-parout', help="Ouptut configuration file")
+    parser.add_argument('-threads', default=0, help="Maximum number of threads")
+    parser.add_argument('-v', '-verbose', dest='verbose',action="count", default=0, help="Verbosity of output messages")
+    args = parser.parse_args()
+    register(args.target, args.source, dofout=args.dofout, dofin=args.dofin,
+             parin=args.parin, parout=args.parout, model=args.model,
+             threads=args.threads, verbose=args.verbose)

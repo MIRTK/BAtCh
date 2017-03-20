@@ -10,6 +10,7 @@ levels=4
 resolution=0.5
 interpolation='Linear with padding'
 inclbg=false
+symmetric=true
 similarity='NMI'
 bins=64
 refine=9

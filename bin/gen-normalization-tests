@@ -114,7 +114,7 @@ nrmdir="$tmpdir"
 nrmpre=""
 nrmref="template_0"
 nrmsuf=".nii.gz"
-nrmdofs="$dofdir/0.2_inv"
+nrmdofs="$dofdir/rigid"
 
 begin_dag "compare_affine_atlas_constructions"
 
@@ -126,15 +126,15 @@ begin_dag "compare_affine_atlas_constructions"
 
     register_node "register" \
         -subjects "${subids[@]}" \
-        -tgtid    "$refid" \
-        -tgtdir   "$refdir" \
-        -tgtpre   "$refpre" \
-        -tgtsuf   "$refsuf" \
+        -srcid    "$refid" \
+        -srcdir   "$refdir" \
+        -srcpre   "$refpre" \
+        -srcsuf   "$refsuf" \
         -imgdir   "$imgdir" \
         -imgpre   "$imgpre" \
         -imgsuf   "$imgsuf" \
-        -dofdir   "$dofdir/0.1_ref" \
-        -model    "Rigid" \
+        -dofdir   "$nrmdofs" \
+        -model    "Rigid" -inverse-consistent \
         -interp   "$interpolation" \
         -sim      "$similarity" \
         -bins     "$bins" \
@@ -147,13 +147,7 @@ begin_dag "compare_affine_atlas_constructions"
         -maxstep  1 \
         -group    $group
 
-    invert_dof_node "invert" -parent "register" \
-        -subjects "${subids[@]}" \
-        -dofins   "$dofdir/0.1_ref" \
-        -dofdir   "$nrmdofs" \
-        -group    $group
-
-    average_images_node "average" -parent "invert" \
+    average_images_node "average" -parent "register" \
         -subjects  "${subids[@]}" \
         -refdir    "$refdir" \
         -refpre    "$refpre" \
@@ -199,28 +193,29 @@ begin_dag "compare_affine_atlas_constructions"
         while [ $i -le $refine ]; do
 
           register_node "compute_dofs_$i" -parent "$prev_node" \
-              -subjects "${subids[@]}" \
-              -tgtid    "$tgtid" \
-              -tgtdir   "$tgtdir" \
-              -tgtpre   "$tgtpre" \
-              -tgtsuf   "$tgtsuf" \
-              -imgdir   "$imgdir" \
-              -imgpre   "$imgpre" \
-              -imgsuf   "$imgsuf" \
-              -hdrdofs  "$nrmdofs" \
-              -dofins   "identity" \
-              -dofdir   "$dofdir/1.${i}_aff/$imgid" \
-              -model    "Affine" \
-              -interp   "$interpolation" \
-              -sim      "$similarity" \
-              -bins     "$bins" \
-              -radius   "$radius" \
-              -bgvalue  "$bgvalue" \
-              -inclbg   "$inclbg" \
-              -maxres   "$resolution" \
-              -levels   "$levels" \
-              -maxstep  1 \
-              -group    $group
+              -subjects  "${subids[@]}" \
+              -tgtid     "$tgtid" \
+              -tgtdir    "$tgtdir" \
+              -tgtpre    "$tgtpre" \
+              -tgtsuf    "$tgtsuf" \
+              -imgdir    "$imgdir" \
+              -imgpre    "$imgpre" \
+              -imgsuf    "$imgsuf" \
+              -hdrdofs   "$nrmdofs" \
+              -dofins    "identity" \
+              -dofdir    "$dofdir/1.${i}_aff/$imgid" \
+              -model     "Affine" \
+              -interp    "$interpolation" \
+              -sim       "$similarity" \
+              -bins      "$bins" \
+              -radius    "$radius" \
+              -bgvalue   "$bgvalue" \
+              -inclbg    "$inclbg" \
+              -maxres    "$resolution" \
+              -levels    "$levels" \
+              -symmetric "$symmetric" \
+              -maxstep   1 \
+              -group     $group
 
           invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
               -subjects "${subids[@]}" \
@@ -288,28 +283,29 @@ begin_dag "compare_affine_atlas_constructions"
     while [ $i -le $refine ]; do
 
       register_node "compute_dofs_$i" -parent "$prev_node" \
-          -subjects "${subids[@]}" \
-          -tgtid    "$tgtid" \
-          -tgtdir   "$tgtdir" \
-          -tgtpre   "$tgtpre" \
-          -tgtsuf   "$tgtsuf" \
-          -imgdir   "$imgdir" \
-          -imgpre   "$imgpre" \
-          -imgsuf   "$imgsuf" \
-          -hdrdofs  "$nrmdofs" \
-          -dofins   "identity" \
-          -dofdir   "$dofdir/2.${i}_aff" \
-          -model    "Affine" \
-          -interp   "$interpolation" \
-          -sim      "$similarity" \
-          -bins     "$bins" \
-          -radius   "$radius" \
-          -bgvalue  "$bgvalue" \
-          -inclbg   "$inclbg" \
-          -maxres   "$resolution" \
-          -levels   "$levels" \
-          -maxstep  1 \
-          -group    $group
+          -subjects  "${subids[@]}" \
+          -tgtid     "$tgtid" \
+          -tgtdir    "$tgtdir" \
+          -tgtpre    "$tgtpre" \
+          -tgtsuf    "$tgtsuf" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -hdrdofs   "$nrmdofs" \
+          -dofins    "identity" \
+          -dofdir    "$dofdir/2.${i}_aff" \
+          -model     "Affine" \
+          -interp    "$interpolation" \
+          -sim       "$similarity" \
+          -bins      "$bins" \
+          -radius    "$radius" \
+          -bgvalue   "$bgvalue" \
+          -inclbg    "$inclbg" \
+          -maxres    "$resolution" \
+          -levels    "$levels" \
+          -symmetric "$symmetric" \
+          -maxstep   1 \
+          -group     $group
 
       invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
@@ -368,24 +364,25 @@ begin_dag "compare_affine_atlas_constructions"
     while [ $i -le $refine ]; do
 
       register_node "compute_dofs_$i" -parent "$prev_node" \
-          -subjects "${subids[@]}" \
-          -imgdir   "$imgdir" \
-          -imgpre   "$imgpre" \
-          -imgsuf   "$imgsuf" \
-          -hdrdofs  "$hdrdofs" \
-          -dofins   "identity" \
-          -dofdir   "$dofdir/3.${i}_aff" \
-          -model    "Affine" \
-          -interp   "$interpolation" \
-          -sim      "$similarity" \
-          -bins     "$bins" \
-          -radius   "$radius" \
-          -bgvalue  "$bgvalue" \
-          -inclbg   "$inclbg" \
-          -maxres   "$resolution" \
-          -levels   "$levels" \
-          -maxstep  1 \
-          -group    $group
+          -subjects  "${subids[@]}" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -hdrdofs   "$hdrdofs" \
+          -dofins    "identity" \
+          -dofdir    "$dofdir/3.${i}_aff" \
+          -model     "Affine" \
+          -interp    "$interpolation" \
+          -sim       "$similarity" \
+          -bins      "$bins" \
+          -radius    "$radius" \
+          -bgvalue   "$bgvalue" \
+          -inclbg    "$inclbg" \
+          -maxres    "$resolution" \
+          -levels    "$levels" \
+          -symmetric "$symmetric" \
+          -maxstep   1 \
+          -group     $group
 
       average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
@@ -435,24 +432,25 @@ begin_dag "compare_affine_atlas_constructions"
     subdir="iterative_atlas_construction_with_mean_of_pairwise_dofs"
 
     register_node "compute_dofs_0" \
-        -subjects "${subids[@]}" \
-        -imgdir   "$imgdir" \
-        -imgpre   "$imgpre" \
-        -imgsuf   "$imgsuf" \
-        -hdrdofs  "$nrmdofs" \
-        -dofins   "identity" \
-        -dofdir   "$dofdir/4.0_aff" \
-        -model    "Affine" \
-        -interp   "$interpolation" \
-        -sim      "$similarity" \
-        -bins     "$bins" \
-        -radius   "$radius" \
-        -bgvalue  "$bgvalue" \
-        -inclbg   "$inclbg" \
-        -maxres   "$resolution" \
-        -levels   "$levels" \
-        -maxstep  1 \
-        -group    $group
+        -subjects  "${subids[@]}" \
+        -imgdir    "$imgdir" \
+        -imgpre    "$imgpre" \
+        -imgsuf    "$imgsuf" \
+        -hdrdofs   "$nrmdofs" \
+        -dofins    "identity" \
+        -dofdir    "$dofdir/4.0_aff" \
+        -model     "Affine" \
+        -interp    "$interpolation" \
+        -sim       "$similarity" \
+        -bins      "$bins" \
+        -radius    "$radius" \
+        -bgvalue   "$bgvalue" \
+        -inclbg    "$inclbg" \
+        -maxres    "$resolution" \
+        -levels    "$levels" \
+        -symmetric "$symmetric" \
+        -maxstep   1 \
+        -group     $group
 
     average_dofs_node "average_dofs_0" -parent "compute_dofs_0" \
         -subjects "${subids[@]}" \
@@ -489,28 +487,29 @@ begin_dag "compare_affine_atlas_constructions"
     while [ $i -le $refine ]; do
 
       register_node "compute_dofs_$i" -parent "$prev_node" \
-          -subjects "${subids[@]}" \
-          -tgtdir   "$tgtdir" \
-          -tgtpre   "$tgtpre" \
-          -tgtid    "$tgtid" \
-          -tgtsuf   "$tgtsuf" \
-          -imgdir   "$imgdir" \
-          -imgpre   "$imgpre" \
-          -imgsuf   "$imgsuf" \
-          -hdrdofs  "$nrmdofs" \
-          -dofins   "identity" \
-          -dofdir   "$dofdir/4.${i}_aff" \
-          -model    "Affine" \
-          -interp   "$interpolation" \
-          -sim      "$similarity" \
-          -bins     "$bins" \
-          -radius   "$radius" \
-          -bgvalue  "$bgvalue" \
-          -inclbg   "$inclbg" \
-          -maxres   "$resolution" \
-          -levels   "$levels" \
-          -maxstep  1 \
-          -group    $group
+          -subjects  "${subids[@]}" \
+          -tgtdir    "$tgtdir" \
+          -tgtpre    "$tgtpre" \
+          -tgtid     "$tgtid" \
+          -tgtsuf    "$tgtsuf" \
+          -imgdir    "$imgdir" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -hdrdofs   "$nrmdofs" \
+          -dofins    "identity" \
+          -dofdir    "$dofdir/4.${i}_aff" \
+          -model     "Affine" \
+          -interp    "$interpolation" \
+          -sim       "$similarity" \
+          -bins      "$bins" \
+          -radius    "$radius" \
+          -bgvalue   "$bgvalue" \
+          -inclbg    "$inclbg" \
+          -maxres    "$resolution" \
+          -levels    "$levels" \
+          -symmetric "$symmetric" \
+          -maxstep   1 \
+          -group     $group
 
       invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
