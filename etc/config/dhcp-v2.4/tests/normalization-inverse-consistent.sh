@@ -10,13 +10,13 @@ levels=4
 resolution=0.5
 interpolation='Linear with padding'
 inclbg=false
-symmetric=false
+symmetric=true
 similarity='NMI'
 bins=64
 refine=9
 
 # output settings
-subdir="normalization"
+subdir="normalization-inverse-consistent"
 dagdir="dag/tests/$subdir"
 logdir="log/tests/$subdir"
 dofdir="../tests/$subdir/dofs"
