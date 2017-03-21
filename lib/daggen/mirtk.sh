@@ -512,7 +512,7 @@ register_node()
     write "$parin" "$cfg\n"
 
     # create generic register command script
-    local sub="arguments    = \"-threads $threads"
+    local sub="arguments    = \"-model '$model' -threads $threads"
     [ -z "$domain" ] || sub="$sub -mask '$domain'"
     sub="$sub -parin '$parin'"
     if [ -n "$tgtid" -a -n "$srcid" ]; then
