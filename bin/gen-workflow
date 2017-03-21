@@ -467,6 +467,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point between each pair of images
   defdofs=""
+  resdof=false  # false: do not use average inverse subject to atlas deformation
+                # other: deform average intensity image by inverse of this transform
+
   if [[ $pairwise == true ]]; then
     defdofs="$dofdir/2.2_avg"
 
@@ -515,6 +518,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -dofdir "$defdofs/t$t" \
             -dofs
 
+        # compute residual deformation
+        resdof="residual"
+        average_dofs_node "residual_$t" -parent "avgdefs_$t" \
+            -doflst "$kernel/$krnpre${t}.$krnext" \
+            -dofins "$defdofs/t$t" \
+            -dofdir "$defdofs/t$t" \
+            -dofid  "$resdof" -dofs
+
       done
 
     end_dag
@@ -531,12 +542,6 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # 4. Repeat steps 1-3 a number of times
   #    (TODO: or until average image barely changes
   #           or as long as residual template deformation is not close to identity)
-  dofid3=false  # false: do not use average inverse subject to atlas deformation
-                # other: deform average intensity image by inverse of this transform
-                #        this is used during the iterative refinement to minimize
-                #        the residual deformation required to deform each subject
-                #        to the template shape
-
   if [ $refine -gt 0 ]; then
     begin_dag 'def_refinement' -parent "$prev_node" -splice
 
@@ -557,10 +562,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
             if [ -n "$defdofs" ]; then
               curdofs="$defdofs/t$t"
-              resdofs="$defdofs/t$t"
             else
               curdofs=''
-              resdofs=''
             fi
 
             # average intensity (minimize intensity difference)
@@ -575,7 +578,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf    "$nrmsuf" \
                 -dofin1    "$nrmdofs" \
                 -dofin2    "$curdofs" \
-                -dofin3    "$resdofs" -dofid3 "$dofid3" \
+                -dofin3    "$curdofs" -dofid3 "$resdof" \
                 -output    "$tmpdir/t2w_t${t}_${i}.nii.gz" \
                 -padding   "$bgvalue" \
                 -threshold "$threshold" \
@@ -617,12 +620,12 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -maxres    "$resolution" \
                 -levels    "$levels"
 
-            dofid3="residual"
+            resdof="residual"
             average_dofs_node "average_$t" -parent "register_$t" \
                 -doflst "$kernel/$krnpre${t}.$krnext" \
                 -dofins "$nxtdofs/t$t" \
                 -dofdir "$nxtdofs/t$t" \
-                -dofid  "$dofid3" \
+                -dofid  "$resdof" \
                 -dofs -invert
 
           done
@@ -636,7 +639,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
     end_dag
 
-    unset -v i nxtdofs
+    unset -v i nxtdofs curdofs
     prev_node="def_refinement"
   fi
 
@@ -671,7 +674,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refsuf    "$nrmsuf" \
           -dofin1    "$nrmdofs" \
           -dofin2    "$defdofs/t$t" \
-          -dofin3    "$defdofs/t$t" -dofid3 "$dofid3" \
+          -dofin3    "$defdofs/t$t" -dofid3 "$resdof" \
           -output    "$outdir/average/t2w/t$t.nii.gz" \
           -padding   "$bgvalue" \
           -threshold "$threshold" \
@@ -715,7 +718,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
                 -dofin2 "$defdofs/t$t" \
-                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
+                -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
      
@@ -751,7 +754,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
                 -dofin2 "$defdofs/t$t" \
-                -dofin3 "$defdofs/t$t" -dofid3 "$dofid3" \
+                -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
      
