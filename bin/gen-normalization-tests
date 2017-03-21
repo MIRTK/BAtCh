@@ -194,6 +194,8 @@ begin_dag "compare_affine_atlas_constructions"
         tgtdir="$imgdir"
         tgtpre="$imgpre"
         tgtsuf="$imgsuf"
+        hdrdofs="$nrmdofs"
+        nlevels="$levels"
 
         i=1
         while [ $i -le $refine ]; do
@@ -207,9 +209,9 @@ begin_dag "compare_affine_atlas_constructions"
               -imgdir    "$imgdir" \
               -imgpre    "$imgpre" \
               -imgsuf    "$imgsuf" \
-              -hdrdofs   "$nrmdofs" \
+              -hdrdofs   "$hdrdofs" \
               -dofins    "identity" \
-              -dofdir    "$dofdir/1.${i}_aff/$imgid" \
+              -dofdir    "$dofdir/1.${i}_aff/$imgid/residual" \
               -model     "Affine" \
               -interp    "$interpolation" \
               -sim       "$similarity" \
@@ -224,16 +226,26 @@ begin_dag "compare_affine_atlas_constructions"
               -group     $group
 
           invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.${i}_aff/$imgid/residual" \
+          -dofdir   "$dofdir/1.${i}_aff/$imgid/residual/inverse" \
+          -group    $group
+
+          average_dofs_node "average_dofs_$i" -parent "invert_dofs_$i" \
               -subjects "${subids[@]}" \
-              -dofins   "$dofdir/1.${i}_aff/$imgid" \
-              -dofdir   "$dofdir/1.${i}_inv/$imgid" \
+              -dofins   "$dofdir/1.${i}_aff/$imgid/residual" \
+              -dofdir   "$dofdir/1.${i}_aff/$imgid/residual" \
+              -dofid    "average"
+
+          compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
+              -subjects "${subids[@]}" \
+              -dofin1   "$hdrdofs" \
+              -dofin2   "$dofdir/1.${i}_aff/$imgid/residual/inverse" \
+              -dofin3   "$dofdir/1.${i}_aff/$imgid/residual" -dofid3 "average" \
+              -dofdir   "$dofdir/1.${i}_aff/$imgid" \
               -group    $group
 
-          average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
-              -subjects "${subids[@]}" \
-              -dofins   "$dofdir/1.${i}_aff/$imgid" \
-              -dofdir   "$dofdir/1.${i}_aff/$imgid" \
-              -dofid    "average"
+          hdrdofs="$dofdir/1.${i}_aff/$imgid"
 
           average_images_node "average_images_$i" -parent "average_dofs_$i" \
               -subjects  "${subids[@]}" \
@@ -244,9 +256,7 @@ begin_dag "compare_affine_atlas_constructions"
               -imgdir    "$imgdir" \
               -imgpre    "$imgpre" \
               -imgsuf    "$imgsuf" \
-              -dofin1    "$nrmdofs" \
-              -dofin2    "$dofdir/1.${i}_inv/$imgid" \
-              -dofin3    "$dofdir/1.${i}_aff/$imgid" -dofid3 "average" \
+              -dofdir    "$hdrdofs" \
               -output    "$outdir/atlas_with_${imgid}_as_initial_template/template_$i.nii.gz" \
               -padding   "$bgvalue" \
               -threshold "$threshold" \
@@ -260,6 +270,7 @@ begin_dag "compare_affine_atlas_constructions"
           tgtdir="$outdir/atlas_with_${imgid}_as_initial_template"
           tgtpre=""
           tgtsuf=".nii.gz"
+          nlevels=1
 
           let i++
         done  # for i
@@ -282,6 +293,8 @@ begin_dag "compare_affine_atlas_constructions"
     tgtdir="$nrmdir"
     tgtpre="$nrmpre"
     tgtsuf="$nrmsuf"
+    hdrdofs="$nrmdofs"
+    nlevels="$levels"
 
     prev_node=""
 
@@ -297,9 +310,9 @@ begin_dag "compare_affine_atlas_constructions"
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    "$imgsuf" \
-          -hdrdofs   "$nrmdofs" \
+          -hdrdofs   "$hdrdofs" \
           -dofins    "identity" \
-          -dofdir    "$dofdir/2.${i}_aff" \
+          -dofdir    "$dofdir/2.${i}_aff/residual" \
           -model     "Affine" \
           -interp    "$interpolation" \
           -sim       "$similarity" \
@@ -308,24 +321,34 @@ begin_dag "compare_affine_atlas_constructions"
           -bgvalue   "$bgvalue" \
           -inclbg    "$inclbg" \
           -maxres    "$resolution" \
-          -levels    "$levels" \
+          -levels    "$nlevels" \
           -symmetric "$symmetric" \
           -maxstep   1 \
           -group     $group
 
       invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/2.${i}_aff" \
-          -dofdir   "$dofdir/2.${i}_inv" \
+          -dofins   "$dofdir/2.${i}_aff/residual" \
+          -dofdir   "$dofdir/2.${i}_aff/residual/inverse" \
           -group    $group
 
-      average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+      average_dofs_node "average_dofs_$i" -parent "invert_dofs_$i" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/2.${i}_aff" \
-          -dofdir   "$dofdir/2.${i}_aff" \
+          -dofins   "$dofdir/2.${i}_aff/residual" \
+          -dofdir   "$dofdir/2.${i}_aff/residual" \
           -dofid    "average"
 
-      average_images_node "average_images_$i" -parent "average_dofs_$i" \
+      compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofin1   "$hdrdofs" \
+          -dofin2   "$dofdir/2.${i}_aff/residual/inverse" \
+          -dofin3   "$dofdir/2.${i}_aff/residual" -dofid3 "average" \
+          -dofdir   "$dofdir/2.${i}_aff" \
+          -group    $group
+
+      hdrdofs="$dofdir/2.${i}_aff"
+
+      average_images_node "average_images_$i" -parent "compose_dofs_$i" \
           -subjects  "${subids[@]}" \
           -refdir    "$nrmdir" \
           -refpre    "$nrmpre" \
@@ -334,9 +357,7 @@ begin_dag "compare_affine_atlas_constructions"
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    "$imgsuf" \
-          -dofin1    "$nrmdofs" \
-          -dofin2    "$dofdir/2.${i}_inv" \
-          -dofin3    "$dofdir/2.${i}_aff" -dofid3 "average" \
+          -dofdir    "$hdrdofs" \
           -output    "$outdir/$subdir/template_$i.nii.gz" \
           -padding   "$bgvalue" \
           -threshold "$threshold" \
@@ -350,6 +371,7 @@ begin_dag "compare_affine_atlas_constructions"
       tgtdir="$outdir/$subdir"
       tgtpre=""
       tgtsuf=".nii.gz"
+      nlevels=1
 
       let i++
     done  # for i
@@ -362,9 +384,10 @@ begin_dag "compare_affine_atlas_constructions"
   info "\nAdding DAG for reference-free atlas construction using Log-Euclidean mean of pairwise transformations"
   begin_dag "atlas_construction_with_iterative_mean_of_pairwise_dofs" -parent "rigid_normalization" -splice
 
-    subdir="atlas_construction_with_iterative_mean_of_pairwise_dofs"
+    subdir="atlas_with_iterative_mean_of_pairwise_dofs"
     hdrdofs="$nrmdofs"
     prev_node=""
+    nlevels="$levels"
 
     i=1
     while [ $i -le $refine ]; do
@@ -387,6 +410,7 @@ begin_dag "compare_affine_atlas_constructions"
           -maxres    "$resolution" \
           -levels    "$levels" \
           -symmetric "$symmetric" \
+          -levels    "$nlevels" \
           -maxstep   1 \
           -group     $group
 
@@ -396,14 +420,21 @@ begin_dag "compare_affine_atlas_constructions"
           -dofdir   "$dofdir/3.${i}_aff/average" \
           -group    $group
 
-      compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
+      average_dofs_node "residual_dof_$i" -parent "average_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/3.${i}_aff/average" \
+          -dofdir   "$dofdir/3.${i}_aff/average" -dofid "residual" \
+          -invert -group $group
+
+      compose_dofs_node "compose_dofs_$i" -parent "residual_dof_$i" \
           -subjects "${subids[@]}" \
           -dofin1   "$hdrdofs" \
           -dofin2   "$dofdir/3.${i}_aff/average" \
-          -dofdir   "$dofdir/3.${i}_aff/composite" \
+          -dofin3   "$dofdir/3.${i}_aff/average" -dofid3 "residual" \
+          -dofdir   "$dofdir/3.${i}_aff" \
           -group    $group
 
-      hdrdofs="$dofdir/3.${i}_aff/composite"
+      hdrdofs="$dofdir/3.${i}_aff"
 
       average_images_node "average_images_$i" -parent "compose_dofs_$i" \
           -subjects  "${subids[@]}" \
@@ -423,6 +454,7 @@ begin_dag "compare_affine_atlas_constructions"
           -sharpen   "$sharpen"
 
       prev_node="average_images_$i"
+      nlevels=1
 
       let i++
     done  # for i
@@ -435,16 +467,18 @@ begin_dag "compare_affine_atlas_constructions"
   info "\nAdding DAG for iterative atlas construction with Log-Euclidean mean as initial reference"
   begin_dag "iterative_atlas_construction_with_mean_of_pairwise_dofs" -parent "rigid_normalization" -splice
 
-    subdir="iterative_atlas_construction_with_mean_of_pairwise_dofs"
+    subdir="atlas_with_pairwise_mean_as_initial_template"
 
-    register_node "compute_dofs_0" \
+    i=0
+
+    register_node "compute_dofs_$i" \
         -subjects  "${subids[@]}" \
         -imgdir    "$imgdir" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
         -hdrdofs   "$nrmdofs" \
         -dofins    "identity" \
-        -dofdir    "$dofdir/4.0_aff" \
+        -dofdir    "$dofdir/4.${i}_aff" \
         -model     "Affine" \
         -interp    "$interpolation" \
         -sim       "$similarity" \
@@ -458,18 +492,34 @@ begin_dag "compare_affine_atlas_constructions"
         -maxstep   1 \
         -group     $group
 
-    average_dofs_node "average_dofs_0" -parent "compute_dofs_0" \
+    average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/4.${i}_aff" \
+          -dofdir   "$dofdir/4.${i}_aff/average" \
+          -group    $group
+
+    average_dofs_node "residual_dof_$i" -parent "average_dofs_$i" \
         -subjects "${subids[@]}" \
-        -dofins   "$dofdir/4.0_aff" \
-        -dofdir   "$dofdir/4.0_aff/average" \
+        -dofins   "$dofdir/4.${i}_aff/average" \
+        -dofdir   "$dofdir/4.${i}_aff/average" -dofid "residual" \
+        -invert -group $group
+
+    compose_dofs_node "compose_dofs_$i" -parent "residual_dof_$i" \
+        -subjects "${subids[@]}" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$dofdir/4.${i}_aff/average" \
+        -dofin3   "$dofdir/4.${i}_aff/average" -dofid3 "residual" \
+        -dofdir   "$dofdir/4.${i}_aff" \
         -group    $group
 
+    hdrdofs="$dofdir/4.${i}_aff"
     tgtdir="$outdir/$subdir"
     tgtpre=""
-    tgtid="template_0"
+    tgtid="template_$i"
     tgtsuf=".nii.gz"
+    nlevels=1
 
-    average_images_node "average_images_0" -parent "average_dofs_0" \
+    average_images_node "average_images_$i" -parent "compose_dofs_$i" \
         -subjects  "${subids[@]}" \
         -refdir    "$nrmdir" \
         -refpre    "$nrmpre" \
@@ -478,8 +528,7 @@ begin_dag "compare_affine_atlas_constructions"
         -imgdir    "$imgdir" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
-        -dofin1    "$nrmdofs" \
-        -dofin2    "$dofdir/4.0_aff/average" \
+        -dofdir    "$hdrdofs" \
         -output    "$tgtdir/$tgtpre$tgtid$tgtsuf" \
         -padding   "$bgvalue" \
         -threshold "$threshold" \
@@ -487,7 +536,7 @@ begin_dag "compare_affine_atlas_constructions"
         -rescale   "$rescaling" \
         -sharpen   "$sharpen"
 
-    prev_node="average_images_0"
+    prev_node="average_images_$i"
 
     i=1
     while [ $i -le $refine ]; do
@@ -501,9 +550,9 @@ begin_dag "compare_affine_atlas_constructions"
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    "$imgsuf" \
-          -hdrdofs   "$nrmdofs" \
+          -hdrdofs   "$hdrdofs" \
           -dofins    "identity" \
-          -dofdir    "$dofdir/4.${i}_aff" \
+          -dofdir    "$dofdir/4.${i}_aff/residual" \
           -model     "Affine" \
           -interp    "$interpolation" \
           -sim       "$similarity" \
@@ -512,22 +561,32 @@ begin_dag "compare_affine_atlas_constructions"
           -bgvalue   "$bgvalue" \
           -inclbg    "$inclbg" \
           -maxres    "$resolution" \
-          -levels    "$levels" \
+          -levels    "$nlevels" \
           -symmetric "$symmetric" \
           -maxstep   1 \
           -group     $group
 
       invert_dof_node "invert_dofs_$i" -parent "compute_dofs_$i" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/4.${i}_aff" \
-          -dofdir   "$dofdir/4.${i}_inv" \
+          -dofins   "$dofdir/4.${i}_aff/residual" \
+          -dofdir   "$dofdir/4.${i}_aff/residual/inverse" \
           -group    $group
 
-      average_dofs_node "average_dofs_$i" -parent "compute_dofs_$i" \
+      average_dofs_node "average_dofs_$i" -parent "invert_dofs_$i" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/4.${i}_aff" \
-          -dofdir   "$dofdir/4.${i}_aff" \
+          -dofins   "$dofdir/4.${i}_aff/residual" \
+          -dofdir   "$dofdir/4.${i}_aff/residual" \
           -dofid    "average"
+
+      compose_dofs_node "compose_dofs_$i" -parent "average_dofs_$i" \
+          -subjects "${subids[@]}" \
+          -dofin1   "$hdrdofs" \
+          -dofin2   "$dofdir/4.${i}_aff/residual/inverse" \
+          -dofin3   "$dofdir/4.${i}_aff/residual" -dofid3 "average" \
+          -dofdir   "$dofdir/4.${i}_aff" \
+          -group    $group
+
+      hdrdofs="$dofdir/4.${i}_aff"
 
       average_images_node "average_images_$i" -parent "average_dofs_$i" \
           -subjects  "${subids[@]}" \
@@ -538,9 +597,7 @@ begin_dag "compare_affine_atlas_constructions"
           -imgdir    "$imgdir" \
           -imgpre    "$imgpre" \
           -imgsuf    "$imgsuf" \
-          -dofin1    "$nrmdofs" \
-          -dofin2    "$dofdir/4.${i}_inv" \
-          -dofin3    "$dofdir/4.${i}_aff" -dofid3 "average" \
+          -dofdir    "$hdrdofs" \
           -output    "$outdir/$subdir/template_$i.nii.gz" \
           -padding   "$bgvalue" \
           -threshold "$threshold" \
