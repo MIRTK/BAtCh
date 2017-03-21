@@ -959,6 +959,29 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
         print("  Submitted job {} (JobId={})".format(job.fullname, job.uid))
 
 
+def slurm_deps(jobs, deps, i):
+    """Get jobs IDs of unfinished SLURM jobs which the i-th jobs depends on (indirectly).
+
+    Note that a direct dependency of a job may be finished although a dependency of this
+    job is yet unfinished. This is the case because of the 'mkdirs' jobs which are marked
+    as done when the directory already exists. The following job in this case may still
+    have to wait for the job that the 'mkdirs' job depended on during a previous run.
+
+    """
+    uids = set()
+    for j in deps[i]:
+        if jobs[j].done:
+            transitive_uids = slurm_deps(jobs, deps, j)
+            if transitive_uids is None:
+                return None
+            uids.update(transitive_uids)
+        elif not jobs[j].uid:
+            return None
+        else:
+            uids.add(jobs[j].uid)
+    return uids
+
+
 def run_slurm(jobs, deps, threads=1, queue='long', log=''):
     todo = set()
     for i in range(len(jobs)):
@@ -968,15 +991,8 @@ def run_slurm(jobs, deps, threads=1, queue='long', log=''):
         prev = todo
         todo = set()
         for i in prev:
-            ready = True
-            uids = set()
-            for j in deps[i]:
-                if not jobs[j].done:
-                    if not jobs[j].uid:
-                        ready = False
-                        break
-                    uids.add(jobs[j].uid)
-            if ready:
+            uids = slurm_deps(jobs, deps, i)
+            if uids is not None:
                 run_job_slurm(jobs[i], deps=uids, threads=threads, queue=queue, log=log)
             else:
                 todo.add(i)
