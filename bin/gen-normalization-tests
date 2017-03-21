@@ -126,15 +126,15 @@ begin_dag "compare_affine_atlas_constructions"
 
     register_node "register" \
         -subjects "${subids[@]}" \
-        -srcid    "$refid" \
-        -srcdir   "$refdir" \
-        -srcpre   "$refpre" \
-        -srcsuf   "$refsuf" \
+        -tgtid    "$refid" \
+        -tgtdir   "$refdir" \
+        -tgtpre   "$refpre" \
+        -tgtsuf   "$refsuf" \
         -imgdir   "$imgdir" \
         -imgpre   "$imgpre" \
         -imgsuf   "$imgsuf" \
-        -dofdir   "$nrmdofs" \
-        -model    "Rigid" -inverse-consistent \
+        -dofdir   "$nrmdofs/$refid" \
+        -model    "Rigid" \
         -interp   "$interpolation" \
         -sim      "$similarity" \
         -bins     "$bins" \
@@ -147,7 +147,13 @@ begin_dag "compare_affine_atlas_constructions"
         -maxstep  1 \
         -group    $group
 
-    average_images_node "average" -parent "register" \
+    invert_dof_node "invert" -parent "register" \
+        -subjects "${subids[@]}" \
+        -dofins   "$nrmdofs/$refid" \
+        -dofdir   "$nrmdofs" \
+        -group    $group
+
+    average_images_node "average" -parent "invert" \
         -subjects  "${subids[@]}" \
         -refdir    "$refdir" \
         -refpre    "$refpre" \
@@ -175,7 +181,7 @@ begin_dag "compare_affine_atlas_constructions"
   begin_dag "iterative_atlas_construction_with_single_reference" -parent "rigid_normalization" -splice
 
     seed="0"  # or use "datetime.now()" if it should not always be the same (not good for reproducibility, though)
-    tgtids=($(python -c "import sys; import random; from datetime import datetime; random.seed($seed); ids = sys.stdin.readlines(); random.shuffle(ids); print(''.join(ids))" < "$sublst"))
+    tgtids=($(python -c "import sys; import random; from datetime import datetime; random.seed($seed); ids = sys.stdin.readlines(); ids = [id for id in ids if id[0] != '#']; random.shuffle(ids); print(''.join(ids))" < "$sublst"))
 
     for imgid in ${tgtids[@]:0:5}; do
 
