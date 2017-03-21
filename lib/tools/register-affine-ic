@@ -3,9 +3,11 @@
 """Inverse-consistent affine registration."""
 
 import os
-import argparse
+import sys
+#import argparse
 import tempfile
-from mirtk.subprocess import run
+
+import mirtk
 
 
 def register(images, dofout, dofin=None, parin=None, parout=None, model='Affine', threads=0, verbose=0):
@@ -14,66 +16,133 @@ def register(images, dofout, dofin=None, parin=None, parout=None, model='Affine'
         raise ValueError("Transformation model must be Rigid, Similarity, or Affine!")
     if len(images) < 2 or len(images) % 2 == 1:
         raise ValueError("Number of input images must be positive and even!")
-    opts = {'model': model}
-    if parin:
-        opts['parin'] = parin
-    if parout:
-        opts['parout'] = parout
-    tmpdir = None
-    t2sdof = None
-    s2tdof = None
+    if not dofout:
+        raise ValueError("Output transformation file name required!")
+    # create temporary directory for temporary files
+    tmpdir = tempfile.mkdtemp(prefix='mirtk_register-affine-ic_')
+    t2sdof = os.path.join(tmpdir, "target2source.dof")
+    s2tdof = os.path.join(tmpdir, "source2target.dof")
     try:
-        # create temporary directory for temporary files
-        tmpdir = tempfile.mkdtemp(prefix='mirtk_register-affine-ic_')
         # compute target to source mapping
         print("Computing forward mapping...\n")
+        argv = ["register", "-model", model]
+        for image in images:
+            if isinstance(image, (tuple, list)):
+                argv.extend(["-image", image[0]])
+                if image[1]:
+                    if image[2]:
+                        argv.extend(["-dof_i", image[1]])
+                    else:
+                        argv.extend(["-dof", image[1]])
+            else:
+                argv.extend(["-image", image])
+        if parin:
+            argv.extend(["-parin", parin])
+        if parout:
+            argv.extend(["-parout", parout])
         if dofin:
-            opts['dofin'] = dofin
-        opts['dofout'] = os.path.join(tmpdir, 'target2source.dof')
-        run("register", args=images, opts=opts, verbose=verbose, threads=threads)
-        t2sdof = opts['dofout']
-        opts.pop('parout', None)
+            argv.extend(["-dofin", dofin])
+        argv.extend(["-dofout", t2sdof])
+        mirtk.check_call(argv)
         # compute source to target mapping
         print("\nComputing forward mapping... done")
         print("Computing backward mapping...\n")
-        opts['dofout'] = os.path.join(tmpdir, 'source2target.dof')
-        if dofin and not dofin.lower() in ('id', 'identity'):
-            run("invert-dof", args=[dofin, opts['dofout']], verbose=verbose, threads=threads)
-            opts['dofin'] = opts['dofout']
-        reversed_images = []
+        argv = ["register", "-model", model]
         for i in range(0, len(images), 2):
-            reversed_images.append(images[i + 1])
-            reversed_images.append(images[i])
-        run("register", args=reversed_images, opts=opts, verbose=verbose, threads=threads)
-        s2tdof = opts['dofout']
+            for j in (1, 0):
+                image = images[i + j]
+                if isinstance(image, (tuple, list)):
+                    argv.extend(["-image", image[0]])
+                    if image[1]:
+                        if image[2]:
+                            argv.extend(["-dof_i", image[1]])
+                        else:
+                            argv.extend(["-dof", image[1]])
+                else:
+                    argv.extend(["-image", image])
+        if parin:
+            argv.extend(["-parin", parin])
+        if dofin and not dofin.lower() in ('id', 'identity'):
+            mirtk.run("invert-dof", args=[dofin, s2tdof], verbose=verbose, threads=threads)
+            argv.extend(["-dofin", s2tdof])
+        argv.extend(["-dofout", s2tdof])
+        mirtk.check_call(argv)
         print("\nComputing backward mapping... done")
         # invert source to target mapping and average transformations
         print("Averaging forward and inverse backward mappings...")
-        run("invert-dof", args=[s2tdof, s2tdof], verbose=verbose, threads=threads)
-        run("average-dofs", args=[dofout, t2sdof, s2tdof], opts={'all': None}, verbose=verbose, threads=threads)
+        mirtk.run("invert-dof", args=[s2tdof, s2tdof], verbose=verbose, threads=threads)
+        mirtk.run("average-dofs", args=[dofout, t2sdof, s2tdof], opts={'all': None}, verbose=verbose, threads=threads)
         print("Averaging forward and inverse backward mappings... done")
     finally:
-        # remove temporary files
-        if tmpdir:
-            if t2sdof:
-                os.remove(t2sdof)
-            if s2tdof:
-                os.remove(s2tdof)
-            os.rmdir(tmpdir)
+        if os.path.exists(t2sdof):
+            os.remove(t2sdof)
+        if os.path.exists(s2tdof):
+            os.remove(s2tdof)
+        os.rmdir(tmpdir)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('-image', dest='images', default=[], action='append', help="Input image", required=True)
-    parser.add_argument('-model', default='Affine', help="Affine transformation model")
-    parser.add_argument('-dofin', help="Input transformation file")
-    parser.add_argument('-dofout', help="Output transformation file", required=True)
-    parser.add_argument('-parin', help="Input configuration file")
-    parser.add_argument('-parout', help="Ouptut configuration file")
-    parser.add_argument('-threads', default=0, help="Maximum number of threads")
-    parser.add_argument('-v', '-verbose', dest='verbose',action="count", default=0, help="Verbosity of output messages")
-    args = parser.parse_args()
-    print("images = " + repr(args.images))
-    register(args.images, dofout=args.dofout, dofin=args.dofin,
-             parin=args.parin, parout=args.parout, model=args.model,
-             threads=args.threads, verbose=args.verbose)
+    # TODO: Use custom argparse type for -dof|-dof_i <file> option which
+    #       applies to the previous -image argument
+    images = []
+    model = 'Affine'
+    parin = None
+    parout = None
+    dofin = None
+    dofout = None
+    threads = 0
+    verbose = 0
+
+    i = 1
+    while i < len(sys.argv) - 1:
+        opt = sys.argv[i]
+        i += 1
+        if opt == '-image':
+            while sys.argv[i][0] != '-':
+                images.append([sys.argv[i], None, False])
+                i += 1
+        elif opt == '-dof':
+            images[-1][1] = sys.argv[i]
+            images[-1][2] = False
+            i += 1
+        elif opt == '-dof_i':
+            images[-1][1] = sys.argv[i]
+            images[-1][2] = True
+            i += 1
+        elif opt == '-model':
+            model = sys.argv[i]
+            i += 1
+        elif opt == '-dofin':
+            dofin = sys.argv[i]
+            i += 1
+        elif opt == '-dofout':
+            dofout = sys.argv[i]
+            i += 1
+        elif opt == '-parin':
+            parin = sys.argv[i]
+            i += 1
+        elif opt == '-parout':
+            parout = sys.argv[i]
+            i += 1
+        elif opt == '-threads':
+            threads = int(sys.argv[i])
+            i += 1
+        elif opt == '-v' or opt == '-verbose':
+            verbose += 1
+    register(images, dofout=dofout, dofin=dofin,
+             parin=parin, parout=parout, model=model,
+             threads=threads, verbose=verbose)
+
+    #parser = argparse.ArgumentParser(description=__doc__)
+    #parser.add_argument('-image', dest='images', default=[], action='append', help="Input image", required=True)
+    #parser.add_argument('-model', default='Affine', help="Affine transformation model")
+    #parser.add_argument('-dofin', help="Input transformation file")
+    #parser.add_argument('-dofout', help="Output transformation file", required=True)
+    #parser.add_argument('-parin', help="Input configuration file")
+    #parser.add_argument('-parout', help="Ouptut configuration file")
+    #parser.add_argument('-threads', default=0, help="Maximum number of threads")
+    #parser.add_argument('-v', '-verbose', dest='verbose',action="count", default=0, help="Verbosity of output messages")
+    #args = parser.parse_args()
+    #register(args.images, dofout=args.dofout, dofin=args.dofin,
+    #         parin=args.parin, parout=args.parout, model=args.model,
+    #         threads=args.threads, verbose=args.verbose)
