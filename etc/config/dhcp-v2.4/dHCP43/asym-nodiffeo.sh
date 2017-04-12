@@ -28,7 +28,7 @@ epsilon=0.054
 kernel="$pardir/sigma_$sigma"
 
 # output settings
-subdir="dHCP43/sigma_$sigma-asym-nodiff"
+subdir="dHCP43/sigma_$sigma-asym-nodiffeo"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../$subdir/dofs"
