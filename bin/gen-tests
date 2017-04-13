@@ -234,7 +234,7 @@ pairwise_registration_test()
 # workflow
 # ==============================================================================
 
-begin_dag "tests"
+begin_dag "pairwise-registration-tests"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
@@ -258,7 +258,7 @@ begin_dag "tests"
           -inclbg   true \
           -maxres   "$resolution" \
           -segdir   "$segdir" \
-          -segmsk   "BS+CB" .33 \
+          -segmsk   "bs+cb" .33 \
           -levels   4 2
 
       register_node "affine" -parent "rigid" \
@@ -310,8 +310,8 @@ begin_dag "tests"
       -output    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
       -spacing   "$resolution" \
       -padding   "$bgvalue" \
-      -normalize "mean" \
-      -rescale   "dist" \
+      -normalize "zscore" \
+      -rescale   "0 100" \
       -sharpen   "yes" \
       -margin    5
 
@@ -325,13 +325,13 @@ begin_dag "tests"
   spacing=2.5
   symmetric=true
   bins=64
-  radius=5
+  radius=3
   interp='Linear with padding'
   inclbg=false
 
-  for sim in 'nmi' 'ncc'; do
-  for bending  in 1e-2 5e-3 1e-3 1e-4 1e-5; do
-  for jacobian in 0 1e-3 1e-4 1e-5 1e-6; do
+  sim='nmi'
+  for bending  in 5e-2 1e-2 5e-3 1e-3 1e-4; do
+  for jacobian in 1e-3 5e-4 1e-4 1e-5 0e-0; do
 
     let i++
     name="test_$(printf %03d $i)"
@@ -349,7 +349,32 @@ begin_dag "tests"
         -interp "$interp" \
         -inclbg "$inclbg"
 
-  done; done; done
+  done; done
+
+  sim='ncc'
+  for bending  in 5e-2 1e-2 5e-3 1e-3; do
+  for jacobian in 1e-3 1e-4 1e-5 0e-0; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done
+
+end_dag
+exit 0
 
   # ----------------------------------------------------------------------------
   # different NMI #bins, regularization weights based on initial tests
