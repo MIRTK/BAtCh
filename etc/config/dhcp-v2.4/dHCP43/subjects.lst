@@ -1,3 +1,4 @@
+# bin/query-subjects etc/config/dhcp-v2.4/dHCP43/sessions.csv --min-pma 38 --max-ga 40 --max-time-to-scan 0.15
 CC00051XX02-7702
 CC00066XX09-19200
 CC00067XX10-20200
