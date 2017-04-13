@@ -7,6 +7,7 @@ if [ ${#tests[@]} -eq 0 ]; then
 fi
 
 for i in ${tests[@]}; do
+  i=$(echo $i | sed "s/^0*\([1-9]\)/\1/;s/^0*$/0/")
   d=$(printf test_%03d $i)
   echo -n "$d: "
   find $d -name "*$ext" -type f | wc -l
