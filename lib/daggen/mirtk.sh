@@ -1904,12 +1904,21 @@ average_images_node()
         optarg arg $1 "$2"; shift
         options="$options -sharpen $arg"
         ;;
-      -label)
-        optarg label $1 "$2"; shift
-        options="$options -label $label";;
-      -*)        error "average_images_node: invalid option: $1"; ;;
-      *)         [ -z "$node" ] || error "average_images_node: too many arguments: $@"
-                 node="$1"; ;;
+      -label|-labels)
+        local args=
+        optargs args "$@"; shift ${#args[@]}
+        options="$options -label ${args[@]}"
+        ;;
+      -dtype)
+        local arg=
+        optarg arg $1 "$2"; shift
+        options="$options -dtype $arg"
+        ;;
+      -*)
+        error "average_images_node: invalid option: $1"; ;;
+      *)
+        [ -z "$node" ] || error "average_images_node: too many arguments: $@"
+        node="$1"; ;;
     esac
     shift
   done
