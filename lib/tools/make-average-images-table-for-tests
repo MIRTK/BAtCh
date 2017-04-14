@@ -1,0 +1,29 @@
+#!/bin/bash
+
+[ $# -gt 7 ] || {
+  echo "usage: $(basename $0) <table> <append:0|1> <sublst> <imgdir> <imgpre> <imgsuf> <outdir> <testid>..." 1>&2
+  exit 1
+}
+
+table="$1"
+append="$2"
+sublst="$3"
+imgdir="$4"
+imgpre="$5"
+imgsuf="$6"
+outdir="$7"
+shift 7
+
+tests="$@"
+subids=($(cat "$sublst" | tr '\t' ',' | tr ' ' ',' | tr '#' ',' | cut -d, -f1))
+
+if [ $append -eq 0 ]; then
+  rm -f "$table"
+  echo "$outdir/" > "$table"
+fi
+for i in ${tests[@]}; do
+  test=$(printf test_%03d $i)
+  for subid in ${subids[@]}; do
+    echo "$imgdir/$imgpre$subid$imgsuf,global/dofs/1.3_ref/$subid.dof.gz,$test/dofs/average/$subid.dof.gz" >> "$table"
+  done
+done
