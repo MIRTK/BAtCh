@@ -75,6 +75,13 @@ lbldir="$(dirname  "$_lbldir/${_lblpre}id")"
 lblpre="$(basename "$_lbldir/${_lblpre}id")"
 lblpre="${lblpre:0:${#lblpre}-2}"
 
+_clsdir="$lbldir"
+_clspre="$clspre"
+
+clsdir="$(dirname  "$_clsdir/${_clspre}id")"
+clspre="$(basename "$_clsdir/${_clspre}id")"
+clspre="${clspre:0:${#clspre}-2}"
+
 verbose=0
 sublst="$1"; shift
 refimg="$1"; shift
@@ -110,12 +117,25 @@ else
   error "This workflow only supports NIfTI images!"
 fi
 
-dofdir="$outdir/dofs"
 log="$dagdir/progress.log"
 
 # ==============================================================================
 # auxiliary functions
 # ==============================================================================
+
+pbmap_name_to_tissue_labels()
+{
+  local labels=()
+  case "$2" in
+    csf) labels=(1); ;;
+    wm) labels=(3); ;;
+    cgm) labels=(2); ;;
+    dgm) labels=(7 9); ;;
+    vents) labels=(5); ;;
+    bs_cb|bs+cb) labels=(6 8); ;;
+  esac
+  local "$1" && upvar $1 "${labels[@]}"
+}
 
 pairwise_registration_test()
 {
@@ -171,8 +191,8 @@ pairwise_registration_test()
     evaluate_overlap_node "evaluate_overlap" -parent "transform_labels" \
         -subjects "${subids[@]}" \
         -imgdir   "$outdir/$name/labels" \
-        -imgpre   "$imgpre" \
-        -imgsuf   "$imgsuf" \
+        -imgpre   "$lblpre" \
+        -imgsuf   "$lblsuf" \
         -outdir   "$outdir/$name/overlap" \
         -metric   TP FP FN TN Sensitivity Specificity Precision Accuracy Dice Jaccard
 
@@ -196,6 +216,34 @@ pairwise_registration_test()
         -outdir   "$outdir/$name/images/atlas" \
         -padding  "$bgvalue" -invert
 
+    transform_image_node "transform_tissue_labels_to_atlas" -parent "average_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$clsdir" \
+        -imgpre   "$clspre" \
+        -imgsuf   "$clssuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$outdir/$name/dofs/average" \
+        -outdir   "$outdir/$name/labels/atlas" \
+        -invert
+
+    transform_image_node "transform_all_labels_to_atlas" -parent "average_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$lbldir" \
+        -imgpre   "$lblpre" \
+        -imgsuf   "$lblsuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$outdir/$name/dofs/average" \
+        -outdir   "$outdir/$name/labels/atlas" \
+        -invert
+
     # compute voxel-wise statistics of co-registered images
     aggregate_images_node "compute_mean" -parent "transform_images_to_atlas" \
         -subjects  "${subids[@]}" \
@@ -207,13 +255,13 @@ pairwise_registration_test()
         -normalize "z-score" \
         -padding   "$bgvalue"
 
-    aggregate_images_node "compute_stdev" -parent "transform_images_to_atlas" \
+    aggregate_images_node "compute_sdev" -parent "transform_images_to_atlas" \
         -subjects  "${subids[@]}" \
-        -mode      "stdev" \
+        -mode      "sdev" \
         -imgdir    "$outdir/$name/images/atlas" \
         -imgpre    "$imgpre" \
         -imgsuf    "$imgsuf" \
-        -output    "$outdir/$name/stats/stdev.nii.gz" \
+        -output    "$outdir/$name/stats/sdev.nii.gz" \
         -normalize "z-score" \
         -padding   "$bgvalue"
 
@@ -227,6 +275,44 @@ pairwise_registration_test()
         -output    "$outdir/$name/stats/gini.nii.gz" \
         -padding   "$bgvalue"
 
+    aggregate_images_node "compute_tissue_consistency" -parent "transform_tissue_labels_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "label-consistency" \
+        -imgdir    "$outdir/$name/labels/atlas" \
+        -imgpre    "$clspre" \
+        -imgsuf    "$clssuf" \
+        -output    "$outdir/$name/stats/tissue-consistency.nii.gz"
+
+    aggregate_images_node "compute_structure_consistency" -parent "transform_all_labels_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "label-consistency" \
+        -imgdir    "$outdir/$name/labels/atlas" \
+        -imgpre    "$lblpre" \
+        -imgsuf    "$lblsuf" \
+        -output    "$outdir/$name/stats/structure-consistency.nii.gz"
+
+    # compute probability maps of tissue ROIs
+    for pbmap in csf wm cgm dgm vents bs+cb; do
+      local labels=
+      pbmap_name_to_tissue_labels labels $pbmap
+      average_images_node "compute_pbmap_${pbmap/+/_}" -parent "average_dofs" \
+          -subjects "${subids[@]}" \
+          -refdir    "$nrmdir" \
+          -refpre    "$nrmpre" \
+          -refid     "$nrmref" \
+          -refsuf    "$nrmsuf" \
+          -imgdir    "$clsdir" \
+          -imgpre    "$clspre" \
+          -imgsuf    "$clssuf" \
+          -dofin1    "$nrmdofs" \
+          -dofin2    "$outdir/$name/dofs/average" \
+          -output    "$outdir/$name/pbmaps/$pbmap.nii.gz" \
+          -labels    "${labels[@]}" \
+          -rescale   "0 100" \
+          -dtype     "uchar"
+    done
+
+
   end_dag
 }
 
@@ -234,7 +320,9 @@ pairwise_registration_test()
 # workflow
 # ==============================================================================
 
-begin_dag "pairwise-registration-tests"
+begin_dag "pairwise-registration-tests" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
+
+  dofdir="$outdir/global/dofs"
 
   # ----------------------------------------------------------------------------
   # global normalization (translation, rotation, and scale)
@@ -284,15 +372,15 @@ begin_dag "pairwise-registration-tests"
       invert_dof_node "invert" -parent "affine" \
           -subjects "${subids[@]}" \
           -dofins   "$dofdir/1.2_aff" \
-          -dofdir   "$dofdir/1.3_inv"
+          -dofdir   "$dofdir/1.3_ref"
 
-      nrmdofs="$dofdir/1.3_inv"
+      nrmdofs="$dofdir/1.3_ref"
 
   end_dag
 
   # ----------------------------------------------------------------------------
   # generate population specific reference image/mask
-  nrmdir="$outdir/average"
+  nrmdir="$outdir/global/average"
   nrmref="linear"
   nrmpre=""
   nrmsuf=".nii.gz"
@@ -373,23 +461,34 @@ begin_dag "pairwise-registration-tests"
 
   done; done
 
-end_dag
-exit 0
+  sim='nmi'
+  for bending  in 1e-2 5e-3; do
+  for jacobian in 5e-5 5e-6 1e-6; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done
 
   # ----------------------------------------------------------------------------
   # different NMI #bins, regularization weights based on initial tests
-  mffd='None'
-  model='SVFFD'
-  spacing=2.5
-  symmetric=true
-  bending=1e-4
-  jacobian=1e-5
   sim='nmi'
-  radius=5
-  interp='Linear with padding'
-  inclbg=false
-
-  for bins in 100 150 200; do
+  bending=5e-3
+  jacobian=1e-5
+  for bins in 32 48 80 96 112 128 144 160; do
     let i++
     name="test_$(printf %03d $i)"
     echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
@@ -409,18 +508,10 @@ exit 0
 
   # ----------------------------------------------------------------------------
   # different NCC window size, regularization weights based on initial tests
-  mffd='None'
-  model='SVFFD'
-  spacing=2.5
-  symmetric=true
-  bending=1e-2
-  jacobian=1e-6
   sim='ncc'
-  bins=64
-  interp='Linear with padding'
-  inclbg=false
-
-  for radius in 0 1 2 3 4; do
+  bending=1e-2
+  jacobian=0e-0
+  for radius in 0 1 2 4 5; do
     let i++
     name="test_$(printf %03d $i)"
     echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
@@ -437,6 +528,9 @@ exit 0
         -interp "$interp" \
         -inclbg "$inclbg"
   done
+
+end_dag
+exit 0
 
   # ----------------------------------------------------------------------------
   # different model with similarity measure and regularization weights based on preceeding tests
@@ -513,50 +607,6 @@ exit 0
   done
 
   # ----------------------------------------------------------------------------
-  # exclude constraints from energy value, fit line for convergence test
-  spacing=2.5
-  symmetric='true'
-  mffd='None'
-  model='SVFFD'
-  bins=64
-  radius=3
-  interp='Linear with padding'
-  inclbg=false
-
-  for sim in nmi ncc; do
-
-    if [[ $sim == nmi ]]; then
-      be=(1e-2 1e-3 1e-4)
-      jl=(0 1e-4 1e-3)
-    else
-      be=(1e-2 5-e3 1e-3)
-      jl=(0 1e-6 1e-5)
-    fi
-
-    for bending  in ${be[@]}; do
-    for jacobian in ${jl[@]}; do
-
-      let i++
-      name="test_$(printf %03d $i)"
-      echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-      pairwise_registration_test "$name" "make_average" \
-          -model "$model" \
-          -mffd "$mffd" \
-          -similarity "$sim" \
-          -bins "$bins" \
-          -radius "$radius" \
-          -spacing "$spacing" \
-          -bending "$bending" \
-          -jacobian "$jacobian" \
-          -symmetric "$symmetric" \
-          -interp "$interp" \
-          -inclbg "$inclbg" \
-          -maxstep 2 -exclude-constraints
-
-    done; done
-  done
-
-  # ----------------------------------------------------------------------------
   # include background in downsampling, interpolation, and similarity
 
   mffd='None'
@@ -591,73 +641,6 @@ exit 0
   done; done; done
 
   # ----------------------------------------------------------------------------
-  # exclude constraints from energy value
-
-  mffd='None'
-  model='SVFFD'
-  spacing=2.5
-  symmetric=true
-  sim='nmi'
-  bins=64
-  interp='Linear with padding'
-  inclbg=false
-
-  for bending  in 5e-3 1e-3; do
-  for jacobian in 1e-4 1e-5 1e-6; do
-
-    let i++
-    name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp, excl_constraints=true, maxstep=2"
-    pairwise_registration_test "$name" "make_average" \
-        -model "$model" \
-        -mffd "$mffd" \
-        -similarity "$sim" \
-        -bins "$bins" \
-        -radius "$radius" \
-        -spacing "$spacing" \
-        -bending "$bending" \
-        -jacobian "$jacobian" \
-        -symmetric "$symmetric" \
-        -interp "$interp" \
-        -inclbg "$inclbg" \
-        -maxstep 2 -exclude-constraints
-
-  done; done
-
-  # ----------------------------------------------------------------------------
-  # with cubic B-spline interpolation?
-
-  mffd='None'
-  model='SVFFD'
-  spacing=2.5
-  symmetric=true
-  sim='nmi'
-  bins=64
-  interp='Fast cubic BSpline with padding'
-  inclbg=false
-
-  for bending  in 5e-3; do
-  for jacobian in 1e-4; do
-
-    let i++
-    name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-    pairwise_registration_test "$name" "make_average" \
-        -model "$model" \
-        -mffd "$mffd" \
-        -similarity "$sim" \
-        -bins "$bins" \
-        -radius "$radius" \
-        -spacing "$spacing" \
-        -bending "$bending" \
-        -jacobian "$jacobian" \
-        -symmetric "$symmetric" \
-        -interp "$interp" \
-        -inclbg "$inclbg"
-
-  done; done
-
-  # ----------------------------------------------------------------------------
   # find best parameters for FFD model (method of Serag et al.)
 
   mffd='Sum'
@@ -689,41 +672,6 @@ exit 0
         -interp "$interp" \
         -inclbg "$inclbg"
 
-  done
-
-  # ----------------------------------------------------------------------------
-  # have not tried less than 64 bins before... also use BE and JAC weights
-  # found to work better with new MIRTK register version f5d3f50
-  #
-  # ANTs atlas construction uses 32 bins by default (and cannot be changed)
- 
-  mffd='None'
-  model='SVFFD'
-  spacing=2.5
-  symmetric=true
-  bending=5e-3
-  jacobian=1e-4
-  sim='nmi'
-  radius=0
-  interp='Linear with padding'
-  inclbg=false
-
-  for bins in 32 40 50; do
-    let i++
-    name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-    pairwise_registration_test "$name" "make_average" \
-        -model "$model" \
-        -mffd "$mffd" \
-        -similarity "$sim" \
-        -bins "$bins" \
-        -radius "$radius" \
-        -spacing "$spacing" \
-        -bending "$bending" \
-        -jacobian "$jacobian" \
-        -symmetric "$symmetric" \
-        -interp "$interp" \
-        -inclbg "$inclbg"
   done
 
 end_dag
