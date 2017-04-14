@@ -27,10 +27,11 @@ if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
 fi
 for i in ${tests[@]}; do
   name=test_$(printf %03d $i)
+  echo "$name: compute average runtime of individual registrations"
   n=0
   # CPU time
   cpu_time=0
-  for row in $(grep 'CPU time is ' "$dagdir/tests/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/CPU time is +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+  for row in $(grep 'CPU time is ' "$dagdir/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/CPU time is +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
     IFS=',' read -ra cols <<< "$row"
     let cpu_time="$cpu_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
     let n++
@@ -39,7 +40,7 @@ for i in ${tests[@]}; do
   cpu_time=$(remove_trailing_zeros $cpu_time)
   # wall time
   wall_time=0
-  for row in $(grep 'Finished in ' "$dagdir/tests/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+  for row in $(grep 'Finished in ' "$dagdir/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
     IFS=',' read -ra cols <<< "$row"
     let wall_time="$wall_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
     let n++

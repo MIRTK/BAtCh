@@ -25,26 +25,31 @@ for i in ${tests[@]}; do
   if [ ! -f "$avgcsv" ]; then
     [ -z "$name" ] || echo "$name: compute average of individual pairwise overlaps"
     csvlst=($(find "$csvdir" -name '*.csv' -type f))
-    mirtk average-overlap "${csvlst[@]}" \
-        --measure DSC \
-        --segment BG 84 \
-        --segment CSF 83 \
-        --segment WM 51..82 \
-        --segment cGM 5..16 20..39 \
-        --segment dGM 40..48 85 86 87 \
-        --segment CC 48 \
-        --segment BS+CB 17 18 19 \
-        --segment Amygdala+Hippocampus 1..4 \
-        --segment Ventricles 49 50 \
-        --output  "$avgcsv"
-    [ $? -eq 0 ] || exit 1
+    if [ ${#csvlst[@]} -gt 0 ]; then
+      mirtk average-overlap "${csvlst[@]}" \
+          --measure DSC \
+          --segment BG 84 \
+          --segment CSF 83 \
+          --segment WM 51..82 \
+          --segment cGM 5..16 20..39 \
+          --segment dGM 40..48 85 86 87 \
+          --segment CC 48 \
+          --segment BS+CB 17 18 19 \
+          --segment Amygdala+Hippocampus 1..4 \
+          --segment Ventricles 49 50 \
+          --output  "$avgcsv"
+      [ $? -eq 0 ] || exit 1
+    else
+      echo "Could not find any CSV files in $csvdir" 1>&2
+      exit 1
+    fi
   fi
 done
 
 segments=('BG' 'CSF' 'WM' 'cGM' 'dGM' 'CC' 'BS+CB' 'Amygdala+Hippocampus' 'Ventricles')
 if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
   if [ ${#tests[@]} -gt 1 -o ${tests[0]} -ne 0 ]; then
-    echo -n "Test," > "$table" || exit 1
+    echo -n "Test" > "$table" || exit 1
     c=1
   else
     rm -f "$table" || exit 1
