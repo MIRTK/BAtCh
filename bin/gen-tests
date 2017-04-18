@@ -529,6 +529,63 @@ begin_dag "pairwise-registration-tests" -dagfile "$dagdir/all_tests.dag" -dagdir
         -inclbg "$inclbg"
   done
 
+  # ----------------------------------------------------------------------------
+  # find best parameters for FFD model (method of Serag et al.)
+  mffd='Sum'
+  model='Affine+FFD'
+  spacing=2.5
+  symmetric=false
+  sim='nmi'
+  bins=64
+  interp='Linear with padding'
+  inclbg=false
+  jacobian=0
+  radius=0
+
+  for bending in 1e-2 5e-2 1e-3 5e-3 1e-4 5e-4 1e-5 5e-5 1e-6; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done
+
+  # ----------------------------------------------------------------------------
+  # reduce BE weight for NCC even further than before
+  sim='ncc'
+  for bending  in 1e-1; do
+  for jacobian in 1e-3 1e-4 1e-5 0e-0; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done
+
 end_dag
 exit 0
 
@@ -639,39 +696,5 @@ exit 0
         -inclbg "$inclbg"
 
   done; done; done
-
-  # ----------------------------------------------------------------------------
-  # find best parameters for FFD model (method of Serag et al.)
-
-  mffd='Sum'
-  model='Affine+FFD'
-  spacing=2.5
-  symmetric=false
-  sim='nmi'
-  bins=64
-  interp='Linear with padding'
-  inclbg=false
-  jacobian=0
-  radius=0
-
-  for bending in 1e-2 5e-2 1e-3 5e-3 1e-4 5e-4 1e-5 5e-5 1e-6; do
-
-    let i++
-    name="test_$(printf %03d $i)"
-    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-    pairwise_registration_test "$name" "make_average" \
-        -model "$model" \
-        -mffd "$mffd" \
-        -similarity "$sim" \
-        -bins "$bins" \
-        -radius "$radius" \
-        -spacing "$spacing" \
-        -bending "$bending" \
-        -jacobian "$jacobian" \
-        -symmetric "$symmetric" \
-        -interp "$interp" \
-        -inclbg "$inclbg"
-
-  done
 
 end_dag
