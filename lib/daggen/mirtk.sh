@@ -1074,7 +1074,7 @@ transform_image_node()
     make_sub_script "transform.sub" "$sub" -executable transform-image
 
     # create generic resample submission script
-    if [[ $resample == true ]]; then
+    if [[ $resample == true ]] && [ -z "$tgtid" -o -z "$srcid" ]; then
       sub="arguments    = \""
       sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
       sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
@@ -1133,13 +1133,8 @@ transform_image_node()
     if [ -n "$tgtid" -a -n "$srcid" ]; then
       id1="$tgtid"
       id2="$srcid"
-      if [[ "$id1" == "$id2" ]]; then
-        job_node="resample_$id1"
-        add_node "$job_node" -subfile "resample.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
-      else
-        job_node="transform_$id1,$id2"
-        add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
-      fi
+      job_node="transform_$id1,$id2"
+      add_node "$job_node" -subfile "transform.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
       [ -z "$pre" ] || add_edge "$job_node" 'mkdirs'
       if [[ outid == '$(source)' ]]; then
         [ ! -f "$outdir/$outpre$id2$outsuf" ] || node_done "$job_node"
@@ -1834,6 +1829,9 @@ average_images_node()
   local dofid1=
   local dofid2=
   local dofid3=
+  local invdof1=false
+  local invdof2=false
+  local invdof3=false
   local dofpre=
   local dofsuf='.dof.gz'
   local dofinv='false'
@@ -1864,7 +1862,14 @@ average_images_node()
       -dofid3)   dofid3="$2"; shift; ;;
       -dofpre)   dofpre="$2"; shift; ;;
       -dofsuf)   dofsuf="$2"; shift; ;;
-      -dofinv)   options="$options -invert"; ;;
+      -dofinv)
+        invdof1=true
+        invdof2=true
+        invdof3=true
+        ;;
+      -dofinv1) optarg dofinv1 $1 "$2"; shift; ;;
+      -dofinv2) optarg dofinv2 $1 "$2"; shift; ;;
+      -dofinv3) optarg dofinv3 $1 "$2"; shift; ;;
       -output|-mean|-average)
         optarg average $1 "$2"
         shift; ;;
@@ -1949,25 +1954,31 @@ average_images_node()
     while [ $i -lt ${#ids[@]} ]; do
       images="$images\"$imgpre${ids[i]}$imgsuf\""
       if [ -n "$dofin1" ] && [[ $dofid1 != false ]]; then
-        if [ -n "$dofid1" ]; then
-          images="$images,\"$dofin1/$dofpre$dofid1$dofsuf\""
-        else
-          images="$images,\"$dofin1/$dofpre${ids[i]}$dofsuf\""
+        images="$images,\""
+        [[ $invdof1 != true ]] || images="${images}inv:"
+        images="$images$dofin1/$dofpre$dofid1"
+        if [ -z "$dofid1" ]; then
+          images="${ids[i]}"
         fi
+        images="$images$dofsuf\""
       fi
       if [ -n "$dofin2" ] && [[ $dofid2 != false ]]; then
-        if [ -n "$dofid2" ]; then
-          images="$images,\"$dofin2/$dofpre$dofid2$dofsuf\""
-        else
-          images="$images,\"$dofin2/$dofpre${ids[i]}$dofsuf\""
+        images="$images,\""
+        [[ $invdof2 != true ]] || images="${images}inv:"
+        images="$images$dofin2/$dofpre$dofid2"
+        if [ -z "$dofid2" ]; then
+          images="${ids[i]}"
         fi
+        images="$images$dofsuf\""
       fi
       if [ -n "$dofin3" ] && [[ $dofid3 != false ]]; then
-        if [ -n "$dofid3" ]; then
-          images="$images,\"$dofin3/$dofpre$dofid3$dofsuf\""
-        else
-          images="$images,\"$dofin3/$dofpre${ids[i]}$dofsuf\""
+        images="$images,\""
+        [[ $invdof3 != true ]] || images="${images}inv:"
+        images="$images$dofin3/$dofpre$dofid3"
+        if [ -z "$dofid3" ]; then
+          images="${ids[i]}"
         fi
+        images="$images$dofsuf\""
       fi
       if [ $i -lt ${#weights[@]} ]; then
         images="$images,${weights[i]}"

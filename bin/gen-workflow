@@ -467,11 +467,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   # ----------------------------------------------------------------------------
   # compute cross-sectional FFDs for each time point between each pair of images
   defdofs=""
-  resdof=false  # false: do not use average inverse subject to atlas deformation
-                # other: deform average intensity image by inverse of this transform
+  definvs=false
+  resdof=false
 
   if [[ $pairwise == true ]]; then
-    defdofs="$dofdir/2.2_avg"
 
     begin_dag 'def_alignment' -parent "$prev_node" -splice
 
@@ -511,19 +510,26 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       # for each atlas time point...
       for t in ${timepoints[@]}; do
 
-        # compute average deformations for each subject
+        # compute average deformations
         average_dofs_node "avgdefs_$t" -parent 'regpairs' \
             -doflst "$kernel/$krnpre${t}.$krnext" \
             -dofins "$dofdir/2.1_def" \
-            -dofdir "$defdofs/t$t" \
+            -dofdir "$dofdir/2.2_avg/t$t" \
             -dofs
 
-        # compute residual deformation
-        resdof="residual"
-        average_dofs_node "residual_$t" -parent "avgdefs_$t" \
+        # invert average deformations
+        invert_dof_node "invavgs_$t"  -parent "avgdefs_$t" \
+            -sublst "$kernel/$krnpre${t}.$krnext" \
+            -dofins "$dofdir/2.2_avg/t$t" \
+            -dofdir "$dofdir/2.3_inv/t$t" \
+            -group  10
+
+        # compute residual average deformation
+        resdof="average"
+        average_dofs_node "resdef_$t" -parent "invavgs_$t" \
             -doflst "$kernel/$krnpre${t}.$krnext" \
-            -dofins "$defdofs/t$t" \
-            -dofdir "$defdofs/t$t" \
+            -dofins "$dofdir/2.3_inv/t$t" \
+            -dofdir "$dofdir/2.3_inv/t$t" \
             -dofid  "$resdof" -dofs
 
       done
@@ -531,6 +537,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     end_dag
 
     prev_node='def_alignment'
+    defdofs="$dofdir/2.3_inv"
+    definvs=true
   fi
 
   # ----------------------------------------------------------------------------
@@ -563,7 +571,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             if [ -n "$defdofs" ]; then
               curdofs="$defdofs/t$t"
             else
-              curdofs=''
+              curdofs=""
             fi
 
             # average intensity (minimize intensity difference)
@@ -577,7 +585,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refpre    "$nrmpre" \
                 -refsuf    "$nrmsuf" \
                 -dofin1    "$nrmdofs" \
-                -dofin2    "$curdofs" \
+                -dofin2    "$curdofs" -dofinv2 "$definvs" \
                 -dofin3    "$curdofs" -dofid3 "$resdof" \
                 -output    "$tmpdir/t2w_t${t}_${i}.nii.gz" \
                 -padding   "$bgvalue" \
@@ -598,9 +606,9 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -imgdir    "$imgdir" \
                 -imgpre    "$imgpre" \
                 -imgsuf    "$imgsuf" \
-                -srcdir    "$tmpdir" \
-                -srcid     "t2w_t${t}_${i}" \
-                -srcsuf    ".nii.gz" \
+                -tgtdir    "$tmpdir" \
+                -tgtid     "t2w_t${t}_${i}" \
+                -tgtsuf    ".nii.gz" \
                 -model     "$model" \
                 -mffd      "$mffd" \
                 -symmetric "$symmetric" \
@@ -620,19 +628,20 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -maxres    "$resolution" \
                 -levels    "$levels"
 
-            resdof="residual"
+            resdof="average"
             average_dofs_node "average_$t" -parent "register_$t" \
                 -doflst "$kernel/$krnpre${t}.$krnext" \
                 -dofins "$nxtdofs/t$t" \
                 -dofdir "$nxtdofs/t$t" \
                 -dofid  "$resdof" \
-                -dofs -invert
+                -dofs
 
           done
         end_dag
 
         prev_node="reg_templates_$i"
         defdofs="$nxtdofs"
+        definvs=true
 
         let i++
       done
@@ -673,7 +682,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refpre    "$nrmpre" \
           -refsuf    "$nrmsuf" \
           -dofin1    "$nrmdofs" \
-          -dofin2    "$defdofs/t$t" \
+          -dofin2    "$defdofs/t$t" -dofinv2 "$definvs" \
           -dofin3    "$defdofs/t$t" -dofid3 "$resdof" \
           -output    "$outdir/average/t2w/t$t.nii.gz" \
           -padding   "$bgvalue" \
@@ -682,14 +691,17 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -rescale   "$rescaling" \
           -sharpen   "$sharpen"
 
-      edit_image_node "putdof_$t" -parent "average_$t" \
-          -imgdir "$outdir/average/t2w" \
-          -imgid  "t$t" \
-          -imgsuf ".nii.gz" \
-          -outdir "$outdir/templates/t2w" \
-          -dofins "$outdir/dofs" \
-          -dofid  "t$t" \
-          -dofsuf ".dof"
+      transform_image_node "transform_$t" -parent "average_$t" \
+          -srcdir "$outdir/average/t2w" \
+          -srcpre "" \
+          -srcid  "t$t" \
+          -srcsuf ".nii.gz" \
+          -tgtid  "$nrmref" \
+          -tgtdir "$nrmdir" \
+          -tgtpre "$nrmpre" \
+          -tgtsuf "$nrmsuf" \
+          -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" \
+          -outdir "$outdir/templates/t2w"
 
     done
   end_dag
@@ -717,7 +729,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refpre "$nrmpre" \
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
-                -dofin2 "$defdofs/t$t" \
+                -dofin2 "$defdofs/t$t" -dofinv2 "$definvs" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
@@ -753,7 +765,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refpre "$nrmpre" \
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
-                -dofin2 "$defdofs/t$t" \
+                -dofin2 "$defdofs/t$t" -dofinv2 "$definvs" \
                 -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
