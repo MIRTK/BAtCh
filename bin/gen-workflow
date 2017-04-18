@@ -60,7 +60,7 @@ HELP
 
 # sigma value specified as command argument
 # Note: Only used when not overridden by configuration file.
-sigma=0
+sigma=
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
