@@ -142,7 +142,7 @@ pairwise_registration_test()
   local name="$1"; shift
   local parent="$1"; shift
 
-  begin_dag "$name" -parent "$parent"
+  begin_dag "$name" -parent "$parent" -splice
 
     # perform pairwise test registrations
     register_node "register_images" \
@@ -564,6 +564,15 @@ begin_dag "pairwise-registration-tests" -dagfile "$dagdir/all_tests.dag" -dagdir
 
   # ----------------------------------------------------------------------------
   # reduce BE weight for NCC even further than before
+  mffd='None'
+  model='SVFFD'
+  spacing=2.5
+  symmetric=true
+  bins=64
+  radius=3
+  interp='Linear with padding'
+  inclbg=false
+
   sim='ncc'
   for bending  in 1e-1; do
   for jacobian in 1e-3 1e-4 1e-5 0e-0; do
@@ -571,6 +580,111 @@ begin_dag "pairwise-registration-tests" -dagfile "$dagdir/all_tests.dag" -dagdir
     let i++
     name="test_$(printf %03d $i)"
     echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done
+
+  # ----------------------------------------------------------------------------
+  # reduce control point spacing
+  mffd='None'
+  model='SVFFD'
+  symmetric=true
+  ic=true
+  interp='Linear with padding'
+  inclbg=false
+
+  sim='nmi'
+  bins=64
+  radius=3
+
+  for spacing  in 2 1.5; do
+  for bending  in 5e-2 1e-2 5e-3 1e-3 1e-4; do
+  for jacobian in 1e-3 5e-4 1e-4 1e-5 0e-0; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, ic=$ic, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -inverse-consistent "$ic" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done; done
+
+  # ----------------------------------------------------------------------------
+  # inverse consistent vs. symmetric energy
+  mffd='None'
+  model='SVFFD'
+  symmetric=false
+  ic=true
+  interp='Linear with padding'
+  inclbg=false
+
+  sim='nmi'
+  bins=64
+  radius=0
+  for spacing  in 2.5 2 1.5; do
+  for bending  in 5e-2 1e-2 5e-3 1e-3 1e-4; do
+  for jacobian in 1e-3 5e-4 1e-4 1e-5 0e-0; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+    pairwise_registration_test "$name" "make_average" \
+        -model "$model" \
+        -mffd "$mffd" \
+        -similarity "$sim" \
+        -bins "$bins" \
+        -radius "$radius" \
+        -spacing "$spacing" \
+        -bending "$bending" \
+        -jacobian "$jacobian" \
+        -symmetric "$symmetric" \
+        -inverse-consistent "$ic" \
+        -interp "$interp" \
+        -inclbg "$inclbg"
+
+  done; done; done
+
+  # ----------------------------------------------------------------------------
+  # find best parameters for FFD model without Affine component
+  mffd='None'
+  model='FFD'
+  symmetric=false
+  ic=false
+  sim='nmi'
+  bins=64
+  interp='Linear with padding'
+  inclbg=false
+  jacobian=0
+  radius=0
+
+  for spacing in 2.5 2 1.5; do
+  for bending in 1e-2 5e-2 1e-3 5e-3 1e-4 5e-4 1e-5 5e-5 1e-6; do
+
+    let i++
+    name="test_$(printf %03d $i)"
+    echo "$name: mffd=$mffd, model=$model, sym=$symmetric, ic=$ic, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, jl=$jacobian, inclbg=$inclbg, interp=$interp"
     pairwise_registration_test "$name" "make_average" \
         -model "$model" \
         -mffd "$mffd" \
