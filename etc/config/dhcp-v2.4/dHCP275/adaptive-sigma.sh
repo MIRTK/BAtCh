@@ -3,7 +3,7 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
 
-[ -n "$sigma" ] || sigma=0.5
+[ -n "$sigma" ] || sigma=1.0
 sigma=$(printf '%.2f' $sigma)
 kernel="$pardir/adaptive-sigma_$sigma"
 

@@ -50,15 +50,16 @@ interpolation="Linear with padding"
 similarity="NMI"
 bins=64
 inclbg=false
+spacing=2.0
 bending=5e-3
-jacobian=1e-4
+jacobian=1e-5
 symmetric=true
 pairwise=true
 refine=10
 
 # regression
 means=({36..44})
-[ -n "$sigma" ] || sigma=0.5
+[ -n "$sigma" ] || sigma=1.0
 sigma=$(printf '%.2f' $sigma)
 epsilon=0.001
 kernel="$pardir/constant_sigma=$sigma"

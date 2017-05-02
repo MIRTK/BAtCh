@@ -68,9 +68,9 @@ bins=64                               # no. of bins to use for NMI
 model="SVFFD"                         # free-form deformation model
 mffd="None"                           # multi-level transformation model
 levels=4                              # no. of resolution levels for deformable registration
-spacing=2.5                           # control point spacing on finest level
+spacing=2.0                           # control point spacing on finest level
 bending=5e-3                          # weight of bending energy term
-jacobian=1e-4                         # weigth of Jacobian-based penalty term
+jacobian=1e-5                         # weigth of Jacobian-based penalty term
 symmetric=true                        # use symmetric registration (requires 'SVFFD' model)
 pairwise=true                         # true:  construct template using pairwise deformable registrations
                                       # false: use initial affine average as initial template

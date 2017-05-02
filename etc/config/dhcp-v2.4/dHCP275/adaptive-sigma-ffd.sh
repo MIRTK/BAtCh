@@ -15,6 +15,7 @@ interpolation='Linear with padding'
 similarity='NMI'
 bins=64
 inclbg=false
+spacing=2.0
 bending=1e-3
 jacobian=0
 symmetric=false
