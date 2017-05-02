@@ -700,7 +700,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -tgtdir "$nrmdir" \
           -tgtpre "$nrmpre" \
           -tgtsuf "$nrmsuf" \
-          -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" \
+          -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" -invert \
           -outdir "$outdir/templates/t2w"
 
     done
