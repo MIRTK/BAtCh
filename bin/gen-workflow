@@ -525,12 +525,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
             -group  10
 
         # compute residual average deformation
-        resdof="average"
-        average_dofs_node "resdef_$t" -parent "invavgs_$t" \
-            -doflst "$kernel/$krnpre${t}.$krnext" \
-            -dofins "$dofdir/2.3_inv/t$t" \
-            -dofdir "$dofdir/2.3_inv/t$t" \
-            -dofid  "$resdof" -dofs
+        if [[ $useresdof == true ]]; then
+          resdof="average"
+          average_dofs_node "resdef_$t" -parent "invavgs_$t" \
+              -doflst "$kernel/$krnpre${t}.$krnext" \
+              -dofins "$dofdir/2.3_inv/t$t" \
+              -dofdir "$dofdir/2.3_inv/t$t" \
+              -dofid  "$resdof" -dofs
+        fi
 
       done
 

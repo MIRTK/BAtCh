@@ -74,6 +74,10 @@ jacobian=1e-4                         # weigth of Jacobian-based penalty term
 symmetric=true                        # use symmetric registration (requires 'SVFFD' model)
 pairwise=true                         # true:  construct template using pairwise deformable registrations
                                       # false: use initial affine average as initial template
+useresdof=false                       # whether to compute and apply residual average deformation
+                                      # when "pairwise" deformable registration are enabled
+                                      # - only needed for non-inverse-consistent registration
+                                      # - not considered by Serag et al., NeuroImage 2012
 refine=10                             # no. of subject to template deformation refinement steps
 inclbg=false                          # whether to include background during deformable registration
 interpolation="Linear"                # image interpolation mode
