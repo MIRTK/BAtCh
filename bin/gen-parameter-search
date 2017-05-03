@@ -320,7 +320,7 @@ pairwise_registration_test()
 # workflow
 # ==============================================================================
 
-begin_dag "pairwise-registration-tests" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
+begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
 
   dofdir="$outdir/global/dofs"
 
