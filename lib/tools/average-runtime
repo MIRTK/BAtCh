@@ -1,0 +1,26 @@
+#!/bin/bash
+[ $# -eq 1 ] || { echo "usage: $(basename "$0") <logdir>" 1>&2; exit 1; }
+
+logdir="$1"
+
+# CPU time
+n=0
+cpu_time=0
+for row in $(grep 'CPU time is ' "$logdir/"*/reg_*.log | cut -d: -f2 | sed -r 's/CPU time is +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+  IFS=',' read -ra cols <<< "$row"
+  let cpu_time="$cpu_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
+  let n++
+done
+cpu_time=$(/usr/bin/bc -l <<< "$cpu_time / ($n * 60.0)")
+printf "Average CPU time [min] = %6.2f\n" $cpu_time
+
+# wall time
+n=0
+wall_time=0
+for row in $(grep 'Finished in ' "$logdir/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
+  IFS=',' read -ra cols <<< "$row"
+  let wall_time="$wall_time + ${cols[0]} * 3600 + ${cols[1]} * 60 + ${cols[2]}"
+  let n++
+done
+wall_time=$(/usr/bin/bc -l <<< "$wall_time / ($n * 60.0)")
+printf "Average run-time [min] = %6.2f\n" $wall_time
