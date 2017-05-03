@@ -15,12 +15,7 @@ else
 fi
 
 tests=($@)
-[ ${#tests[@]} -gt 0 ] || tests=({1..50})
-
-remove_trailing_zeros()
-{
-  echo -n $1 | sed 's/\(\.[0-9]*[1-9]\)0*$/\1/;s/\.0*$//'
-}
+[ ${#tests[@]} -gt 0 ] || tests=({1..225})
 
 if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
   echo "Test,CPU Time [min],Runtime [min]" > "$csv"
@@ -28,8 +23,8 @@ fi
 for i in ${tests[@]}; do
   name=test_$(printf %03d $i)
   echo "$name: compute average runtime of individual registrations"
+  # average CPU time
   n=0
-  # CPU time
   cpu_time=0
   for row in $(grep 'CPU time is ' "$dagdir/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/CPU time is +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
     IFS=',' read -ra cols <<< "$row"
@@ -37,8 +32,8 @@ for i in ${tests[@]}; do
     let n++
   done
   cpu_time=$(/usr/bin/bc -l <<< "$cpu_time / ($n * 60.0)")
-  cpu_time=$(remove_trailing_zeros $cpu_time)
-  # wall time
+  # average wall time
+  n=0
   wall_time=0
   for row in $(grep 'Finished in ' "$dagdir/$name/register_images/"*/reg_*.log | cut -d: -f2 | sed -r 's/Finished in +([[:digit:]]+) h +([[:digit:]]+) min +([[:digit:]]+) sec/\1,\2,\3/'); do
     IFS=',' read -ra cols <<< "$row"
@@ -46,6 +41,6 @@ for i in ${tests[@]}; do
     let n++
   done
   wall_time=$(/usr/bin/bc -l <<< "$wall_time / ($n * 60.0)")
-  wall_time=$(remove_trailing_zeros $wall_time)
-  echo "$i,$cpu_time,$wall_time" >> "$csv"
+  # print output table row
+  printf "%d,%6.2f,%6.2f\n" $i $cpu_time $wall_time >> "$csv"
 done
