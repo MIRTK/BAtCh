@@ -42,5 +42,5 @@ for i in ${tests[@]}; do
   done
   wall_time=$(/usr/bin/bc -l <<< "$wall_time / ($n * 60.0)")
   # print output table row
-  printf "%d,%6.2f,%6.2f\n" $i $cpu_time $wall_time >> "$csv"
+  printf "%d,%.2f,%.2f\n" $i $cpu_time $wall_time >> "$csv"
 done
