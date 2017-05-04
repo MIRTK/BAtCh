@@ -24,7 +24,7 @@ useresdof=false
 refine=0
 
 # output settings
-subdir="dHCP275/adaptive-sigma_$sigma-ffd"
+subdir="dHCP275/adaptive-sigma_$sigma-ffd-noresdof"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../$subdir/dofs"
