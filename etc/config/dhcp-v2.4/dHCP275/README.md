@@ -40,3 +40,13 @@ The subject weights for the different ages are in:
 # Notes from Andreas Schuh
 
 Adaptive kernel weights created by Antonis, copied to `weights_adaptive_sigma=?.??/t??.tsv` files.
+
+# Term subjects
+
+The term subjects were selected using the following command:
+
+```
+for subid in $(../../../../bin/query-subjects sessions.csv --min-ga 37 --max-ga 42 --max-time-to-scan 0.15 | tail -n+2 | tr , -); do
+  grep $subid subjects.lst > /dev/null && echo $subid
+done > term-subjects.lst
+```
