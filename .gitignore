@@ -19,3 +19,4 @@
 /lib/tools/edit-image
 /lib/tools/evaluate-overlap
 /lib/tools/run-dagman
+/etc/config/custom.sh
