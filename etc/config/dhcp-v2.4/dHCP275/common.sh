@@ -41,22 +41,6 @@ refsuf=".nii.gz"
 refid="serag-t40"
 refini=true
 
-# registration
-mffd="None"
-model="SVFFD"
-levels=4
-resolution=0.5
-interpolation="Linear with padding"
-similarity="NMI"
-bins=64
-inclbg=false
-spacing=2.0
-bending=5e-3
-jacobian=1e-5
-symmetric=true
-pairwise=true
-refine=10
-
 # regression
 means=({36..44})
 [ -n "$sigma" ] || sigma=1.0

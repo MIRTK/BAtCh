@@ -6,22 +6,6 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
 
-# registration
-mffd='None'
-model='SVFFD'
-levels=4
-resolution=0.5
-interpolation='Linear with padding'
-similarity='NMI'
-bins=64
-inclbg=false
-spacing=2.0
-bending=5e-3
-jacobian=1e-5
-symmetric=true
-pairwise=true
-refine=10
-
 # regression
 means=(40)
 sigma=1.00

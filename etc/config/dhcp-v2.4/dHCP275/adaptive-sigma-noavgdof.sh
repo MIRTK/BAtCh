@@ -4,7 +4,7 @@ set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
 
 pairwise=false
-refine=10
+
 kernel="$pardir/adaptive-sigma_$sigma"
 subdir="dHCP275/adaptive-sigma_$sigma-noavgdof"
 dagdir="dag/$subdir"
