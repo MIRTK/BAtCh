@@ -89,14 +89,17 @@ make_sub_script()
   fi
   makedir "$(dirname "$topdir/$_dagdir/$file")"
   cat --<<EOF > "$topdir/$_dagdir/$file"
-universe     = $universe
-environment  = "LD_LIBRARY_PATH='$topdir/$libdir:$LD_LIBRARY_PATH' PYTHONPATH='$PYTHONPATH'"
-initialdir   = $topdir
-executable   = $executable
-log          = $topdir/$log
-notify_user  = $notify_user
-notification = $notification
-requirements = $_requirements
+universe       = $universe
+environment    = "LD_LIBRARY_PATH='$topdir/$libdir:$LD_LIBRARY_PATH' PYTHONPATH='$PYTHONPATH'"
+initialdir     = $topdir
+executable     = $executable
+log            = $topdir/$log
+notify_user    = $notify_user
+notification   = $notification
+requirements   = $_requirements
+# Note: MIRTK executables return exit code 6 when memory allocation fails, other codes are kill/term signals
+on_exit_remove = (ExitSignal =?= 11 || (ExitCode =!= UNDEFINED && ExitCode =!= 6 && ExitCode =!= 247 && ExitCode =!= 241))
+retry_until    = (ExitCode =!= 6 && ExitCode =!= 247 && ExitCode =!= 241)
 EOF
   echo -en "$subdesc" >> "$topdir/$_dagdir/$file"
 }
