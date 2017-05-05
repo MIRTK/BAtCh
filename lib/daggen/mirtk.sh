@@ -1201,10 +1201,12 @@ evaluate_overlap_node()
   local node=
   local parent=()
   local ids=()
+  local idlst=
   local imgdir=
   local imgpre=
   local imgsuf='.nii.gz'
   local tgtid=
+  local tgtsub=true
   local tgtdir=
   local tgtpre='$imgpre'
   local tgtsuf='$imgsuf'
@@ -1222,6 +1224,7 @@ evaluate_overlap_node()
     case "$1" in
       -parent)   optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -sublst)   optarg  idlst $1 "$2"; shift; ;;
       -imgdir)   optarg imgdir $1 "$2"; shift; ;;
       -imgpre)   imgpre="$2"; shift; ;;
       -imgsuf)   imgsuf="$2"; shift; ;;
@@ -1229,6 +1232,7 @@ evaluate_overlap_node()
       -tgtid)    tgtid="$2";  shift; ;;
       -tgtpre)   tgtpre="$2"; shift; ;;
       -tgtsuf)   tgtsuf="$2"; shift; ;;
+      -subdir)   optarg tgtsub $1 "$2"; shift; ;;
       -bgvalue)  optarg padding $1 "$2"; shift; ;;
       -metric)
         metric=()
@@ -1249,6 +1253,8 @@ evaluate_overlap_node()
     shift
   done
   [ -n "$node" ] || error "evaluate_overlap_node: missing name argument"
+  [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+  [ ${#ids[@]} -gt 0 ] || error "evaluate_overlap_node: missing -subjects or -sublst"
   if [ -n "$tgtid" ]; then
     [ ${#ids[@]} -ge 1 ] || error "evaluate_overlap_node: not enough -subjects specified"
   else
@@ -1266,8 +1272,10 @@ evaluate_overlap_node()
     else
       let N="${#ids[@]}"  
     fi
-  else
+  elif [[ $tgtsub == true ]]; then
     let N="${#ids[@]} * (${#ids[@]} - 1)"
+  else
+    let N="${#ids[@]}"  
   fi
 
   # add SUBDAG node
@@ -1285,10 +1293,14 @@ evaluate_overlap_node()
         sub="$sub '$imgdir/$imgpre\$(source)$imgsuf'"
         sub="$sub -table '$outdir/$outpre\$(source)$outsuf'"
       fi
-    else
+    elif [[ $tgtsub == true ]]; then
       sub="$sub '$imgdir/\$(target)/$imgpre\$(target)$imgsuf'"
       sub="$sub '$imgdir/\$(target)/$imgpre\$(source)$imgsuf'"
       sub="$sub -table '$outdir/\$(target)/$outpre\$(source)$outsuf'"
+    else
+      sub="$sub '$imgdir/$imgpre\$(target)$imgsuf'"
+      sub="$sub -images '$_dagdir/images.csv'"
+      sub="$sub -table '$outdir/$outpre\$(target)$outsuf'"
     fi
     sub="$sub -labels ${labels[@]} -metric ${metric[@]}"
     sub="$sub -precision $digits -delim '$delim'"
@@ -1325,15 +1337,20 @@ evaluate_overlap_node()
         fi
       fi
     elif [ -n "$outdir" ]; then
-      for id in ${ids[@]}; do
-        pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
-      done
-      for id in ${ids[@]}; do
-        if [ ! -d "$topdir/$outdir/$id" ]; then
-          is_done=false
-          break
-        fi
-      done
+      if [[ $tgtsub == true ]]; then
+        for id in ${ids[@]}; do
+          pre="$pre\nmkdir -p '$outdir/$id' || exit 1"
+        done
+        for id in ${ids[@]}; do
+          if [ ! -d "$topdir/$outdir/$id" ]; then
+            is_done=false
+            break
+          fi
+        done
+      else
+        pre="$pre\nmkdir -p '$outdir' || exit 1"
+        [ ! -d "$topdir/$outdir" ] || is_done=true
+      fi
     fi
     if [ -n "$pre" ]; then
       make_script "mkdirs.sh" "$pre"
@@ -1368,8 +1385,7 @@ evaluate_overlap_node()
           let n++
         done
       fi
-    else
-      local n=0
+    elif [[ $tgtsub == true ]]; then
       for id1 in "${ids[@]}"; do
       for id2 in "${ids[@]}"; do
         [[ "$id1" != "$id2" ]] || continue
@@ -1377,8 +1393,19 @@ evaluate_overlap_node()
         add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
         [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
-        let n++
       done; done
+    else
+      sublst="$_dagdir/images.csv"
+      echo "$topdir/$imgdir" > "$sublst"
+      for id in ${ids[@]}; do
+        echo "$imgpre$id$imgsuf" >> "$sublst"
+      done
+      for id in "${ids[@]}"; do
+        job_node="evaluate_$id"
+        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id\""
+        [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+        [ ! -f "$outdir/$outpre$id$outsuf" ] || node_done "$job_node"
+      done
     fi
 
   }; end_dag
@@ -2043,6 +2070,7 @@ aggregate_images_node()
   local node=
   local parent=()
   local ids=()
+  local idlst=
   local imgdir=
   local imgpre=''
   local imgsuf='.nii.gz'
@@ -2056,6 +2084,7 @@ aggregate_images_node()
     case "$1" in
       -parent) optargs parent "$@"; shift ${#parent[@]}; ;;
       -subjects) optargs ids "$@"; shift ${#ids[@]}; ;;
+      -sublst)   optarg  idlst $1 "$2"; shift; ;;
       -mode) optarg mode $1 "$2"; shift; ;;
       -imgdir) optarg imgdir $1 "$2"; shift; ;;
       -imgpre) imgpre="$2"; shift; ;;
@@ -2074,6 +2103,8 @@ aggregate_images_node()
   [ -n "$node"   ] || error "aggregate_images_node: missing name argument"
   [ -n "$imgdir" ] || error "aggregate_images_node: missing -imgdir argument"
   [ -n "$output" ] || error "aggregate_images_node: missing -output argument"
+  [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
+  [ ${#ids[@]} -gt 0 ] || error "aggregate_images_node: missing -subjects or -sublst"
 
   info "Adding node $node..."
   begin_dag $node -splice || {

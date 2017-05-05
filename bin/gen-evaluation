@@ -1,5 +1,6 @@
 #! /bin/bash
 
+appid="$(basename "$0")"
 appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
 appdir="$(cd "$appdir/.." && pwd)"
 
@@ -19,25 +20,41 @@ print_help()
 
 usage: $(basename "$0") [options]
 
-This script generates the DAGMan application for the evaluation of the
-pairwise transformations computed during the atlas construction.
+This script generates the DAGMan application for the evaluation of the atlas.
+
+usage: $appid [options]
+
+This script generates the DAGMan worflow description for the evaluation of
+the constructed spatio-temporal brain atlas for submission to the batch
+queuing system HTCondor for distributed parallel execution. Alternatively,
+the workflow can be executed sequentially on the local machine or submitted
+to another supported batch queuing system (e.g., SLURM).
 
 Options:
-  -s -sublst <sub.lst>     Text file listing the IDs of the images
-                           to use for the atlas construction. If not
-                           specified, the IDs are read from the -agelst.
-                           (default: $appdir/etc/sub.lst)
-
-  -a -agelst <age.csv>     Comma/space-separated CSV file, where the
-                           first column contains the image ID and the
-                           second column the associated age.
-                           (default: $appdir/etc/age.csv)
-
-  -c -config <config.sh>   Configuration file.
-                           (default: $appdir/etc/config.sh)
-
-  -h -help                 Print help and exit.
-  -v -verbose              Enable verbose output messages.
+  -c, -config <config.sh>
+      Custom configuration file. (default: none)
+  -a, -agelst <age.csv>
+      Comma/space-separated CSV file, where the first column contains
+      the image ID and the second column the associated age.
+      (default: $agelst)
+  -s, -sublst <sub.lst>
+      Text file listing the IDs of the images to use for the atlas construction.
+      If not specified, the IDs are read from the -agelst.
+      (default: $sublst)
+  -t <t1>...
+      Time points to evaluate.
+      (default: all time points found in $kernel/ directory)
+  -sigma, -stdev <value>
+      Standard deviation of temporal Gaussian kernels.
+      This value is set before the configuration is loaded.
+      It will only have an effect if the configuration file does
+      not override it, unless the 'sigma' variable is not set.
+  -u, -update
+      Overwrite existing DAGMan files.
+  -h, -help
+      Print help and exit.
+  -v, -verbose
+      Enable verbose output messages.
 HELP
 }
 
@@ -45,84 +62,279 @@ HELP
 # configuration
 # ==============================================================================
 
-verbose=0
-sublst=
-agelst="$appdir/etc/age.csv"
-config="$appdir/etc/config.sh"
-
+# sigma value specified as command argument
+# Note: Only used when not overridden by configuration file.
+sigma=
 o=0
 while [ $o -lt $# ]; do
   case "${!o}" in
-    -c|-config) let a=o+1; optarg config ${!o} "${!a}"; ;;
+    -stdev|-sigma)
+      let a=o+1
+      optarg sigma ${!o} "${!a}";
+      ;;
   esac
   let o++
 done
-source "$config"  || error "Failed to load configuration from file: $config"
 
+# load default configuration (including etc/config/custom.sh if present)
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
+
+# load custom configuration
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
+  esac
+  let o++
+done
+
+[ -z "$agelst" ] || agelst="$topdir/$agelst"
+[ -z "$sublst" ] || sublst="$topdir/$sublst"
+
+# atlas time points for which kernel was create either manually,
+# with another tool (e.g. MATLAB), or using the "kernel" shell script
+if [ ! -d "$topdir/$kernel/" ]; then
+  error "Missing regression kernels directory:\n$topdir/$kernel"
+fi
+timepoints=($(ls "$topdir/$kernel/" | awk "{
+  if (\$0 ~ /$krnpre[0-9]+(\\.[0-9]+)?\\.$krnext/) {
+    print gensub(/$krnpre([0-9.]+(\\.[0-9]+)?)\\.$krnext/, \"\\\\1\", \"g\")
+  }
+}"))
+if [ ${#timepoints[@]} -eq 0 ]; then
+  error "No regression kernels matching pattern \"$krnpre([0-9.]+(\\.[0-9]+)?)\\.$krnext\" found in:\n$topdir/$kernel"
+fi
+
+# parse remaining options
 while [ $# -gt 0 ]; do
   case "$1" in
-    -s|-sublst)      optarg sublst $1 "$2"; shift; ;;
-    -a|-agelst)      optarg agelst $1 "$2"; shift; ;;
-    -c|-config)      shift; ;; # already loaded
+    -s|-sublst) optarg sublst $1 "$2"; shift; ;;
+    -a|-agelst) optarg agelst $1 "$2"; shift; ;;
+    -t|-timepoints)
+      timepoints=()
+      optargs timepoints "$@"
+      shift ${#timepoints[@]}
+      ;;
+    -u|-update) update='true'; ;;
+    -c|-config) shift; ;; # already loaded
+    -stdev|-sigma) shift; ;; # already set
     -h|-help|--help) print_help; exit 0; ;;
-    -v|-verbose)     let verbose++; ;;
-    -*)              error "Unknown option: $1"; ;;
-    *)               if   [ -z "$agelst" ]; then agelst="$1"
-                     elif [ -z "$sublst" ]; then sublst="$1"
-                     else error "Too many arguments: $1"
-                     fi; ;;
+    -v|-verbose) let verbose++; ;;
+    *) error "Unknown argument: $1"; ;;
   esac
   shift
 done
 
-if [ -z "$agelst" ]; then
+# read subject IDs
+if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
   error "Missing CSV file with subject IDs and corresponding ages!"
 fi
-if [ -z "$sublst" ]; then
-  sublst="$appdir/etc/sub.lst"
-  [ -f "$sublst" ] || sublst="$agelst"
-fi
+[ -n "$sublst" ] || sublst="$agelst"
 read_sublst subids "$sublst"
 
-cd "$topdir" || { echo "Failed to change to working directory!" 1>&2; exit 1; }
+# change to working directory
+cd "$topdir" || error "Failed to change to working directory!"
 
-# atlas time points for which kernel was create either manually,
-# with another tool (e.g. MATLAB), or using the "kernel" shell script
-timepoints=()
-for doflst in $(ls "$kernel/weights_t="*".csv"); do
-  t=${doflst/*_t=}; t=${t/.csv}
-  timepoints=(${timepoints[@]} $t)
-done
-[ ${#timepoints[@]} -gt 0 ] || error "No temporal kernels $PWD/$kernel/weights_t=*.csv found"
+if [ $verbose -gt 0 ]; then
+  echo "No. of subjects/images   = ${#subids[@]}"
+  echo "Atlas time points        = ${timepoints[@]}"
+  echo "Temporal kernel sigma    = $sigma"
+  echo "Temporal kernel weights  = $kernel"
+  echo "Update existing workflow = $update"
+fi
+
+# global normalization output files
+nrmdir="$outdir/average/t2w"
+nrmref="linear"
+nrmpre=""
+nrmsuf=".nii.gz"
+if [[ $refini == false ]] && [ -n "$refid" ]; then
+  nrmdofs="$dofdir/1.3_inv"
+else
+  nrmdofs="$dofdir/1.4_ref"
+fi
+
+# deformable atlas construction output files
+defdofs=""
+resdof=false
+if [[ $pairwise == true ]]; then
+  if [ $refine -gt 0 ]; then
+    defdofs="$dofdir/3.${refine}_def"
+    resdof="average"
+  else
+    defdofs="$dofdir/2.3_inv"
+    if [[ $useresdof == true ]]; then
+      resdof="average"
+    fi
+  fi
+else
+  if [ $refine -gt 0 ]; then
+    defdofs="$dofdir/2.${refine}_def"
+    resdof="average"
+  fi
+fi
 
 # ==============================================================================
 # workflow
 # ==============================================================================
 
-begin_dag 'eval' -dagfile "$dagdir/eval.dag"
+begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
 
-  transform_image_node 'warp_images' \
-      -outdir    "$evldir/warped-images" \
-      -subjects  "${subids[@]}" \
-      -bgvalue   "$bgvalue" \
-      -hdrdofs   "$dofdir/1___affine" \
-      -dofins    "$dofdir/2.1_ffd" \
-      -ref       "$pardir/ref.nii.gz" \
-      -prefix    "$imgdir/" \
-      -suffix    ".nii.gz" \
-      -interp    "linear" \
-      -include_identity
+  for t in ${timepoints[@]}; do
+    imgids=()
+    read_sublst imgids "$kernel/$krnpre${t}.$krnext"
+    begin_dag "eval_t$t" -splice
 
-  transform_image_node 'warp_tissues' \
-      -outdir    "$evldir/warped-labels" \
-      -subjects  "${subids[@]}" \
-      -bgvalue   "$bgvalue" \
-      -hdrdofs   "$dofdir/1___affine" \
-      -dofins    "$dofdir/2.1_ffd" \
-      -ref       "$pardir/ref.nii.gz" \
-      -prefix    "$lbldir/" \
-      -suffix    "-tissues.nii.gz" \
-      -interp    "nn" \
-      -include_identity
+      # intensity based measures
+      if [ 0 -eq 0 ]; then
+        begin_dag "image_based_measures" -splice
+
+          outdir="$evldir/images/t2w/t$t"
+          mkdir -p "$outdir"
+
+          transform_image_node "transform_images" \
+              -subjects "${imgids[@]}" \
+              -imgdir   "$imgdir" \
+              -imgpre   "$imgpre" \
+              -imgsuf   "$imgsuf" \
+              -tgtid    "$nrmref" \
+              -tgtdir   "$nrmdir" \
+              -tgtpre   "$nrmpre" \
+              -tgtsuf   "$nrmsuf" \
+              -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+              -dofin2   "$defdofs/t$t" \
+              -dofin3   "$nrmdofs" -dofinv3 \
+              -outdir   "$outdir" \
+              -outpre   "" \
+              -outsuf   ".nii.gz" \
+              -padding  "$bgvalue"
+
+          for measure in "mean" "sdev" "gini"; do
+            aggregate_images_node "compute_$measure" -parent "transform_images" \
+                -subjects  "${imgids[@]}" \
+                -mode      "$measure" \
+                -imgdir    "$outdir" \
+                -imgpre    "" \
+                -imgsuf    ".nii.gz" \
+                -normalize "z-score" \
+                -padding   "$bgvalue" \
+                -output    "$outdir/$measure.nii.gz"
+          done
+
+        end_dag
+      fi
+
+      # tissue segmentation based measures
+      if [ -n "$lbldir" ]; then
+        inpdir="$(dirname  "$lbldir/${clspre}id")"
+        prefix="$(basename "$lbldir/${clspre}id")"
+        prefix="${prefix:0:${#prefix}-2}"
+        if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+          begin_dag "tissues_based_measures" -splice
+
+            outdir="$evldir/labels/tissues/t$t"
+            mkdir -p "$outdir"
+
+            transform_image_node "transform_images" \
+                -subjects "${imgids[@]}" \
+                -imgdir   "$inpdir" \
+                -imgpre   "$prefix" \
+                -imgsuf   "$clssuf" \
+                -tgtid    "$nrmref" \
+                -tgtdir   "$nrmdir" \
+                -tgtpre   "$nrmpre" \
+                -tgtsuf   "$nrmsuf" \
+                -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+                -dofin2   "$defdofs/t$t" \
+                -dofin3   "$nrmdofs" -dofinv3 \
+                -outdir   "$outdir" \
+                -outpre   "" \
+                -outsuf   ".nii.gz"
+
+            for overlap in "dice"; do
+              evaluate_overlap_node "compute_$overlap" -parent "transform_images" \
+                  -subjects "${imgids[@]}" \
+                  -imgdir   "$outdir" \
+                  -imgpre   "" \
+                  -imgsuf   ".nii.gz" \
+                  -subdir   false \
+                  -metric   "$overlap" \
+                  -outdir   "$outdir/$overlap"
+            done
+
+            for measure in "label-consistency"; do
+              aggregate_images_node "compute_$measure" -parent "transform_images" \
+                  -subjects "${imgids[@]}" \
+                  -mode     "$measure" \
+                  -imgdir   "$outdir" \
+                  -imgpre   "" \
+                  -imgsuf   ".nii.gz" \
+                  -output   "$outdir/$measure.nii.gz"
+            done
+
+          end_dag
+        fi
+      fi
+
+      # structural segmentation based measures
+      if [ -n "$lbldir" ]; then
+        inpdir="$(dirname  "$lbldir/${lblpre}id")"
+        prefix="$(basename "$lbldir/${lblpre}id")"
+        prefix="${prefix:0:${#prefix}-2}"
+        if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+          begin_dag "structures_based_measures" -splice
+
+            outdir="$evldir/labels/structures/t$t"
+            mkdir -p "$outdir"
+
+            transform_image_node "transform_images" \
+                -subjects "${imgids[@]}" \
+                -imgdir   "$inpdir" \
+                -imgpre   "$prefix" \
+                -imgsuf   "$lblsuf" \
+                -tgtid    "$nrmref" \
+                -tgtdir   "$nrmdir" \
+                -tgtpre   "$nrmpre" \
+                -tgtsuf   "$nrmsuf" \
+                -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+                -dofin2   "$defdofs/t$t" \
+                -dofin3   "$nrmdofs" -dofinv3 \
+                -outdir   "$outdir" \
+                -outpre   "" \
+                -outsuf   ".nii.gz"
+
+            for overlap in "dice"; do
+              evaluate_overlap_node "compute_$overlap" -parent "transform_images" \
+                  -subjects "${imgids[@]}" \
+                  -imgdir   "$outdir" \
+                  -imgpre   "" \
+                  -imgsuf   ".nii.gz" \
+                  -subdir   false \
+                  -metric   "$overlap"
+            done
+
+            for measure in "label-consistency"; do
+              aggregate_images_node "compute_$measure" -parent "transform_images" \
+                  -subjects "${imgids[@]}" \
+                  -mode     "$measure" \
+                  -imgdir   "$outdir" \
+                  -imgpre   "" \
+                  -imgsuf   ".nii.gz" \
+                  -output   "$outdir/$measure.nii.gz"
+            done
+
+          end_dag
+        fi
+      fi
+
+    end_dag
+  done
 
 end_dag
