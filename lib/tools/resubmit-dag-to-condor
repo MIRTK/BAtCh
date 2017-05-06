@@ -56,8 +56,7 @@ while [ $try -le $max ]; do
           let nxt=try+1
           log="${log%_${try}.${ext}}_${nxt}.${ext}"
           try=$nxt
-          echo lib/tools/submit-dag-to-condor -d "$dag" -l "$log"
-          exit 1
+          "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
           if [ $? -eq 0 ]; then
             info "Resubmitted DAGMan job, no. of resubmissions = $try"
           else
