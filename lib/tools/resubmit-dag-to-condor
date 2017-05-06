@@ -30,6 +30,7 @@ else
 fi
 
 max=${3:-10}
+sec=600
 
 info()
 {
@@ -42,7 +43,7 @@ echo "log=$log"
 echo "ext=$ext"
 echo "try=$try"
 echo "max=$max"
-echo "sec=600"
+echo "sec=$sec"
 echo
 
 while [ $try -le $max ]; do
