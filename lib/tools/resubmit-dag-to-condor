@@ -48,33 +48,44 @@ echo
 
 while [ $try -le $max ]; do
   if [ ! -f "${dag}.lock" ]; then
-    grep "DAG status: 1 (DAG_STATUS_ERROR)" "$log"
-    if [ $? -eq 0 ]; then
-      grep "ProcessLogEvents() returned false" "$log"
+    if [ -f "$log" ]; then
+      grep "DAG status: 1 (DAG_STATUS_ERROR)" "$log"
       if [ $? -eq 0 ]; then
-        grep "Writing Rescue DAG" "$log"
+        grep "ProcessLogEvents() returned false" "$log"
         if [ $? -eq 0 ]; then
-          let nxt=try+1
-          log="${log%_${try}.${ext}}_${nxt}.${ext}"
-          try=$nxt
-          "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
+          grep "Writing Rescue DAG" "$log"
           if [ $? -eq 0 ]; then
-            info "Resubmitted DAGMan job, no. of resubmissions = $try"
+            let nxt=try+1
+            log="${log%_${try}.${ext}}_${nxt}.${ext}"
+            try=$nxt
+            "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
+            if [ $? -eq 0 ]; then
+              info "Resubmitted DAGMan job, no. of resubmissions = $try"
+            else
+              info "Failed to resubmit DAGMan job! Aborting..."
+              exit 1
+            fi
           else
-            info "Failed to resubmit DAGMan job! Aborting..."
+            info "DAG status 1, but no rescue file written! Aborting..."
             exit 1
           fi
         else
-          info "DAG status 1, but no rescue file written! Aborting..."
+          info "DAGMan status 1, but no 'ProcessLogEvents() returned false' error message in log file, aborting..."
           exit 1
         fi
       else
-        info "DAGMan status 1, but no 'ProcessLogEvents() returned false' error message in log file, aborting..."
-        exit 1
+        info "DAGMan lock file not found, no DAG_STATUS_ERROR in log. Assuming its finished fine"
+        break
       fi
     else
-      info "DAGMan lock file not found, no DAG_STATUS_ERROR in log. Assuming its finished fine"
-      break
+      info "Log file does not exist, submitting DAGMan job..."
+      "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
+      if [ $? -eq 0 ]; then
+        info "Submitted DAGMan job, no. of resubmissions = $try"
+      else
+        info "Failed to submit DAGMan job! Aborting..."
+        exit 1
+      fi
     fi
   else
     info "DAGMan lock file still exists, will check status again in ${sec}s"
