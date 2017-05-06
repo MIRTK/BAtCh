@@ -1,7 +1,7 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 
 set_pardir_from_file_path "$BASH_SOURCE"
-source "$topdir/$pardir/term-unweighted-ffd-noresdof.sh"
+source "$topdir/$pardir/term-unweighted-ffd-useresdof.sh"
 
 # registration
 pairwise=false
