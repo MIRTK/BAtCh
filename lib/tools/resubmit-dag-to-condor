@@ -1,44 +1,71 @@
 #!/bin/bash
 
-top="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
-dag="${1:-"$top/dag/dHCP275/adaptive-sigma_1.00-ffd/def_alignment.dag"}"
+[ $# -ge 1 -a $# -le 3 ] || {
+  echo "usage: $(basename $0) <dag> [<log> [<max>]]" 1>&2
+  exit 1
+}
 
-dag_name="$(basename "$dag")"
-dag_name="${dag_name/.dag/}"
+top="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+
+dag="$1"
+name="$(basename "$dag")"
+name="${name/.dag/}"
 
 log="$2"
-if [ -z "$log" ]; then
+if [ -n "$log" ]; then
+  ext="${log##*.}"
+  try=$(echo "$log" | sed "s/.*_\([0-9][0-9]*\)\.$ext\$/\1/g")
+  if [[ "$try" == "$log" ]]; then
+    echo "Could not determine resubmission attempt from log file path!" 1>&2
+    echo "Log file name has to match the regex '.*_[0-9]+.$ext$'," 1>&2
+    echo "where the number before the extension corresponds to the" 1>&2
+    echo "last resubmission attempt." 1>&2
+  fi
+else
+  try=1
+  ext=log
   log="$(dirname "$dag")"
   log="${log/\/dag\//\/log\/}"
-  log="$log/${dag_name}_1.log"
+  log="$log/${name}_${try}.${ext}"
 fi
+
+max=${3:-10}
 
 info()
 {
   echo "$(date '+%d/%m/%y %H:%M:%S'): $@"
 }
 
-try=$(basename "$log" | sed 's/^.*_\([0-9][0-9]*\)\.log$/\1/g')
-while [ $try -lt 10 ]; do
+
+echo "dag=$dag"
+echo "log=$log"
+echo "ext=$ext"
+echo "try=$try"
+echo "max=$max"
+echo "sec=600"
+echo
+
+while [ $try -le $max ]; do
   if [ ! -f "${dag}.lock" ]; then
     grep "DAG status: 1 (DAG_STATUS_ERROR)" "$log"
-    if [ $# -eq 0 ]; then
+    if [ $? -eq 0 ]; then
       grep "ProcessLogEvents() returned false" "$log"
-      if [ $# -eq 0 ]; then
+      if [ $? -eq 0 ]; then
         grep "Writing Rescue DAG" "$log"
-        if [ $# -eq 0 ]; then
-          let next_try=try+1
-          log=${log/_${try}.log/_${next_try}.log}
-          try=$next_try
-          lib/tools/submit-dag-to-condor -d "$dag" -l "$log"
-          if [ $# -eq 0 ]; then
+        if [ $? -eq 0 ]; then
+          let nxt=try+1
+          log="${log%_${try}.${ext}}_${nxt}.${ext}"
+          try=$nxt
+          echo lib/tools/submit-dag-to-condor -d "$dag" -l "$log"
+          exit 1
+          if [ $? -eq 0 ]; then
             info "Resubmitted DAGMan job, no. of resubmissions = $try"
           else
-            info "Failed to resubmit DAGMan job, aborting..."
+            info "Failed to resubmit DAGMan job! Aborting..."
             exit 1
           fi
         else
-          info "DAG status 1 but no rescue file written it seems, aborting..."
+          info "DAG status 1, but no rescue file written! Aborting..."
           exit 1
         fi
       else
@@ -46,11 +73,11 @@ while [ $try -lt 10 ]; do
         exit 1
       fi
     else
-      info "DAGMan lock file not found, no DAG_STATUS_ERROR in log. Assumeing its finished fine"
+      info "DAGMan lock file not found, no DAG_STATUS_ERROR in log. Assuming its finished fine"
       break
     fi
   else
-    info "DAGMan lock file still exists, assuming its running fine"
+    info "DAGMan lock file still exists, will check status again in ${sec}s"
   fi
-  sleep 600
+  sleep $sec
 done
