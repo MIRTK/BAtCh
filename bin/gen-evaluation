@@ -256,7 +256,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
                 -dofin3   "$nrmdofs" -dofinv3 \
                 -outdir   "$outdir" \
                 -outpre   "" \
-                -outsuf   ".nii.gz"
+                -outsuf   ".nii.gz" \
+                -interp   "nn"
 
             for overlap in "dice"; do
               evaluate_overlap_node "compute_$overlap" -parent "transform_images" \
@@ -308,7 +309,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
                 -dofin3   "$nrmdofs" -dofinv3 \
                 -outdir   "$outdir" \
                 -outpre   "" \
-                -outsuf   ".nii.gz"
+                -outsuf   ".nii.gz" \
+                -interp   "nn"
 
             for overlap in "dice"; do
               evaluate_overlap_node "compute_$overlap" -parent "transform_images" \

@@ -1030,15 +1030,15 @@ transform_image_node()
     # source transformations
     local dofins=()
     local dofinv=()
-    if [ -n "$dofin1" ]; then
+    if [ -n "$dofin1" ] && [[ $dofid1 != false ]]; then
       dofins=("${dofins[@]}" "$dofin1/$subdir$dofid1$dofsuf")
       dofinv=(${dofinv[@]} $inv1)
     fi
-    if [ -n "$dofin2" ]; then
+    if [ -n "$dofin2" ] && [[ $dofid2 != false ]]; then
       dofins=("${dofins[@]}" "$dofin2/$subdir$dofid2$dofsuf")
       dofinv=(${dofinv[@]} $inv2)
     fi
-    if [ -n "$dofin3" ]; then
+    if [ -n "$dofin3" ] && [[ $dofid3 != false ]]; then
       dofins=("${dofins[@]}" "$dofin3/$subdir$dofid3$dofsuf")
       dofinv=(${dofinv[@]} $inv3)
     fi
