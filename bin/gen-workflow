@@ -674,6 +674,14 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
   begin_dag 'make_templates' -parent "make_dofs" -splice
     for t in ${timepoints[@]}; do
 
+      if [ -n "$defdofs" ]; then
+        dofin2="$defdofs/t$t"
+        dofin3="$defdofs/t$t"
+      else
+        dofin2=""
+        dofin3=""
+      fi
+
       average_images_node "average_$t" \
           -sublst    "$kernel/$krnpre${t}.$krnext" \
           -imgdir    "$imgdir" \
@@ -684,8 +692,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -refpre    "$nrmpre" \
           -refsuf    "$nrmsuf" \
           -dofin1    "$nrmdofs" \
-          -dofin2    "$defdofs/t$t" -dofinv2 "$definvs" \
-          -dofin3    "$defdofs/t$t" -dofid3 "$resdof" \
+          -dofin2    "$dofin2" -dofinv2 "$definvs" \
+          -dofin3    "$dofin3" -dofid3 "$resdof" \
           -output    "$outdir/average/t2w/t$t.nii.gz" \
           -padding   "$bgvalue" \
           -threshold "$threshold" \
@@ -706,6 +714,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -outdir "$outdir/templates/t2w"
 
     done
+
+    unset -v dofin2 dofin3
   end_dag
 
   # ----------------------------------------------------------------------------
@@ -718,6 +728,15 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       begin_dag 'make_tissue_pbmaps' -parent "$prev_node" -splice
 
         for t in ${timepoints[@]}; do
+
+          if [ -n "$defdofs" ]; then
+            dofin2="$defdofs/t$t"
+            dofin3="$defdofs/t$t"
+          else
+            dofin2=""
+            dofin3=""
+          fi
+
           l=1
           while [ $l -le $tissues ]; do
 
@@ -731,8 +750,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refpre "$nrmpre" \
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
-                -dofin2 "$defdofs/t$t" -dofinv2 "$definvs" \
-                -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
+                -dofin2 "$dofin2" -dofinv2 "$definvs" \
+                -dofin3 "$dofin3" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
      
@@ -740,6 +759,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           done
         done
 
+        unset -v dofin2 dofin3
       end_dag
     fi
   fi
@@ -754,6 +774,15 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
       begin_dag 'make_structural_pbmaps' -parent "$prev_node" -splice
 
         for t in ${timepoints[@]}; do
+
+          if [ -n "$defdofs" ]; then
+            dofin2="$defdofs/t$t"
+            dofin3="$defdofs/t$t"
+          else
+            dofin2=""
+            dofin3=""
+          fi
+
           l=1
           while [ $l -le $structures ]; do
 
@@ -767,8 +796,8 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -refpre "$nrmpre" \
                 -refsuf "$nrmsuf" \
                 -dofin1 "$nrmdofs" \
-                -dofin2 "$defdofs/t$t" -dofinv2 "$definvs" \
-                -dofin3 "$defdofs/t$t" -dofid3 "$resdof" \
+                -dofin2 "$dofin2" -dofinv2 "$definvs" \
+                -dofin3 "$dofin3" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
                 -threshold "$threshold" -label "$l"
      
@@ -776,6 +805,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           done
         done
 
+        unset -v dofin2 dofin3
       end_dag
     fi
   fi
