@@ -30,7 +30,7 @@ else
 fi
 
 max=${3:-10}
-sec=600
+sec=60
 
 info()
 {
