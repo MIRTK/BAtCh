@@ -1313,9 +1313,12 @@ evaluate_overlap_node()
         sub="$sub\noutput       = $_dagdir/evaluate_\$(source).log"
         sub="$sub\nerror        = $_dagdir/evaluate_\$(source).log"
       fi
-    else
+    elif [[ $tgtsub == true ]]; then
       sub="$sub\noutput       = $_dagdir/evaluate_\$(target),\$(source).log"
       sub="$sub\nerror        = $_dagdir/evaluate_\$(target),\$(source).log"
+    else
+      sub="$sub\noutput       = $_dagdir/evaluate_\$(target).log"
+      sub="$sub\nerror        = $_dagdir/evaluate_\$(target).log"
     fi
     sub="$sub\nqueue"
     make_sub_script "evaluate.sub" "$sub" -executable evaluate-overlap

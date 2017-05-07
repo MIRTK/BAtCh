@@ -319,7 +319,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
                   -imgpre   "" \
                   -imgsuf   ".nii.gz" \
                   -subdir   false \
-                  -metric   "$overlap"
+                  -metric   "$overlap" \
+                  -outdir   "$outdir/$overlap"
             done
 
             for measure in "label-consistency"; do
