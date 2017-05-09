@@ -29,7 +29,7 @@ else
   log="$log/${name}_${try}.${ext}"
 fi
 
-max=${3:-10}
+let max="$try + ${3:-10}"
 sec=60
 
 info()
@@ -46,7 +46,7 @@ echo "max=$max"
 echo "sec=$sec"
 echo
 
-while [ $try -le $max ]; do
+while [ $try -lt $max ]; do
   if [ ! -f "${dag}.lock" ]; then
     if [ -f "$log" ]; then
       grep "DAG status: 1 (DAG_STATUS_ERROR)" "$log"
@@ -88,6 +88,8 @@ while [ $try -le $max ]; do
       fi
     fi
   else
+    info "Last reported progress of workflow execution:"
+    sed -e '/Of [0-9][0-9]* nodes total:/,/[0-9][0-9]* job proc(s) currently held/!d' "$log" | tail -n5
     info "DAGMan lock file still exists, will check status again in ${sec}s"
   fi
   sleep $sec
