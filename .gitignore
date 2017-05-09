@@ -9,6 +9,7 @@
 *.log
 .*.swo
 .*.swp
+.nfs*
 /lib/tools/register
 /lib/tools/invert-dof
 /lib/tools/compose-dofs
@@ -18,5 +19,6 @@
 /lib/tools/transform-image
 /lib/tools/edit-image
 /lib/tools/evaluate-overlap
+/lib/tools/average-overlap
 /lib/tools/run-dagman
 /etc/config/custom.sh

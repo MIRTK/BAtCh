@@ -185,159 +185,168 @@ fi
 # workflow
 # ==============================================================================
 
+t2w_measures=true
+tissues_based_measures=true
+structures_based_measures=true
+
+if [ -n "$lbldir" ]; then
+  clsdir="$(dirname  "$lbldir/${clspre}id")"
+  clspre="$(basename "$lbldir/${clspre}id")"
+  clspre="${clspre:0:${#clspre}-2}"
+  clssuf="$lblsuf"
+  if [ ! -d "$clsdir" ] || [ $(find -L "$clsdir" -name "$clspre*$clssuf" | wc -l) -eq 0 ]; then
+    tissues_based_measures=false
+  fi
+  strdir="$(dirname  "$lbldir/${lblpre}id")"
+  strpre="$(basename "$lbldir/${lblpre}id")"
+  strpre="${strpre:0:${#strpre}-2}"
+  strsuf="$lblsuf"
+  if [ ! -d "$strdir" ] || [ $(find -L "$strdir" -name "$strpre*$strsuf" | wc -l) -eq 0 ]; then
+    structures_based_measures=false
+  fi
+fi
+
 begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
 
-  for t in ${timepoints[@]}; do
-    imgids=()
-    read_sublst imgids "$kernel/$krnpre${t}.$krnext"
-    begin_dag "eval_t$t" -splice
-
-      # intensity based measures
-      if [ 0 -eq 0 ]; then
-        begin_dag "image_based_measures" -splice
-
-          outdir="$evldir/images/t2w/t$t"
-          mkdir -p "$outdir"
-
-          transform_image_node "transform_images" \
-              -subjects "${imgids[@]}" \
-              -imgdir   "$imgdir" \
-              -imgpre   "$imgpre" \
-              -imgsuf   "$imgsuf" \
-              -tgtid    "$nrmref" \
-              -tgtdir   "$nrmdir" \
-              -tgtpre   "$nrmpre" \
-              -tgtsuf   "$nrmsuf" \
-              -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-              -dofin2   "$defdofs/t$t" \
-              -dofin3   "$nrmdofs" -dofinv3 \
-              -outdir   "$outdir" \
-              -outpre   "" \
-              -outsuf   ".nii.gz" \
-              -padding  "$bgvalue"
-
-          for measure in "mean" "sdev" "gini"; do
-            aggregate_images_node "compute_$measure" -parent "transform_images" \
-                -subjects  "${imgids[@]}" \
-                -mode      "$measure" \
-                -imgdir    "$outdir" \
-                -imgpre    "" \
-                -imgsuf    ".nii.gz" \
-                -normalize "z-score" \
-                -padding   "$bgvalue" \
-                -output    "$outdir/$measure.nii.gz"
-          done
-
-        end_dag
+  # (pre-)transform all images to atlas space
+  begin_dag "transform_images" -splice
+    for t in ${timepoints[@]}; do
+      imgids=()
+      read_sublst imgids "$kernel/$krnpre${t}.$krnext"
+      if [[ $t2w_measures == true ]]; then
+        transform_image_node "transform_t2w_images_t$t" \
+            -subjects "${imgids[@]}" \
+            -imgdir   "$imgdir" \
+            -imgpre   "$imgpre" \
+            -imgsuf   "$imgsuf" \
+            -tgtid    "$nrmref" \
+            -tgtdir   "$nrmdir" \
+            -tgtpre   "$nrmpre" \
+            -tgtsuf   "$nrmsuf" \
+            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs/t$t" \
+            -dofin3   "$nrmdofs" -dofinv3 \
+            -outdir   "$evldir/t2w/t$t" \
+            -outpre   "" \
+            -outsuf   ".nii.gz" \
+            -padding  "$bgvalue"
       fi
-
-      # tissue segmentation based measures
-      if [ -n "$lbldir" ]; then
-        inpdir="$(dirname  "$lbldir/${clspre}id")"
-        prefix="$(basename "$lbldir/${clspre}id")"
-        prefix="${prefix:0:${#prefix}-2}"
-        if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
-          begin_dag "tissues_based_measures" -splice
-
-            outdir="$evldir/labels/tissues/t$t"
-            mkdir -p "$outdir"
-
-            transform_image_node "transform_images" \
-                -subjects "${imgids[@]}" \
-                -imgdir   "$inpdir" \
-                -imgpre   "$prefix" \
-                -imgsuf   "$clssuf" \
-                -tgtid    "$nrmref" \
-                -tgtdir   "$nrmdir" \
-                -tgtpre   "$nrmpre" \
-                -tgtsuf   "$nrmsuf" \
-                -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-                -dofin2   "$defdofs/t$t" \
-                -dofin3   "$nrmdofs" -dofinv3 \
-                -outdir   "$outdir" \
-                -outpre   "" \
-                -outsuf   ".nii.gz" \
-                -interp   "nn"
-
-            for overlap in "dice"; do
-              evaluate_overlap_node "compute_$overlap" -parent "transform_images" \
-                  -subjects "${imgids[@]}" \
-                  -imgdir   "$outdir" \
-                  -imgpre   "" \
-                  -imgsuf   ".nii.gz" \
-                  -subdir   false \
-                  -metric   "$overlap" \
-                  -outdir   "$outdir/$overlap"
-            done
-
-            for measure in "label-consistency"; do
-              aggregate_images_node "compute_$measure" -parent "transform_images" \
-                  -subjects "${imgids[@]}" \
-                  -mode     "$measure" \
-                  -imgdir   "$outdir" \
-                  -imgpre   "" \
-                  -imgsuf   ".nii.gz" \
-                  -output   "$outdir/$measure.nii.gz"
-            done
-
-          end_dag
-        fi
+      if [[ $tissues_based_measures == true ]]; then
+        transform_image_node "transform_tissue_maps_t$t" \
+            -subjects "${imgids[@]}" \
+            -imgdir   "$clsdir" \
+            -imgpre   "$clspre" \
+            -imgsuf   "$clssuf" \
+            -tgtid    "$nrmref" \
+            -tgtdir   "$nrmdir" \
+            -tgtpre   "$nrmpre" \
+            -tgtsuf   "$nrmsuf" \
+            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs/t$t" \
+            -dofin3   "$nrmdofs" -dofinv3 \
+            -outdir   "$evldir/tissues/t$t" \
+            -outpre   "" \
+            -outsuf   ".nii.gz" \
+            -interp   "nn"
       fi
-
-      # structural segmentation based measures
-      if [ -n "$lbldir" ]; then
-        inpdir="$(dirname  "$lbldir/${lblpre}id")"
-        prefix="$(basename "$lbldir/${lblpre}id")"
-        prefix="${prefix:0:${#prefix}-2}"
-        if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
-          begin_dag "structures_based_measures" -splice
-
-            outdir="$evldir/labels/structures/t$t"
-            mkdir -p "$outdir"
-
-            transform_image_node "transform_images" \
-                -subjects "${imgids[@]}" \
-                -imgdir   "$inpdir" \
-                -imgpre   "$prefix" \
-                -imgsuf   "$lblsuf" \
-                -tgtid    "$nrmref" \
-                -tgtdir   "$nrmdir" \
-                -tgtpre   "$nrmpre" \
-                -tgtsuf   "$nrmsuf" \
-                -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-                -dofin2   "$defdofs/t$t" \
-                -dofin3   "$nrmdofs" -dofinv3 \
-                -outdir   "$outdir" \
-                -outpre   "" \
-                -outsuf   ".nii.gz" \
-                -interp   "nn"
-
-            for overlap in "dice"; do
-              evaluate_overlap_node "compute_$overlap" -parent "transform_images" \
-                  -subjects "${imgids[@]}" \
-                  -imgdir   "$outdir" \
-                  -imgpre   "" \
-                  -imgsuf   ".nii.gz" \
-                  -subdir   false \
-                  -metric   "$overlap" \
-                  -outdir   "$outdir/$overlap"
-            done
-
-            for measure in "label-consistency"; do
-              aggregate_images_node "compute_$measure" -parent "transform_images" \
-                  -subjects "${imgids[@]}" \
-                  -mode     "$measure" \
-                  -imgdir   "$outdir" \
-                  -imgpre   "" \
-                  -imgsuf   ".nii.gz" \
-                  -output   "$outdir/$measure.nii.gz"
-            done
-
-          end_dag
-        fi
+      if [[ $structures_based_measures == true ]]; then
+        transform_image_node "transform_structure_maps_t$t" \
+            -subjects "${imgids[@]}" \
+            -imgdir   "$strdir" \
+            -imgpre   "$strpre" \
+            -imgsuf   "$strsuf" \
+            -tgtid    "$nrmref" \
+            -tgtdir   "$nrmdir" \
+            -tgtpre   "$nrmpre" \
+            -tgtsuf   "$nrmsuf" \
+            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs/t$t" \
+            -dofin3   "$nrmdofs" -dofinv3 \
+            -outdir   "$evldir/structures/t$t" \
+            -outpre   "" \
+            -outsuf   ".nii.gz" \
+            -interp   "nn"
       fi
+    done
+  end_dag
 
+  # evaluate T2-w image based measures
+  if [[ $t2w_measures == true ]]; then
+    begin_dag "t2w_measures" -parent "transform_images" -splice
+      for measure in "mean" "sdev" "gini"; do
+        for t in ${timepoints[@]}; do
+          aggregate_images_node "compute_${measure}_t$t" \
+              -sublst    "$kernel/$krnpre${t}.$krnext" \
+              -mode      "$measure" \
+              -imgdir    "$evldir/t2w/t$t" \
+              -imgpre    "" \
+              -imgsuf    ".nii.gz" \
+              -normalize "z-score" \
+              -padding   "$bgvalue" \
+              -output    "$evldir/t2w/$measure/t$t.nii.gz"
+        done
+      done
     end_dag
-  done
+  fi
+
+  # tissue segmentation based measures
+  if [[ $tissues_based_measures == true ]]; then
+    outdir="$evldir/tissues"
+    begin_dag "tissues_based_measures" -parent "transform_images" -splice
+      for measure in "overlap" "label-consistency"; do
+        for t in ${timepoints[@]}; do
+          if [[ $measure == "overlap" ]]; then
+            evaluate_overlap_node "compute_tissues_overlap_t$t" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
+                -imgdir "$outdir/t$t" \
+                -imgpre "" \
+                -imgsuf ".nii.gz" \
+                -subdir false \
+                -metric Dice \
+                -outdir "$outdir/$measure/t$t" \
+                -table  "$outdir/$measure/t$t.csv"
+          else
+            aggregate_images_node "compute_tissues_${measure}_t$t" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
+                -mode   "$measure" \
+                -imgdir "$outdir/t$t" \
+                -imgpre "" \
+                -imgsuf ".nii.gz" \
+                -output "$outdir/$measure/t$t.nii.gz"
+          fi
+        done
+      done
+    end_dag
+  fi
+
+  # structural segmentation based measures
+  if [[ $structures_based_measures == true ]]; then
+    outdir="$evldir/structures"
+    begin_dag "structures_based_measures" -parent "transform_images" -splice
+      for measure in "overlap" "label-consistency"; do
+        for t in ${timepoints[@]}; do
+          if [[ $measure == "overlap" ]]; then
+            evaluate_overlap_node "compute_structures_overlap_t$t" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
+                -imgdir "$outdir/t$t" \
+                -imgpre "" \
+                -imgsuf ".nii.gz" \
+                -subdir false \
+                -metric Dice \
+                -outdir "$outdir/$measure/t$t" \
+                -table  "$outdir/$measure/t$t.csv"
+          else
+            aggregate_images_node "compute_structures_${measure}_t$t" \
+                -sublst "$kernel/$krnpre${t}.$krnext" \
+                -mode   "$measure" \
+                -imgdir "$outdir/t$t" \
+                -imgpre "" \
+                -imgsuf ".nii.gz" \
+                -output "$outdir/$measure/t$t.nii.gz"
+          fi
+        done
+      done
+    end_dag
+  fi
 
 end_dag

@@ -1212,7 +1212,7 @@ evaluate_overlap_node()
   local tgtsuf='$imgsuf'
   local padding=0
   local labels=()
-  local metric="dice"
+  local metric=("dice")
   local outdir=
   local outpre=
   local outsuf=".csv"
@@ -1270,12 +1270,12 @@ evaluate_overlap_node()
     if [ -n "$table" ]; then
       N=1
     else
-      let N="${#ids[@]}"  
+      let N="${#ids[@]}"
     fi
-  elif [[ $tgtsub == true ]]; then
-    let N="${#ids[@]} * (${#ids[@]} - 1)"
+  elif [[ $tgtsub != true ]] && [ ${#metric[@]} -eq 1 ]; then
+    let N="${#ids[@]}"
   else
-    let N="${#ids[@]}"  
+    let N="${#ids[@]} * (${#ids[@]} - 1)"
   fi
 
   # add SUBDAG node
@@ -1297,10 +1297,14 @@ evaluate_overlap_node()
       sub="$sub '$imgdir/\$(target)/$imgpre\$(target)$imgsuf'"
       sub="$sub '$imgdir/\$(target)/$imgpre\$(source)$imgsuf'"
       sub="$sub -table '$outdir/\$(target)/$outpre\$(source)$outsuf'"
-    else
+    elif [ ${#metric[@]} -eq 1 ]; then
       sub="$sub '$imgdir/$imgpre\$(target)$imgsuf'"
       sub="$sub -images '$_dagdir/images.csv'"
-      sub="$sub -table '$outdir/$outpre\$(target)$outsuf'"
+      sub="$sub -table '$outdir/\$(target)$outsuf'"
+    else
+      sub="$sub '$imgdir/$imgpre\$(target)$imgsuf'"
+      sub="$sub '$imgdir/$imgpre\$(source)$imgsuf'"
+      sub="$sub -table '$outdir/$outpre\$(target),\$(source)$outsuf'"
     fi
     sub="$sub -labels ${labels[@]} -metric ${metric[@]}"
     sub="$sub -precision $digits -delim '$delim'"
@@ -1313,15 +1317,41 @@ evaluate_overlap_node()
         sub="$sub\noutput       = $_dagdir/evaluate_\$(source).log"
         sub="$sub\nerror        = $_dagdir/evaluate_\$(source).log"
       fi
-    elif [[ $tgtsub == true ]]; then
-      sub="$sub\noutput       = $_dagdir/evaluate_\$(target),\$(source).log"
-      sub="$sub\nerror        = $_dagdir/evaluate_\$(target),\$(source).log"
-    else
+    elif [[ $tgtsub != true ]] && [ ${#metric[@]} -eq 1 ]; then
       sub="$sub\noutput       = $_dagdir/evaluate_\$(target).log"
       sub="$sub\nerror        = $_dagdir/evaluate_\$(target).log"
+    else
+      sub="$sub\noutput       = $_dagdir/evaluate_\$(target),\$(source).log"
+      sub="$sub\nerror        = $_dagdir/evaluate_\$(target),\$(source).log"
     fi
     sub="$sub\nqueue"
     make_sub_script "evaluate.sub" "$sub" -executable evaluate-overlap
+
+    # script to average overlap measures
+    if [ -z "$tgtid" -a -n "$table" ]; then
+      local sub="arguments    = \""
+      if [[ $tgtsub == true ]]; then
+        for id1 in "${ids[@]}"; do
+        for id2 in "${ids[@]}"; do
+          sub="$sub '$outdir/$id1/$outpre$id2$outsuf'"
+        done; done
+      elif [ ${#metric[@]} -eq 1 ]; then
+        for id1 in "${ids[@]}"; do
+          sub="$sub '$outdir/$outpre$id1$outsuf'"
+        done
+        sub="$sub --noid"
+      else
+        for id1 in "${ids[@]}"; do
+        for id2 in "${ids[@]}"; do
+          sub="$sub '$outdir/$outpre$id1,$id2$outsuf'"
+        done; done
+      fi
+      sub="$sub --output '$table'\"\n"
+      sub="$sub\noutput       = $_dagdir/average.log"
+      sub="$sub\nerror        = $_dagdir/average.log"
+      sub="$sub\nqueue"
+      make_sub_script "average.sub" "$sub" -executable average-overlap
+    fi
 
     # job to create output directories
     local pre=''
@@ -1353,6 +1383,13 @@ evaluate_overlap_node()
       else
         pre="$pre\nmkdir -p '$outdir' || exit 1"
         [ ! -d "$topdir/$outdir" ] || is_done=true
+      fi
+      if [ -n "$table" ]; then
+        local csvdir="$(dirname "$table")"
+        if [[ $csvdir != '.' ]]; then
+          pre="$pre\nmkdir -p '$csvdir' || exit 1"
+          [ -d "$topdir/$csvdir" ] || is_done=false
+        fi
       fi
     fi
     if [ -n "$pre" ]; then
@@ -1388,27 +1425,51 @@ evaluate_overlap_node()
           let n++
         done
       fi
-    elif [[ $tgtsub == true ]]; then
+    elif [ ${#metric[@]} -eq 1 ]; then
+      local job_nodes=()
+      sublst="$_dagdir/images.csv"
+      echo "$topdir/$imgdir" > "$sublst"
+      for id2 in ${ids[@]}; do
+        echo "$imgpre$id2$imgsuf" >> "$sublst"
+      done
+      for id1 in "${ids[@]}"; do
+        job_node="evaluate_$id1"
+        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id1\""
+        [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
+        job_nodes=("${job_nodes[@]}" "$job_node")
+        [ ! -f "$outdir/$outpre$id1$outsuf" ] || node_done "$job_node"
+      done
+      if [ ${#job_nodes[@]} -gt 0 -a -n "$table" ]; then
+        job_node="average_overlap"
+        add_node "$job_node" -subfile "average.sub"
+        local job_parent
+        for job_parent in ${job_nodes[@]}; do
+          add_edge "$job_node" "$job_parent"
+        done
+      fi
+    else
+      local job_nodes=()
       for id1 in "${ids[@]}"; do
       for id2 in "${ids[@]}"; do
         [[ "$id1" != "$id2" ]] || continue
         job_node="evaluate_$id1,$id2"
         add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id1\"" -var "source=\"$id2\""
         [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
-        [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
+        job_nodes=("${job_nodes[@]}" "$job_node")
+        if [[ $tgtsub == true ]]; then
+          [ ! -f "$outdir/$id1/$outpre$id2$outsuf" ] || node_done "$job_node"
+        else
+          [ ! -f "$outdir/$outpre$id1,$id2$outsuf" ] || node_done "$job_node"
+        fi
       done; done
-    else
-      sublst="$_dagdir/images.csv"
-      echo "$topdir/$imgdir" > "$sublst"
-      for id in ${ids[@]}; do
-        echo "$imgpre$id$imgsuf" >> "$sublst"
-      done
-      for id in "${ids[@]}"; do
-        job_node="evaluate_$id"
-        add_node "$job_node" -subfile "evaluate.sub" -var "target=\"$id\""
-        [ -z "$pre" ] || add_edge "$job_node" "mkdirs"
-        [ ! -f "$outdir/$outpre$id$outsuf" ] || node_done "$job_node"
-      done
+      if [ ${#job_nodes[@]} -gt 0 -a -n "$table" ]; then
+        job_node="average_overlap"
+        add_node "$job_node" -subfile "average.sub"
+        local job_parent
+        for job_parent in ${job_nodes[@]}; do
+          add_edge "$job_node" "$job_parent"
+        done
+      fi
     fi
 
   }; end_dag
