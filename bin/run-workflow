@@ -884,7 +884,7 @@ def run_local(jobs, deps):
 # ==============================================================================
 
 
-def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
+def run_job_slurm(job, deps=set(), threads=1, memory=8, queue='long', log=''):
     """Submit SLURM job."""
     sbatch_script = "#!/bin/sh\n"
     sbatch_script += job.script(jobid='$SLURM_JOB_NAME (JobId=$SLURM_JOB_ID)', taskid='$SLURM_ARRAY_TASK_ID', hostid='$SLURM_JOB_NODELIST')
@@ -900,7 +900,7 @@ def run_job_slurm(job, deps=set(), threads=1, queue='long', log=''):
         '-n', '1',
         '-c', str(threads),
         '-p', queue,
-        '--mem=8G'
+        '--mem={}G'.format(memory)
     ]
     if isinstance(job, JobArray):
         ranges = []
@@ -982,7 +982,7 @@ def slurm_deps(jobs, deps, i):
     return uids
 
 
-def run_slurm(jobs, deps, threads=1, queue='long', log=''):
+def run_slurm(jobs, deps, threads=1, memory=8, queue='long', log=''):
     todo = set()
     for i in range(len(jobs)):
         if not jobs[i].done:
@@ -993,7 +993,7 @@ def run_slurm(jobs, deps, threads=1, queue='long', log=''):
         for i in prev:
             uids = slurm_deps(jobs, deps, i)
             if uids is not None:
-                run_job_slurm(jobs[i], deps=uids, threads=threads, queue=queue, log=log)
+                run_job_slurm(jobs[i], deps=uids, threads=threads, memory=memory, queue=queue, log=log)
             else:
                 todo.add(i)
         if prev == todo or len(prev) < len(todo):
@@ -1019,6 +1019,8 @@ if __name__ == '__main__':
                         help="Backend to use for job execution")
     parser.add_argument('--threads', default=1,
                         help="Default number of CPUs to request for each job when no -threads argument found in list of executable arguments")
+    parser.add_argument('--memory', default=8,
+                        help="Amount of memory to allocate in GiB")
     parser.add_argument('--queue', default='long',
                         help="Queue of batch processing backend to which to submit the jobs")
     parser.add_argument('--print', dest='try_run', action='store_true',
@@ -1041,7 +1043,7 @@ if __name__ == '__main__':
         sys.stderr.write("Use lib/tools/submit-dag-to-condor instead")
         sys.exit(1)
     elif args.backend == 'slurm':
-        run_slurm(jobs, deps, threads=args.threads, queue=args.queue, log=args.log)
+        run_slurm(jobs, deps, threads=args.threads, memory=args.memory, queue=args.queue, log=args.log)
     elif args.backend == 'local':
         run_local(jobs, deps)
 
