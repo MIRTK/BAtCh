@@ -99,7 +99,6 @@ notification   = $notification
 requirements   = $_requirements
 # Note: MIRTK executables return exit code 6 when memory allocation fails, other codes are kill/term signals
 on_exit_remove = (ExitSignal =?= 11 || (ExitCode =!= UNDEFINED && ExitCode =!= 6 && ExitCode =!= 247 && ExitCode =!= 241))
-retry_until    = (ExitCode =!= 6 && ExitCode =!= 247 && ExitCode =!= 241)
 EOF
   echo -en "$subdesc" >> "$topdir/$_dagdir/$file"
 }
