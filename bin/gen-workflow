@@ -21,10 +21,11 @@ print_help()
 usage: $appid [options]
 
 This script generates the DAGMan worflow description for the generation
-of a consistent brain atlas and growth model for submission to the batch
-queuing system HTCondor for distributed parallel execution. Alternatively,
-the workflow can be executed sequentially on the local machine or submitted
-to another supported batch queuing system (e.g., SLURM).
+of a spatio-temporal brain atlas using pairwise registrations. The workflow can
+be directly submitted to the batch queuing system HTCondor for distributed
+parallel execution. Alternatively, the workflow can be executed sequentially on
+the local machine or submitted to another supported batch queuing system, i.e.,
+SLURM using the bin/run-workflow script.
 
 Options:
   -c, -config <config.sh>
@@ -753,7 +754,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$dofin2" -dofinv2 "$definvs" \
                 -dofin3 "$dofin3" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-                -threshold "$threshold" -label "$l"
+                -label "$l" -rescale "0 100" -dtype uchar
      
             let l++
           done
@@ -799,7 +800,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
                 -dofin2 "$dofin2" -dofinv2 "$definvs" \
                 -dofin3 "$dofin3" -dofid3 "$resdof" \
                 -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-                -threshold "$threshold" -label "$l"
+                -label "$l" -rescale "0 100" -dtype uchar
      
             let l++
           done
@@ -810,10 +811,4 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     fi
   fi
 
-  # ----------------------------------------------------------------------------
-  # construct longitudinal growth model
-  #begin_dag 'growth' -parent 'avgffds' -splice
-    # TODO
-  #end_dag
- 
 end_dag

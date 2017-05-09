@@ -12,7 +12,7 @@ refine=0
 sigma=$(printf '%.2f' $sigma)
 kernel="$pardir/adaptive-sigma_$sigma"
 
-subdir="dHCP275/adaptive-sigma_$sigma-global"
+subdir="dHCP275/adaptive-sigma_$sigma-aff"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 dofdir="../$subdir/dofs"
