@@ -5,11 +5,14 @@
   exit 1
 }
 
-top="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
+topdir="$(cd "$(dirname "$BASH_SOURCE")/../.." && pwd)"
 
 dag="$1"
 name="$(basename "$dag")"
 name="${name/.dag/}"
+if [[ ${dag:0:1} != '/' ]]; then
+  dag="$topdir/$dag"
+fi
 
 log="$2"
 if [ -n "$log" ]; then
@@ -29,7 +32,7 @@ else
   log="$log/${name}_${try}.${ext}"
 fi
 
-let max="$try + ${3:-10}"
+let max="$try + ${3:-100}"
 sec=60
 
 info()
@@ -58,7 +61,7 @@ while [ $try -lt $max ]; do
             let nxt=try+1
             log="${log%_${try}.${ext}}_${nxt}.${ext}"
             try=$nxt
-            "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
+            "$topdir/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
             if [ $? -eq 0 ]; then
               info "Resubmitted DAGMan job, no. of resubmissions = $try"
             else
@@ -79,7 +82,7 @@ while [ $try -lt $max ]; do
       fi
     else
       info "Log file does not exist, submitting DAGMan job..."
-      "$top/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
+      "$topdir/lib/tools/submit-dag-to-condor" -d "$dag" -l "$log"
       if [ $? -eq 0 ]; then
         info "Submitted DAGMan job, no. of resubmissions = $try"
       else
