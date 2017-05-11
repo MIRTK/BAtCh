@@ -1928,7 +1928,7 @@ average_images_node()
   local dofinv='false'
   local average=
   local stdev=
-  local threshold=0.5
+  local threshold=0
   local options=''
   local label margin bgvalue
 
