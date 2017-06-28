@@ -1,0 +1,32 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<age>...]" 1>&2
+  exit 1
+}
+
+topdir="$1"; shift
+
+ages=("$@")
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36 37 38 39 40 41 42 43 44)
+fi
+
+for t in ${ages[@]}; do
+  outdir="$topdir/masks/brain"
+  outmsk="$outdir/t$t.nii.gz"
+  if [ ! -f "$outmsk" ]; then
+    mkdir -p "$outdir" || exit 1
+    mirtk calculate-element-wise \
+        "$topdir/pbmaps/t$t/tissue_1.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_2.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_3.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_5.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_6.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_7.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_8.nii.gz" + \
+        "$topdir/pbmaps/t$t/tissue_9.nii.gz" \
+        -clamp 0 1 -threshold .1 -set 1 -pad 0 \
+        -o "$outmsk" || exit 1
+  fi
+done
