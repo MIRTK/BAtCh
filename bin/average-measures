@@ -1,0 +1,47 @@
+#!/bin/bash
+
+[ $# -eq 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<age>...]" 1>&2
+  exit 1
+}
+
+topdir="$1"; shift
+evldir="$topdir/eval"
+roidir="$topdir/atlas/pbmaps"
+roisuf=".nii.gz"
+
+ages=("$@")
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36 37 38 39 40 41 42 43 44)
+fi
+
+for roi in structure tissue; do
+  for t in ${ages[@]}; do
+    outdir="$evldir/${roi}s/average"
+    if [ ! -f "$outdir/t$t.csv" ]; then
+      mkdir -p "$outdir" || exit 1
+      echo "atlas=$topdir, t=$t, roi=$roi"
+      roipre="$roidir/t$t/${roi}_"
+      rois=()
+      if [[ $roi == structure ]]; then
+        for l in {1..87}; do
+          rois=("${rois[@]}" "$roipre$l$roisuf")
+        done
+      else
+        for l in {1..9}; do
+          rois=("${rois[@]}" "$roipre$l$roisuf")
+        done
+      fi
+      mirtk average-measure \
+              "$evldir/t2w/sdev/t$t.nii.gz" \
+              "$evldir/t2w/gini/t$t.nii.gz" \
+              "$evldir/t2w/entropy/t$t.nii.gz" \
+              "$evldir/${roi}s/entropy/t$t.nii.gz" \
+              "$evldir/${roi}s/label-consistency/t$t.nii.gz" \
+              -n sdev gini entropy le lc \
+              -r "${rois[@]}" \
+              -header -noid -preload \
+              -o "$outdir/t$t.csv" || exit 1
+    fi
+  done
+done
