@@ -1,0 +1,95 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <atlas_dir> [<t>...]" 1>&2
+  exit 1
+}
+
+measures=("entropy" "label-entropy" "grad" "cgm-grad")
+
+topdir="$1"; shift
+evldir="$topdir/eval"
+pbmdir="$topdir/atlas/pbmaps"
+
+ages="$@"
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36 37 38 39 40 41 42 43 44)
+fi
+
+
+calc_image_entropy()
+{
+  local channel="$1"; shift
+  local outdir="$evldir/$channel/entropy"
+  mkdir -p "$outdir" || exit 1
+  for t in $@; do
+    if [ ! -f "$outdir/t$t.nii.gz" ]; then
+      echo -n "Calculating voxel-wise $channel intensity entropy for t=$t..."
+      mirtk aggregate-images entropy "$evldir/$channel/t$t/"*.nii.gz -bins 0 -output "$outdir/t$t.nii.gz" || exit 1
+      echo " done"
+    fi
+  done
+}
+
+
+calc_label_entropy()
+{
+  local channel="$1"; shift
+  local outdir="$evldir/$channel/entropy"
+  mkdir -p "$outdir" || exit 1
+  for t in $@; do
+    if [ ! -f "$outdir/t$t.nii.gz" ]; then
+      echo -n "Calculating voxel-wise $channel label entropy for t=$t..."
+      mirtk aggregate-images entropy "$evldir/$channel/t$t/"*.nii.gz -bins 0 -output "$outdir/t$t.nii.gz" || exit 1
+      echo " done"
+    fi
+  done
+}
+
+
+calc_image_grad()
+{
+  local channel="$1"; shift
+  local outdir="$evldir/$channel/grad"
+  mkdir -p "$outdir" || exit 1
+  for t in $@; do
+    if [ ! -f "$outdir/t$t.nii.gz" ]; then
+      echo -n "Calculating voxel-wise $channel image gradient for t=$t..."
+      mirtk detect-edges "$evldir/$channel/mean/t$t.nii.gz" "$outdir/t$t.nii.gz" -central || exit 1
+      echo " done"
+    fi
+  done
+}
+
+
+calc_pbmap_grad()
+{
+  local channel="$1"; shift
+  local label="$1"; shift
+  local outdir="$evldir/${channel}s/grad_$label"
+  mkdir -p "$outdir" || exit 1
+  for t in $@; do
+    if [ ! -f "$outdir/t$t.nii.gz" ]; then
+      echo -n "Calculating voxel-wise $channel=$label pbmap gradient for t=$t..."
+      mirtk detect-edges "$pbmdir/t$t/${channel}_$label.nii.gz" "$outdir/t$t.nii.gz" -central || exit 1
+      echo " done"
+    fi
+  done
+}
+
+
+for measure in ${measures[@]}; do
+  if [[ $measure == "entropy" ]]; then
+    calc_image_entropy t2w ${ages[@]}
+  fi
+  if [[ $measure == "grad" ]]; then
+    calc_image_grad t2w ${ages[@]}
+  fi
+  if [[ $measure == "label-entropy" ]]; then
+    calc_label_entropy tissues    ${ages[@]}
+    calc_label_entropy structures ${ages[@]}
+  fi
+  if [[ $measure == "cgm-grad" ]]; then
+    calc_pbmap_grad tissue 2 ${ages[@]}
+  fi
+done
