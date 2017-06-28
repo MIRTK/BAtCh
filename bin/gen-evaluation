@@ -144,7 +144,7 @@ cd "$topdir" || error "Failed to change to working directory!"
 
 if [ $verbose -gt 0 ]; then
   echo "No. of subjects/images   = ${#subids[@]}"
-  echo "Atlas time points        = ${timepoints[@]}"
+  echo "Atlas time points        = [${timepoints[@]}]"
   echo "Temporal kernel sigma    = $sigma"
   echo "Temporal kernel weights  = $kernel"
   echo "Update existing workflow = $update"
@@ -193,7 +193,7 @@ if [ -n "$lbldir" ]; then
   clsdir="$(dirname  "$lbldir/${clspre}id")"
   clspre="$(basename "$lbldir/${clspre}id")"
   clspre="${clspre:0:${#clspre}-2}"
-  clssuf="$lblsuf"
+  clssuf="$clssuf"
   if [ ! -d "$clsdir" ] || [ $(find -L "$clsdir" -name "$clspre*$clssuf" | wc -l) -eq 0 ]; then
     tissues_based_measures=false
   fi
@@ -212,6 +212,10 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
   begin_dag "transform_images" -splice
     for t in ${timepoints[@]}; do
       imgids=()
+      defdofs_t=''
+      if [ -n "$defdofs" ]; then
+        defdofs_t="$defdofs/t$t"
+      fi
       read_sublst imgids "$kernel/$krnpre${t}.$krnext"
       if [[ $t2w_measures == true ]]; then
         transform_image_node "transform_t2w_images_t$t" \
@@ -223,8 +227,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
             -tgtdir   "$nrmdir" \
             -tgtpre   "$nrmpre" \
             -tgtsuf   "$nrmsuf" \
-            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-            -dofin2   "$defdofs/t$t" \
+            -dofin1   "$defdofs_t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs_t" \
             -dofin3   "$nrmdofs" -dofinv3 \
             -outdir   "$evldir/t2w/t$t" \
             -outpre   "" \
@@ -241,8 +245,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
             -tgtdir   "$nrmdir" \
             -tgtpre   "$nrmpre" \
             -tgtsuf   "$nrmsuf" \
-            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-            -dofin2   "$defdofs/t$t" \
+            -dofin1   "$defdofs_t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs_t" \
             -dofin3   "$nrmdofs" -dofinv3 \
             -outdir   "$evldir/tissues/t$t" \
             -outpre   "" \
@@ -259,8 +263,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
             -tgtdir   "$nrmdir" \
             -tgtpre   "$nrmpre" \
             -tgtsuf   "$nrmsuf" \
-            -dofin1   "$defdofs/t$t" -dofid1 "$resdof" -dofinv1 \
-            -dofin2   "$defdofs/t$t" \
+            -dofin1   "$defdofs_t" -dofid1 "$resdof" -dofinv1 \
+            -dofin2   "$defdofs_t" \
             -dofin3   "$nrmdofs" -dofinv3 \
             -outdir   "$evldir/structures/t$t" \
             -outpre   "" \
@@ -273,11 +277,17 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
   # evaluate T2-w image based measures
   if [[ $t2w_measures == true ]]; then
     begin_dag "t2w_measures" -parent "transform_images" -splice
-      for measure in "mean" "sdev" "gini"; do
+      for measure in "mean" "sdev" "gini" "entropy"; do
         for t in ${timepoints[@]}; do
+          mode="$measure"
+          alpha=0
+          if [[ ${measure:0:2} == 'ge' ]]; then
+            mode="ge"
+            alpha="${measure/ge_}"
+          fi
           aggregate_images_node "compute_${measure}_t$t" \
               -sublst    "$kernel/$krnpre${t}.$krnext" \
-              -mode      "$measure" \
+              -mode      "$mode" -bins 0 -alpha $alpha \
               -imgdir    "$evldir/t2w/t$t" \
               -imgpre    "" \
               -imgsuf    ".nii.gz" \
@@ -293,7 +303,7 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
   if [[ $tissues_based_measures == true ]]; then
     outdir="$evldir/tissues"
     begin_dag "tissues_based_measures" -parent "transform_images" -splice
-      for measure in "overlap" "label-consistency"; do
+      for measure in "overlap" "label-consistency" "entropy"; do
         for t in ${timepoints[@]}; do
           if [[ $measure == "overlap" ]]; then
             evaluate_overlap_node "compute_tissues_overlap_t$t" \
@@ -306,9 +316,15 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
                 -outdir "$outdir/$measure/t$t" \
                 -table  "$outdir/$measure/t$t.csv"
           else
+            mode="$measure"
+            alpha=0
+            if [[ ${measure:0:2} == 'ge' ]]; then
+              mode="ge"
+              alpha="${measure/ge_}"
+            fi
             aggregate_images_node "compute_tissues_${measure}_t$t" \
                 -sublst "$kernel/$krnpre${t}.$krnext" \
-                -mode   "$measure" \
+                -mode   "$mode" -bins 0 -alpha $alpha \
                 -imgdir "$outdir/t$t" \
                 -imgpre "" \
                 -imgsuf ".nii.gz" \
@@ -323,7 +339,7 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
   if [[ $structures_based_measures == true ]]; then
     outdir="$evldir/structures"
     begin_dag "structures_based_measures" -parent "transform_images" -splice
-      for measure in "overlap" "label-consistency"; do
+      for measure in "overlap" "label-consistency" "entropy"; do
         for t in ${timepoints[@]}; do
           if [[ $measure == "overlap" ]]; then
             evaluate_overlap_node "compute_structures_overlap_t$t" \
@@ -336,9 +352,15 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
                 -outdir "$outdir/$measure/t$t" \
                 -table  "$outdir/$measure/t$t.csv"
           else
+            mode="$measure"
+            alpha=0
+            if [[ ${measure:0:2} == 'ge' ]]; then
+              mode="ge"
+              alpha="${measure/ge_}"
+            fi
             aggregate_images_node "compute_structures_${measure}_t$t" \
                 -sublst "$kernel/$krnpre${t}.$krnext" \
-                -mode   "$measure" \
+                -mode   "$mode" -bins 0 -alpha $alpha \
                 -imgdir "$outdir/t$t" \
                 -imgpre "" \
                 -imgsuf ".nii.gz" \

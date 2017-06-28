@@ -937,13 +937,13 @@ transform_image_node()
       -outid)    outid="$2"; shift; ;;
       -outpre)   outpre="$2"; shift; ;;
       -outsuf)   outsuf="$2"; shift; ;;
-      -hdrdofs)  optarg hdrdofs $1 "$2"; shift; ;;
-      -dofins|-dofin1) dofin1=(); optarg dofin1  $1 "$2"; shift; ;;
-      -dofin2) dofin2=(); optarg dofin2 $1 "$2"; shift; ;;
-      -dofin3) dofin3=(); optarg dofin3 $1 "$2"; shift; ;;
-      -dofid1) optarg dofid1 $1 "$2"; shift; ;;
-      -dofid2) optarg dofid2 $1 "$2"; shift; ;;
-      -dofid3) optarg dofid3 $1 "$2"; shift; ;;
+      -hdrdofs)  hdrdofs="$2"; shift; ;;
+      -dofins|-dofin1) dofin1="$2"; shift; ;;
+      -dofin2) dofin2="$2"; shift; ;;
+      -dofin3) dofin3="$2"; shift; ;;
+      -dofid1) dofid1="$2"; shift; ;;
+      -dofid2) dofid2="$2"; shift; ;;
+      -dofid3) dofid3="$2"; shift; ;;
       -dofinv1) inv1='true'; ;;
       -dofinv2) inv2='true'; ;;
       -dofinv3) inv3='true'; ;;
@@ -1030,15 +1030,15 @@ transform_image_node()
     # source transformations
     local dofins=()
     local dofinv=()
-    if [ -n "$dofin1" ] && [[ $dofid1 != false ]]; then
+    if [ -n "$dofin1" ] && [ -n "$dofid1" ] && [[ $dofid1 != false ]]; then
       dofins=("${dofins[@]}" "$dofin1/$subdir$dofid1$dofsuf")
       dofinv=(${dofinv[@]} $inv1)
     fi
-    if [ -n "$dofin2" ] && [[ $dofid2 != false ]]; then
+    if [ -n "$dofin2" ] && [ -n "$dofid2" ] && [[ $dofid2 != false ]]; then
       dofins=("${dofins[@]}" "$dofin2/$subdir$dofid2$dofsuf")
       dofinv=(${dofinv[@]} $inv2)
     fi
-    if [ -n "$dofin3" ] && [[ $dofid3 != false ]]; then
+    if [ -n "$dofin3" ] && [ -n "$dofid3" ] && [[ $dofid3 != false ]]; then
       dofins=("${dofins[@]}" "$dofin3/$subdir$dofid3$dofsuf")
       dofinv=(${dofinv[@]} $inv3)
     fi
@@ -2143,6 +2143,7 @@ aggregate_images_node()
   local normalization=
   local padding=
   local alpha=
+  local bins=0
 
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -2157,6 +2158,7 @@ aggregate_images_node()
       -padding|-bgvalue) optarg padding $1 "$2"; shift; ;;
       -normalize|-normalization) optarg normalization $1 "$2"; shift; ;;
       -alpha) optarg alpha $1 "$2"; shift; ;;
+      -bins) optarg bins $1 "$2"; shift; ;;
       -*) error "aggregate_images_node: invalid option: $1"; ;;
       *)
         [ -z "$node" ] || error "aggregate_images_node: too many arguments"
@@ -2181,7 +2183,7 @@ aggregate_images_node()
     [ -z "$alpha" ] || sub="$sub -alpha $alpha"
     [ -z "$normalization" ] || sub="$sub -normalization $normalization"
     [ -z "$padding" ] || sub="$sub -padding $padding"
-    sub="$sub -output '$output' -threads $threads"
+    sub="$sub -bins $bins -output '$output' -threads $threads"
     sub="$sub\""
     sub="$sub\noutput    = $_dagdir/aggregate_images.log"
     sub="$sub\nerror     = $_dagdir/aggregate_images.log"
