@@ -9,6 +9,7 @@ topdir="$1"; shift
 evldir="$topdir/eval"
 roidir="$topdir/atlas/pbmaps"
 roisuf=".nii.gz"
+digits=9
 
 ages=("$@")
 if [ ${#ages[@]} -eq 0 ]; then
@@ -18,9 +19,14 @@ fi
 mskdir="$topdir/atlas/masks/brain"
 if [ -d "$mskdir" ]; then
   outdir="$evldir/average"
-  outcsv="$outdir/brain-mean.csv"
+  avgcsv="$outdir/brain-mean.csv"
   stdcsv="$outdir/brain-sdev.csv"
-  if [ ! -f "$outcsv" ] || [ ! -f "$stdcsv" ]; then
+  cntcsv="$outdir/brain-size.csv"
+  outarg=()
+  [ -f "$avgcsv" ] || outarg=("${outarg[@]}" -mean "$avgcsv")
+  [ -f "$stdcsv" ] || outarg=("${outarg[@]}" -sdev "$stdcsv")
+  [ -f "$cntcsv" ] || outarg=("${outarg[@]}" -size "$cntcsv")
+  if [ ${#outarg[@]} -gt 0 ]; then
     mkdir -p "$outdir" || exit 1
     opts=('-header')
     for t in ${ages[@]}; do
@@ -36,10 +42,7 @@ if [ -d "$mskdir" ]; then
               "$evldir/structures/entropy/t$t.nii.gz" \
               "$evldir/structures/label-consistency/t$t.nii.gz" \
               -n t2w_grad t2w_sdev t2w_gini t2w_entropy cgm_grad tissues_le tissues_lc structures_le structures_lc \
-              -r "$mskdir/t$t.nii.gz" \
-              -noid -preload ${opts[@]} \
-              -mean-table "$outcsv" \
-              -sdev-table "$stdcsv" -unbiased \
+              -noid -preload ${opts[@]} -r "$mskdir/t$t.nii.gz" -unbiased "${outarg[@]}" -digits $digits \
       || exit 1
       opts=('-append')
       echo " done"
@@ -50,9 +53,14 @@ fi
 for roi in structure tissue; do
   for t in ${ages[@]}; do
     outdir="$evldir/average"
-    outcsv="$outdir/${roi}s-t$t-mean.csv"
+    avgcsv="$outdir/${roi}s-t$t-mean.csv"
     stdcsv="$outdir/${roi}s-t$t-sdev.csv"
-    if [ ! -f "$outcsv" ] || [ ! -f "$stdcsv" ]; then
+    cntcsv="$outdir/${roi}s-t$t-size.csv"
+    outarg=()
+    [ -f "$avgcsv" ] || outarg=("${outarg[@]}" -mean "$avgcsv")
+    [ -f "$stdcsv" ] || outarg=("${outarg[@]}" -sdev "$stdcsv")
+    [ -f "$cntcsv" ] || outarg=("${outarg[@]}" -size "$cntcsv")
+    if [ ${#outarg[@]} -gt 0 ]; then
       mkdir -p "$outdir" || exit 1
       roipre="$roidir/t$t/${roi}_"
       rois=()
@@ -77,10 +85,7 @@ for roi in structure tissue; do
               "$evldir/structures/entropy/t$t.nii.gz" \
               "$evldir/structures/label-consistency/t$t.nii.gz" \
               -n t2w_grad t2w_sdev t2w_gini t2w_entropy cgm_grad tissues_le tissues_lc structures_le structures_lc \
-              -r "${rois[@]}" \
-              -header -noid -preload \
-              -mean-table "$outcsv" \
-              -sdev-table "$stdcsv" -unbiased \
+              -header -noid -preload -r "${rois[@]}" -unbiased "${outarg[@]}" -digits $digits \
       || exit 1
       echo " done"
     fi
