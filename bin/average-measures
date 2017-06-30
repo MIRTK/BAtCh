@@ -8,6 +8,7 @@
 topdir="$1"; shift
 evldir="$topdir/eval"
 roidir="$topdir/atlas/pbmaps"
+outdir="$evldir/qc-measures"
 roisuf=".nii.gz"
 digits=9
 
@@ -18,7 +19,6 @@ fi
 
 mskdir="$topdir/atlas/masks/brain"
 if [ -d "$mskdir" ]; then
-  outdir="$evldir/average"
   avgcsv="$outdir/brain-mean.csv"
   stdcsv="$outdir/brain-sdev.csv"
   cntcsv="$outdir/brain-size.csv"
@@ -52,7 +52,6 @@ fi
 
 for roi in structure tissue; do
   for t in ${ages[@]}; do
-    outdir="$evldir/average"
     avgcsv="$outdir/${roi}s-t$t-mean.csv"
     stdcsv="$outdir/${roi}s-t$t-sdev.csv"
     cntcsv="$outdir/${roi}s-t$t-size.csv"
