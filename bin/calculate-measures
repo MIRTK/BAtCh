@@ -5,8 +5,9 @@
   exit 1
 }
 
-measures=("entropy" "label-entropy" "grad" "cgm-grad")
+measures=("entropy" "label-entropy" "grad" "cgm-grad" "temporal-consistency")
 
+bindir="$(dirname "$BASH_SOURCE")"
 topdir="$1"; shift
 evldir="$topdir/eval"
 pbmdir="$topdir/atlas/pbmaps"
@@ -78,6 +79,21 @@ calc_pbmap_grad()
 }
 
 
+calc_temporal_consistency()
+{
+  local channel="$1"; shift
+  local metric="$1"; shift
+  local outdir="$evldir/qc-measures"
+  local outcsv="$outdir/$channel-temporal-consistency-dsc.csv"
+  if [ ! -f "$outcsv" ]; then
+    mkdir -p "$outdir" || exit 1
+    echo -n "Calculating temporal consistency of $channel [$metric]..."
+    "$bindir/../lib/tools/evaluate-temporal-consistency" "$topdir" "$channel" "$metric" "$@" > "$outcsv" || exit 1
+    echo " done"
+  fi
+}
+
+
 for measure in ${measures[@]}; do
   if [[ $measure == "entropy" ]]; then
     calc_image_entropy t2w ${ages[@]}
@@ -85,11 +101,15 @@ for measure in ${measures[@]}; do
   if [[ $measure == "grad" ]]; then
     calc_image_grad t2w ${ages[@]}
   fi
-  if [[ $measure == "label-entropy" ]]; then
+  if [[ $measure == "label-entropy" ]] || [[ $measure == "le" ]]; then
     calc_label_entropy tissues    ${ages[@]}
     calc_label_entropy structures ${ages[@]}
   fi
-  if [[ $measure == "cgm-grad" ]]; then
+  if [[ $measure == "cgm-grad" ]] || [[ $measure == "grad_2" ]] || [[ $measure == "grad(2)" ]]; then
     calc_pbmap_grad tissue 2 ${ages[@]}
+  fi
+  if [[ $measure == "temporal-consistency" ]] || [[ $measure == "tc" ]]; then
+    calc_temporal_consistency tissues dsc ${ages[@]}
+    calc_temporal_consistency structures dsc ${ages[@]}
   fi
 done

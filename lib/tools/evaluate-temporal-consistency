@@ -1,0 +1,63 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<metric> [<pbmaps> [<age>...]]]" 1>&2
+  exit 1
+}
+
+outdir="$1"; shift
+channel="${1:-structures}"; shift
+metric="${1:-dsc}"; shift
+digits=5
+
+pbmaps=()
+if [[ $channel == tissues ]] || [[ $channel == tissue ]]; then
+  for l in {1..9}; do
+    pbmaps=(${pbmaps[@]} tissue_${l}.nii.gz)
+  done
+elif [[ $channel == structures ]] || [[ $channel == structure ]]; then
+  for l in {1..87}; do
+    pbmaps=(${pbmaps[@]} structure_${l}.nii.gz)
+  done
+else
+  echo "Invalid <pbmaps> argument! Must be 'structures' or 'tissues', but got ${channel}." 1>&2
+  exit 1
+fi
+
+ages=("$@")
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36 37 38 39 40 41 42 43 44)
+fi
+unset 'ages[${#ages[@]}-1]'
+
+c=0
+for t1 in ${ages[@]}; do
+  let t2="$t1+1"
+  if [ $c -gt 0 ]; then
+    echo -n ","
+  fi
+  echo -n "$t1-$t2"
+  let c++
+done
+echo
+for pbmap in "${pbmaps[@]}"; do
+  c=0
+  for t1 in ${ages[@]}; do
+    let t2="$t1+1"
+    if [ $c -gt 0 ]; then
+      echo -n ","
+    fi
+    if [[ $metric == "CC" ]] || [[ $metric == "cc" ]]; then
+      tc=$(mirtk evaluate-similarity "$outdir/atlas/pbmaps/t$t1/$pbmap" \
+                                     "$outdir/atlas/pbmaps/t$t2/$pbmap" \
+                                     -metric $metric -table -noheader -noid -precision $digits)
+    else
+      tc=$(mirtk evaluate-overlap "$outdir/atlas/pbmaps/t$t1/$pbmap" \
+                                  "$outdir/atlas/pbmaps/t$t2/$pbmap" \
+                                  -probs -metric $metric -precision $digits)
+    fi
+    echo -n $tc
+    let c++
+  done
+  echo
+done
