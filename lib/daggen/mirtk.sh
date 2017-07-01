@@ -2141,6 +2141,7 @@ aggregate_images_node()
   local output=
   local mode='mean'
   local normalization=
+  local rescaling=
   local padding=
   local alpha=
   local bins=0
@@ -2157,6 +2158,7 @@ aggregate_images_node()
       -output) optarg output $1 "$2"; shift; ;;
       -padding|-bgvalue) optarg padding $1 "$2"; shift; ;;
       -normalize|-normalization) optarg normalization $1 "$2"; shift; ;;
+      -rescale|-rescaling) optarg rescaling $1 "$2"; shift; ;;
       -alpha) optarg alpha $1 "$2"; shift; ;;
       -bins) optarg bins $1 "$2"; shift; ;;
       -*) error "aggregate_images_node: invalid option: $1"; ;;
@@ -2182,6 +2184,7 @@ aggregate_images_node()
     done
     [ -z "$alpha" ] || sub="$sub -alpha $alpha"
     [ -z "$normalization" ] || sub="$sub -normalization $normalization"
+    [ -z "$rescaling" ] || sub="$sub -rescale $rescaling"
     [ -z "$padding" ] || sub="$sub -padding $padding"
     sub="$sub -bins $bins -output '$output' -threads $threads"
     sub="$sub\""

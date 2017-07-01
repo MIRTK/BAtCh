@@ -26,7 +26,7 @@ calc_image_entropy()
   for t in $@; do
     if [ ! -f "$outdir/t$t.nii.gz" ]; then
       echo -n "Calculating voxel-wise $channel intensity entropy for t=$t..."
-      mirtk aggregate-images entropy "$evldir/$channel/t$t/"*.nii.gz -bins 0 -output "$outdir/t$t.nii.gz" || exit 1
+      mirtk aggregate-images entropy "$evldir/$channel/t$t/"*.nii.gz -normalize "z-score" -rescale 1 100 -padding 0 -bins 0 -output "$outdir/t$t.nii.gz" || exit 1
       echo " done"
     fi
   done

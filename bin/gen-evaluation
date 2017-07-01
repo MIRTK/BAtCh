@@ -291,7 +291,8 @@ begin_dag 'eval_measures' -dagfile "$dagdir/eval_measures.dag"
               -imgdir    "$evldir/t2w/t$t" \
               -imgpre    "" \
               -imgsuf    ".nii.gz" \
-              -normalize "z-score" \
+              -normalize "$normalization" \
+              -rescale   "$rescaling" \
               -padding   "$bgvalue" \
               -output    "$evldir/t2w/$measure/t$t.nii.gz"
         done
