@@ -18,7 +18,7 @@ outdir="$1"
 name="$(basename "$outdir")"
 shift
 
-steps=("$1")
+steps=($1)
 if [ ${#steps[@]} -eq 0 ]; then
   steps=(1 2 3 4 5 6 7 8)
 fi
