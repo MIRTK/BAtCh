@@ -3,8 +3,8 @@
         "topdir": "..",
         "agecsv": "config/ages.csv",
         "imgcsv": "config/subjects.csv",
-        "tmpdir": "output/dhcp-n275-t36-44-adaptive-sigma_0.50-nmi/cache",
-        "outdir": "output/dhcp-n275-t36-44-adaptive-sigma_0.50-nmi/atlas"
+        "tmpdir": "output/dhcp-n275-t36_44-adaptive-sigma_0.50-nmi/cache",
+        "outdir": "output/dhcp-n275-t36_44-adaptive-sigma_0.50-nmi/atlas"
     },
     "images": {
         "default": "t2w",
