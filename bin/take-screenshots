@@ -1,0 +1,77 @@
+#!/bin/bash
+
+#export PYTHONPATH=/Users/as12312/Software/MIRTK/Maintenance/Build/Clang_x86_64/Release/lib/python
+
+[ $# -ge 2 ] || {
+  echo "usage: $(basename $0) <outdir> [<step> [<ages>]]" 1>&2
+  exit 1
+}
+
+bindir="$(dirname "$BASH_SOURCE")"
+topdir="$(cd "$bindir/.." & pwd)"
+pngdir="$topdir/screenshots"
+
+interpreter="$(which python)"
+script="$bindir/take-screenshots.py"
+
+outdir="$1"
+name="$(basename "$outdir")"
+shift
+
+steps=("$1")
+if [ ${#steps[@]} -eq 0 ]; then
+  steps=(1 2 3 4 5 6 7 8)
+fi
+shift
+
+ages=("$@")
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36.00 37.00 38.00 39.00 40.00 41.00 42.00 43.00 44.00)
+fi
+
+#axial=(65 80 103 112 120 130 155)
+#coronal=(70 100 120 130 150 170 190)
+#sagittal=(45 60 80 90 110 120 140 155)
+
+axial=(80 103 112 155)
+coronal=(100 130 190)
+sagittal=(80 140)
+
+opts=(-s 512)
+for k in ${axial[@]}; do
+  opts=(${opts[@]} -u 2 -i $k)
+done
+for j in ${coronal[@]}; do
+  opts=(${opts[@]} -u 1 -i $j)
+done
+for i in ${sagittal[@]}; do
+  opts=(${opts[@]} -u 0 -i $i)
+done
+
+echo "steps=(${steps[@]})"
+echo "ages=(${ages[@]})"
+echo "opts=(${opts[@]})"
+echo
+for step in ${steps[@]}; do
+  echo -n "Taking screenshots of atlas $name step $step..."
+  subdir=$(printf 'i%02d' $step)
+  niidir="$outdir/cache/$subdir"
+  for t in ${ages[@]}; do
+    if [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "avg-*t${t}.png" | wc -l) -eq 0 ]; then
+      "$interpreter" "$script" "$niidir/t2w/template/t${t}.nii.gz" \
+          "$pngdir/$name/$subdir/avg-" "t${t}.png" -l 40 -w 75 ${opts[@]} \
+      || exit 1
+    fi
+    if [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "cgm-*t${t}.png" | wc -l) -eq 0 ]; then
+      "$interpreter" "$script" "$niidir/tissues/prob_2/t${t}.nii.gz" \
+          "$pngdir/$name/$subdir/cgm-" "t${t}.png" -l .5 -w 1. ${opts[@]} \
+      || exit 1
+    fi
+    if [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "wm-*t${t}.png" | wc -l) -eq 0 ]; then
+      "$interpreter" "$script" "$niidir/tissues/prob_3/t${t}.nii.gz" \
+          "$pngdir/$name/$subdir/wm-"  "t${t}.png" -l .5 -w 1. ${opts[@]} \
+      || exit 1
+    fi
+  done
+  echo " done"
+done
