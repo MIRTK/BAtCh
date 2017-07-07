@@ -2,7 +2,7 @@
 
 #export PYTHONPATH=/Users/as12312/Software/MIRTK/Maintenance/Build/Clang_x86_64/Release/lib/python
 
-[ $# -ge 2 ] || {
+[ $# -ge 1 ] || {
   echo "usage: $(basename $0) <outdir> [<step> [<ages>]]" 1>&2
   exit 1
 }
