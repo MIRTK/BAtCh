@@ -1,0 +1,63 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<pbmaps> [<metric> [<age>...]]]" 1>&2
+  exit 1
+}
+
+outdir="$1"; shift
+channel="${1:-structures}"; shift
+metric="${1:-dsc}"; shift
+digits=5
+
+pbmaps=()
+if [[ $channel == tissues ]] || [[ $channel == tissue ]]; then
+  L=9
+elif [[ $channel == structures ]] || [[ $channel == structure ]]; then
+  L=87
+else
+  echo "Invalid <pbmaps> argument! Must be 'structures' or 'tissues', but got ${channel}." 1>&2
+  exit 1
+fi
+
+ages=("$@")
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36 37 38 39 40 41 42 43 44)
+fi
+unset 'ages[${#ages[@]}-1]'
+
+printf 'roi'
+for t1 in ${ages[@]}; do
+  let t2="$t1+1"
+  printf ",$t1-$t2"
+done
+printf '\n'
+
+l=0
+while [ $l -lt $L ]; do
+  let l++
+  if [ $L -ge 10 ]; then
+    w=2
+  else
+    w=1
+  fi
+  pbmap=$(printf "prob_%0${w}d" $l)
+  printf "${channel%s}=%0${w}d" $l
+  for t1 in ${ages[@]}; do
+    let t2="$t1+1"
+    t1=$(printf '%.2f' $t1)
+    t2=$(printf '%.2f' $t2)
+    if [[ $metric == "CC" ]] || [[ $metric == "cc" ]]; then
+      tc=$(mirtk evaluate-similarity "$outdir/$channel/$pbmap/t${t1}.nii.gz" \
+                                     "$outdir/$channel/$pbmap/t${t2}.nii.gz" \
+                                     -metric $metric -table -noheader -noid -precision $digits)
+    else
+      tc=$(mirtk evaluate-overlap "$outdir/$channel/$pbmap/t${t1}.nii.gz" \
+                                  "$outdir/$channel/$pbmap/t${t2}.nii.gz" \
+                                  -probs -metric $metric -precision $digits)
+    fi
+    [ $? -eq 0 ] || exit 1
+    printf ",$tc"
+  done
+  printf '\n'
+done

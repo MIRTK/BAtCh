@@ -1,0 +1,45 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<age>...]" 1>&2
+  exit 1
+}
+
+topdir="$1"; shift
+ages=("$@")
+
+for i in {1..20}; do
+  tmpdir="$(printf "$topdir/cache/i%02d" $i)"
+  if [ -d "$tmpdir/tissues/prob_1" ]; then
+    echo "tmpdir=$tmpdir"
+    if [ ${#ages[@]} -eq 0 ]; then
+      for f in $(find "$tmpdir/tissues/prob_1" -name '*.nii.gz' | sort); do
+        name="$(basename "$f")"
+        name=${name%.gz}
+        name=${name%.nii}
+        ages=(${ages[@]} ${name:1})
+      done
+      echo "ages=(${ages[@]})"
+    fi
+    for t in ${ages[@]}; do
+      outdir="$tmpdir/roi/brain"
+      outmsk="$outdir/t${t}.nii.gz"
+      if [ ! -f "$outmsk" ]; then
+        echo -n "Creating brain tissues mask for t=${t}..."
+        mkdir -p "$outdir" || exit 1
+        mirtk calculate-element-wise \
+            "$tmpdir/tissues/prob_1/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_2/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_3/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_5/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_6/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_7/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_8/t${t}.nii.gz" + \
+            "$tmpdir/tissues/prob_9/t${t}.nii.gz" \
+            -clamp 0 1 -threshold .1 -set 1 -pad 0 \
+            -o "$outmsk" || exit 1
+        echo " done"
+      fi
+    done
+  fi
+done

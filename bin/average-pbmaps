@@ -1,0 +1,60 @@
+#!/bin/bash
+
+topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+
+ages=(36 40 44)
+step=2
+
+sims=("nmi")
+spacing=(2.0 2.5)
+wbe=(1e-4 1e-3 5e-3 1e-2)
+wlj=(0e-0 1e-5 1e-4 1e-3)
+
+tests=()
+param=()
+for sim in ${sims[@]}; do
+  for ds in ${spacing[@]}; do
+    for be in ${wbe[@]}; do      
+      for lj in ${wlj[@]}; do
+        tests=("${tests[@]}" "sim_$sim-ds_$ds-be_$be-lj_$lj")
+        param=("${param[@]}" "$sim,$ds,$be,$lj")
+      done
+    done
+  done
+done
+
+echo "No. of tests = ${#tests[@]}"
+echo "No. of ages  = ${#ages[@]}"
+
+outdir="$topdir/results/pbmaps"
+mkdir -p "$outdir" || exit 1
+for label in {1..87}; do
+  mkdir -p "$(printf "$outdir/prob_%02d" $label)" || exit 1
+done
+
+n=0
+let N="${#ages[@]} * 87"
+for t in ${ages[@]}; do
+for label in {1..87}; do
+  let n++
+  
+  pbmaps=()
+  for subdir in "${tests[@]}"; do
+    pbmaps=("${pbmaps[@]}" "$(printf "$topdir/tests/$subdir/cache/i%02d/structures/prob_%02d/t%02.0f.nii.gz" $step $label $t)")
+  done
+  output="$(printf "$outdir/prob_%02d/t%02.0f.nii.gz" $label $t)"
+  if [ -f "$output" ]; then
+    echo -n "$(printf %2d/%d $n $N): Average probability map for structure label=${label} at t=${t} exists"
+  else
+    echo -n "$(printf %2d/%d $n $N): Create average probability map for structure label=${label} at t=${t}..."
+    mirtk average-images "$output" \
+      -image "${pbmaps[@]}" -reference "${pbmaps[0]}" \
+      -rescale 0 100 -dtype "uchar" -verbose 0
+    if [ $# -eq 0 ]; then
+      echo " done"
+    else
+      echo " failed"
+      exit 1
+    fi
+  fi
+done; done

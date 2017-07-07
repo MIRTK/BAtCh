@@ -1,0 +1,66 @@
+#!/bin/bash
+
+queue='condor'
+threads=8
+
+if [ $# -gt 0 ]; then
+  sims=("$1")
+  shift
+else
+  sims=(nmi ncc)
+fi
+
+if [ $# -gt 0 ]; then
+  spacing=$1
+  shift
+else
+  spacing=(2.0 2.5)
+fi
+
+if [ $# -gt 0 ]; then
+  max_step=$1
+  shift
+else
+  max_step=3
+fi
+
+if [ $# -gt 0 ]; then
+  wbe=($1)
+  shift
+else
+  wbe=(1e-4 1e-3 5e-3 1e-2)
+fi
+
+if [ $# -gt 0 ]; then
+  wlj=($1)
+  shift
+else
+  wlj=(0e-0 1e-5 1e-4 1e-3)
+fi
+
+n=$(printf %02d $max_step)
+for sim in ${sims[@]}; do
+  for ds in ${spacing[@]}; do
+    for be in ${wbe[@]}; do
+      for lj in ${wlj[@]}; do
+
+        testid="sim_$sim-ds_$ds-be_$be-lj_$lj-inclbg_0"
+        outdir="tests/$testid/atlas"
+        tmpdir="tests/$testid/cache"
+        if [ ! -d "$tmpdir/i$n/t2w/mean" ] || [ $(find "$tmpdir/i$n/t2w/mean" -type f | wc -l) -lt 9 ]; then
+
+          echo
+          echo "========================================================================"
+          echo "Test: Similarity=$sim, Spacing=$ds, BE weight=$be, JAC weight=$lj"
+          echo "========================================================================"
+          echo
+
+          mirtk construct-atlas config/compare-register-params.json \
+              -n $max_step -o "" -w "$tmpdir" -m $sim --spacing $ds --bending $be --jacobian $lj -q "$queue" --threads $threads
+          [ $? -eq 0 ] || exit 1
+
+        fi
+      done
+    done
+  done
+done

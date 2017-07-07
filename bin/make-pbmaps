@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Execution environment: "local", "condor" (HTCondor), "short"/"long" (SLURM)
+queue="condor"
+threads=8
+
+#SBATCH --job-name=makepbmaps
+#SBATCH --cpus-per-task=1
+#SBATCH --mem=15G
+#SBATCH --output=makepbmaps.log
+#SBATCH --error=makepbmaps.log
+#SBATCH --open-mode=append
+
+if [ $# -gt 0 ]; then
+  sims=("$1")
+  shift
+else
+  sims=("nmi")
+fi
+
+if [ $# -gt 0 ]; then
+  spacing=$1
+  shift
+else
+  spacing=(2.0 2.5)
+fi
+
+if [ $# -gt 0 ]; then
+  wbe=($1)
+  shift
+else
+  wbe=(1e-4 1e-3 5e-3 1e-2)
+fi
+
+if [ $# -gt 0 ]; then
+  wlj=($1)
+  shift
+else
+  wlj=(0e-0 1e-5 1e-4 1e-3)
+fi
+
+if [ $# -gt 0 ]; then
+  max_step=$1
+  shift
+else
+  max_step=3
+fi
+
+for sim in ${sims[@]}; do
+  for ds in ${spacing[@]}; do
+    for be in ${wbe[@]}; do
+      for lj in ${wlj[@]}; do
+        testid="sim_$sim-ds_$ds-be_$be-lj_$lj"
+        outdir="tests/$testid/atlas"
+        tmpdir="tests/$testid/cache"
+        step=1
+        while [ $step -le $max_step ]; do
+          subdir="$tmpdir/$(printf i%02d $step)"
+          if [ -d "$subdir/t2w/mean" -a $(find "$subdir/t2w/mean" -type f | wc -l) -eq 9 ]; then
+
+            echo
+            echo "==========================================================="
+            echo "Test: SIM=$sim, Spacing=$ds, BE=$be, JAC=$lj, step=$step"
+            echo "==========================================================="
+            echo
+
+            bin/make-pbmaps.py config/compare-register-params.json \
+              -w "$tmpdir" -i "$step" -q "$queue" --threads $threads -v 1
+            [ $? -eq 0 ] || exit 1
+
+          fi
+          let step++
+        done
+      done
+    done
+  done
+done

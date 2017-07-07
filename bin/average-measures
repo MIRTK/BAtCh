@@ -1,0 +1,91 @@
+#!/bin/bash
+
+topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+cd "$topdir" || exit 1
+
+ages=(36 40 44)
+steps=(1 2 3)
+measures=("t2w/gini" "t2w/grad" "structures/label-consistency" "tissues/grad_2")
+
+sims=("nmi")
+spacing=(2.0 2.5)
+wbe=(1e-4 1e-3 5e-3 1e-2)
+wlj=(0e-0 1e-5 1e-4 1e-3)
+
+tests=()
+param=()
+for sim in ${sims[@]}; do
+  for ds in ${spacing[@]}; do
+    for be in ${wbe[@]}; do      
+      for lj in ${wlj[@]}; do
+        tests=("${tests[@]}" "sim_$sim-ds_$ds-be_$be-lj_$lj")
+        param=("${param[@]}" "$sim,$ds,$be,$lj")
+      done
+    done
+  done
+done
+
+roi_names=("brain")
+roi_prefs=("global/roi/brain")
+if [ 0 -eq 1 ]; then
+  for l in {1..87}; do
+    l=$(printf %02d $l)
+    roi_names=("${roi_names[@]}" "l=$l")
+    roi_prefs=("${roi_prefs[@]}" "results/pbmaps/prob_$l");
+  done
+fi
+
+echo "No. of measures = ${#measures[@]}"
+echo "No. of tests    = ${#tests[@]}"
+echo "No. of ages     = ${#ages[@]}"
+echo "No. of steps    = ${#steps[@]}"
+echo "No. of ROIs     = ${#roi_names[@]}"
+
+outdir="results/measures-global"
+mkdir -p "$outdir" || exit 1
+
+for measure in ${measures[@]}; do
+for step in ${steps[@]}; do
+for age in ${ages[@]}; do
+
+  step=$(printf %02d $step)
+
+  name="${measure/\//_}"
+  name="${name/ /_}"
+  table="$outdir/${name}_i${step}_t${age}.csv"
+
+  if [ ! -f "$table" ]; then
+
+    roi_paths=()
+    for roi_pref in "${roi_prefs[@]}"; do
+      if [ -d "${roi_pref}" ]; then
+        roi_path="${roi_pref}/t${age}.nii.gz"
+      fi
+      if [ ! -f "$roi_path" ]; then
+        echo "Missing ROI mask or probability map: $roi_path" 1>&2
+        exit 1
+      fi
+      roi_paths=("${roi_paths[@]}" "$roi_path")
+    done
+
+    echo -n "Writing table $table..."
+    echo -n "sim,ds,be,lj" > "$table"
+    for roi in ${roi_names[@]}; do
+      echo -n ",$roi" >> "$table"
+    done
+    echo >> "$table"
+
+    k=0
+    while [ $k -lt ${#tests[@]} ]; do
+      echo -n "${param[k]}," >> "$table"
+      mirtk average-measure "tests/${tests[k]}/cache/i${step}/${measure}/t${age}.nii.gz" --noid --roi "${roi_paths[@]}" --roi-names "${roi_names[@]}" -transpose >> "$table"
+      if [ $? -ne 0 ]; then
+        echo " failed"
+        exit 1
+      fi
+      let k++
+    done
+    echo " done"
+  fi
+
+done; done; done

@@ -1,0 +1,140 @@
+{
+    "paths": {
+        "topdir": "..",
+        "agecsv": "config/ages.csv",
+        "imgcsv": "config/term-subjects.csv",
+        "outdir": "output/cfg_12/atlas",
+        "tmpdir": "output/cfg_12/cache"
+    },
+    "images": {
+        "default": "t2w",
+        "ref": "global/avg/t2w.nii.gz",
+        "t1w": {
+            "prefix": "images/t1w/",
+            "suffix": ".nii.gz",
+            "interp": "linear",
+            "bkgrnd": 0
+        },
+        "t2w": {
+            "prefix": "images/t2w/",
+            "suffix": ".nii.gz",
+            "interp": "linear",
+            "bkgrnd": 0
+        },
+        "tissues": {
+            "prefix": "labels/tissues/",
+            "suffix": ".nii.gz",
+            "labels": "1..9",
+            "interp": "nn"
+        },
+        "structures": {
+            "prefix": "labels/structures/",
+            "suffix": ".nii.gz",
+            "labels": "1..87",
+            "interp": "nn"
+        }
+    },
+    "registration": {
+        "affine": {
+            "prefix": "global/dof/",
+            "suffix": ".dof.gz"
+        },
+        "config": [
+            {
+                "model": "SVFFD",
+                "ffdim": "FastSS",
+                "bchterms": 2,
+                "energy": "Symmetric",
+                "channels": ["t2w"],
+                "measures": {
+                    "t2w": "NMI"
+                },
+                "interpolation": "Linear",
+                "padding": false,
+                "foreground": "Domain",
+                "window": "7 vox",
+                "levels": 3,
+                "resolution": 1.0,
+                "blurring": {
+                    "tissues": 2,
+                    "structures": 2
+                },
+                "spacing": [8.0, 16.0, 32.0],
+                "bending": 5e-3,
+                "jacobian": 1e-5
+            },
+            {
+                "levels": 4,
+                "resolution": 0.5,
+                "spacing": [8.0, 8.0, 16.0, 32.0]
+            },
+            {
+                "spacing": 4.0
+            },
+            {
+                "spacing": 4.0
+            },
+            {
+                "spacing": 2.0
+            },
+            {
+                "spacing": 2.0
+            },
+            {
+                "spacing": 2.0
+            },
+            {
+                "spacing": 1.5,
+                "bending": 5e-3,
+                "jacobian": 1e-4
+            },
+            {
+                "spacing": 1.0,
+                "bending": 5e-3,
+                "jacobian": 1e-4
+            }
+        ],
+        "growth": {
+            "enabled": true,
+            "exclavg": false,
+            "bchterms": 3
+        }
+    },
+    "regression": {
+        "means": [40],
+        "sigma": [100],
+        "epsilon": 0,
+        "precision": 2
+    },
+    "evaluation": {
+        "measures": {
+            "t2w": ["grad", "gini"],
+            "tissues": ["grad(2)"],
+            "structures": ["label-consistency"]
+        },
+        "mask": "global/roi/brain/t{t:02.0f}.nii.gz",
+        "rois": {
+            "brain": "global/roi/brain/t{t:02.0f}.nii.gz",
+            "l={l:02d}": ["{subdir}/structures/prob_{l:02d}/t{t:02.0f}.nii.gz", 87]
+        }
+    },
+    "environment": {
+        "queue": {
+            "short": "condor",
+            "long": "condor"
+        },
+        "mintasks": 1,
+        "maxtasks": 500,
+        "threads": 8,
+        "condor": {
+            "requirements": [
+                "Arch == \"X86_64\"",
+                "OpSysShortName == \"Ubuntu\"",
+                "OpSysMajorVer >= 14"
+            ],
+            "environment": {
+                "PYTHONPATH": ["/vol/biomedic/users/as12312/lib/python2.7/site-packages"]
+            }
+        }
+    }
+}
