@@ -1,19 +1,21 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 
-# import settings from spatio-temporal atlas construction
+# import settings from default configuration
 set_pardir_from_file_path "$BASH_SOURCE"
-source "$topdir/$pardir/constant-sigma.sh"
+source "$topdir/$pardir/term-unweighted.sh"
 
-sublst="$pardir/term-subjects.lst"
-
-# regression parameters resulting in uniform weights
-means=(40)
-sigma=1000
-epsilon=0
-kernel="$pardir/term-unweighted"
+# registration parameters
+similarity='nmi'
+levels=5
+spacing=1.0
+bending=1e-2
+jacobian=0e-0
+pairwise=false
+refine=5
 
 # output settings
-subdir="term-unweighted"
+name="$(basename "$BASH_SOURCE")"
+subdir="${name%.sh}"
 dagdir="dag/dHCP275/$subdir"
 logdir="log/dHCP275/$subdir"
 log="$logdir/progress.log"

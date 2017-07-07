@@ -10,16 +10,18 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/term-unweighted-ffd-useresdof.sh"
 
-# registration
+# registration parameters
 useresdof=false
 refine=0
 
 # output settings
-subdir="dHCP275/term-unweighted-ffd-noresdof"
-dagdir="dag/$subdir"
-logdir="log/$subdir"
-dofdir="../$subdir/dofs"
-evldir="../$subdir/eval"
-outdir="../$subdir/atlas"
-tmpdir="../$subdir/temp"
+subdir="term-unweighted-ffd-noresdof"
+dagdir="dag/dHCP275/$subdir"
+logdir="log/dHCP275/$subdir"
 log="$logdir/progress.log"
+
+resdir="dhcp-n275-t36_44/constructed-atlases/$subdir"
+dofdir="../$resdir/dofs"
+evldir="../$resdir/eval"
+outdir="../$resdir/atlas"
+tmpdir="../$resdir/temp"
