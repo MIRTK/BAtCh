@@ -7,6 +7,25 @@ import argparse
 from mirtk.rendering.screenshots import slice_view, take_screenshot, auto_level_window
 
 
+def rgb(r, g, b):
+    return (r, g, b)
+
+
+color_map_points = [
+    (15., 0.),
+    (30., .4),
+    (45., .7),
+    (65., .9),
+    (100., 1.)
+]
+
+color_map_points = [
+    (15., 0.),
+    (40., .6),
+    (100., 1.)
+]
+
+
 def read_image(fname):
     """Read image from file."""
     reader = vtk.vtkNIFTIImageReader()
@@ -17,6 +36,111 @@ def read_image(fname):
     qform = vtk.vtkMatrix4x4()
     qform.DeepCopy(reader.GetQFormMatrix())
     return (output, qform)
+
+
+def inverse_color_map():
+    lut = vtk.vtkColorTransferFunction()
+    lut.AddRGBPoint(0., 1., 1., 1.)
+    lut.AddRGBPoint(1., 0., 0., 0.)
+    lut.ClampingOn()
+    lut.SetRange(0, 1)
+    lut.Build()
+    return lut
+
+
+def linear_color_map(min_color, max_color):
+    lut = vtk.vtkColorTransferFunction()
+    lut.AddRGBPoint(0., min_color[0], min_color[1], min_color[2])
+    lut.AddRGBPoint(1., max_color[0], max_color[1], max_color[2])
+    lut.ClampingOn()
+    lut.SetRange(0, 1)
+    lut.Build()
+    return lut
+
+
+def hot_color_map():
+    lut = vtk.vtkColorTransferFunction()
+    lut.AddRGBPoint(0., 0., 0., 0.)
+    lut.AddRGBPoint(.3, 0., 0., 0.)
+    lut.AddRGBPoint(.35, .847, 0., 0.)
+    lut.AddRGBPoint(.44, 1., .227, 0.)
+    lut.AddRGBPoint(.76, 1., 1., 0.)
+    lut.AddRGBPoint(1., 1., 1., 1.)
+    lut.ClampingOff()
+    lut.SetBelowRangeColor(1., 1., 1.)
+    lut.UseBelowRangeColorOn()
+    lut.SetAboveRangeColor(1., 1., 1.)
+    lut.UseAboveRangeColorOn()
+    lut.SetRange(0, 1)
+    lut.Build()
+    return lut
+
+
+def jet_color_map():
+    lut = vtk.vtkColorTransferFunction()
+    lut.AddRGBPoint(0., 0., 0., .5)
+    lut.AddRGBPoint(.1, 0., 0., 1.)
+    lut.AddRGBPoint(.4, 0., 1., 1.)
+    lut.AddRGBPoint(.6, 1., 1., 0.)
+    lut.AddRGBPoint(.9, 1., 0., 0.)
+    lut.AddRGBPoint(1., .5, 0., 0.)
+    lut.ClampingOff()
+    lut.SetBelowRangeColor(1., 1., 1.)
+    lut.UseBelowRangeColorOn()
+    lut.SetAboveRangeColor(1., 1., 1.)
+    lut.UseAboveRangeColorOn()
+    lut.SetRange(0, 1)
+    lut.Build()
+    return lut
+
+
+def jet_with_white_background_color_map():
+    lut = vtk.vtkColorTransferFunction()
+    lut.AddRGBPoint(0., 1., 1., 1.)
+    #lut.AddRGBPoint(.1, 0., 0., .1)
+    lut.AddRGBPoint(.4, 0., 1., 1.)
+    lut.AddRGBPoint(.6, 1., 1., 0.)
+    lut.AddRGBPoint(.9, 1., 0., 0.)
+    lut.AddRGBPoint(1., .5, 0., 0.)
+    lut.ClampingOn()
+    lut.SetRange(0, 1)
+    lut.Build()
+    return lut
+
+
+def color_map(control_points, colors_lut=None):
+    """Map image intensities to [0, 1] using vtkKochanekSpline as done by ITK-SNAP."""
+    spline = vtk.vtkKochanekSpline()
+    spline.SetLeftConstraint(2)
+    spline.SetRightConstraint(2)
+    spline.SetDefaultContinuity(-1)
+    spline.SetDefaultTension(0)
+    spline.SetDefaultBias(0)
+    min_value = 1000.
+    max_value = -1000.
+    for control_point in control_points:
+        spline.AddPoint(control_point[0], control_point[1])
+        if control_point[0] < min_value:
+            min_value = control_point[0]
+        if control_point[0] > max_value:
+            max_value = control_point[0]
+    spline.Compute()
+    n = 2048
+    lut = vtk.vtkLookupTable()
+    lut.SetRampToLinear()
+    lut.SetNumberOfTableValues(n)
+    lut.SetRange(min_value, max_value)
+    t = 0.
+    dt = (max_value - min_value) / float(n - 1)
+    for i in range(n):
+        s = spline.Evaluate(t)
+        if colors_lut:
+            r, g, b = colors_lut.GetColor(s)
+            lut.SetTableValue(i, r, g, b)
+        else:
+            lut.SetTableValue(i, s, s, s)
+        t += dt
+    return lut
 
 
 def save_slice_view(path, image, index, zdir=2, size=512, **kwargs):
@@ -54,6 +178,9 @@ if __name__ == '__main__':
     parser.add_argument('-s', '--size', default=512, type=int)
     parser.add_argument('-l', '--level', type=float)
     parser.add_argument('-w', '--window', type=float)
+    parser.add_argument('--interp', default="nearest")
+    parser.add_argument('--map', type=float, default=[], nargs=2, action='append')
+    parser.add_argument('--colors', default="grey")
     args = parser.parse_args()
     image, qform = read_image(args.image)
     image2world = vtk.vtkMatrixToLinearTransform()
@@ -73,6 +200,21 @@ if __name__ == '__main__':
             ext = ".png"
     if postfix:
         postfix = "-" + postfix
+    if args.colors == "grey":
+        lut = None
+    elif args.colors == "jet":
+        lut = jet_color_map()
+    elif args.colors == "jet+white":
+        lut = jet_with_white_background_color_map()
+    elif args.colors == "hot":
+        lut = hot_color_map()
+    elif args.colors == "inverse":
+        lut = inverse_color_map()
+    else:
+        values = [float(x) for x in args.colors.split(" ")]
+        lut = linear_color_map((values[0:3]), (values[3:6]))
+    if args.map:
+        lut = color_map(args.map, lut)
     for n in range(len(args.index)):
         i = args.index[n]
         zdir = args.zdir[n] if len(args.zdir) > n else args.zdir[-1]
@@ -97,4 +239,11 @@ if __name__ == '__main__':
             outdir = os.path.dirname(path)
             if outdir and outdir != '.' and not os.path.isdir(outdir):
                 os.makedirs(outdir)
-        save_slice_view(path, image, index=index, zdir=zdir, size=args.size, level_window=level_window, transform=world2image)
+        save_slice_view(path, image,
+                        transform=world2image,
+                        index=index,
+                        zdir=zdir,
+                        size=args.size,
+                        level_window=level_window,
+                        interpolation=args.interp,
+                        image_lut=lut)
