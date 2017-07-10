@@ -672,52 +672,72 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # make template images
-  begin_dag 'make_templates' -parent "make_dofs" -splice
-    for t in ${timepoints[@]}; do
+  for mod in 't1w' 't2w'; do
+    if [[ $mod == 't1w' ]]; then
+      srcdir="$t1wdir"
+      srcpre="$t1wpre"
+      srcsuf="$t1wsuf"
+    elif [[ $mod == 't2w' ]]; then
+      srcdir="$t2wdir"
+      srcpre="$t2wpre"
+      srcsuf="$t2wsuf"
+    fi
+    if [[ $mod == 't2w' ]] && [ -z "$srcdir" ]; then
+      srcdir="$imgdir"
+      srcpre="$imgpre"
+      srcsuf="$imgsuf"
+    fi
+    if [ -n "$srcdir" ]; then
+      begin_dag "make_${mod}_templates" -parent "make_dofs" -splice
+        for t in ${timepoints[@]}; do
 
-      if [ -n "$defdofs" ]; then
-        dofin2="$defdofs/t$t"
-        dofin3="$defdofs/t$t"
-      else
-        dofin2=""
-        dofin3=""
-      fi
+          if [ -n "$defdofs" ]; then
+            dofin2="$defdofs/t$t"
+            dofin3="$defdofs/t$t"
+          else
+            dofin2=""
+            dofin3=""
+          fi
 
-      average_images_node "average_$t" \
-          -sublst    "$kernel/$krnpre${t}.$krnext" \
-          -imgdir    "$imgdir" \
-          -imgpre    "$imgpre" \
-          -imgsuf    "$imgsuf" \
-          -refid     "$nrmref" \
-          -refdir    "$nrmdir" \
-          -refpre    "$nrmpre" \
-          -refsuf    "$nrmsuf" \
-          -dofin1    "$nrmdofs" \
-          -dofin2    "$dofin2" -dofinv2 "$definvs" \
-          -dofin3    "$dofin3" -dofid3 "$resdof" \
-          -output    "$outdir/average/t2w/t$t.nii.gz" \
-          -padding   "$bgvalue" \
-          -threshold "$threshold" \
-          -normalize "$normalization" \
-          -rescale   "$rescaling" \
-          -sharpen   "$sharpen"
+          average_images_node "average_$t" \
+              -sublst    "$kernel/$krnpre${t}.$krnext" \
+              -imgdir    "$srcdir" \
+              -imgpre    "$srcpre" \
+              -imgsuf    "$srcsuf" \
+              -refid     "$nrmref" \
+              -refdir    "$nrmdir" \
+              -refpre    "$nrmpre" \
+              -refsuf    "$nrmsuf" \
+              -dofin1    "$nrmdofs" \
+              -dofin2    "$dofin2" -dofinv2 "$definvs" \
+              -dofin3    "$dofin3" -dofid3 "$resdof" \
+              -output    "$outdir/average/$mod/t$t.nii.gz" \
+              -padding   "$bgvalue" \
+              -threshold "$threshold" \
+              -normalize "$normalization" \
+              -rescale   "$rescaling" \
+              -sharpen   "$sharpen"
 
-      transform_image_node "transform_$t" -parent "average_$t" \
-          -srcdir "$outdir/average/t2w" \
-          -srcpre "" \
-          -srcid  "t$t" \
-          -srcsuf ".nii.gz" \
-          -tgtid  "$nrmref" \
-          -tgtdir "$nrmdir" \
-          -tgtpre "$nrmpre" \
-          -tgtsuf "$nrmsuf" \
-          -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" -invert \
-          -outdir "$outdir/templates/t2w"
+          transform_image_node "transform_$t" -parent "average_$t" \
+              -srcdir "$outdir/average/$mod" \
+              -srcpre "" \
+              -srcid  "t$t" \
+              -srcsuf ".nii.gz" \
+              -tgtid  "$nrmref" \
+              -tgtdir "$nrmdir" \
+              -tgtpre "$nrmpre" \
+              -tgtsuf "$nrmsuf" \
+              -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" -invert \
+              -outdir "$outdir/templates/$mod"
 
-    done
+        done
 
-    unset -v dofin2 dofin3
-  end_dag
+        unset -v dofin2 dofin3
+      end_dag
+    fi
+
+    unset -v srcdir srcpre srcsuf
+  done
 
   # ----------------------------------------------------------------------------
   # make tissue probability maps
