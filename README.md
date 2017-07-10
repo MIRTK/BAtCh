@@ -1,7 +1,11 @@
 HTCondor DAGMan application for the construction of a spatio-temporal brain atlas
-and growth model from cross-sectional brain MR images.
+from cross-sectional brain MR images using deformable registration between all pairs of images.
+The subject-to-atlas deformations can be iteratively refined. Alternatively, the initial
+pairwise registrations can be skipped, and only an initial global average image computed.
+A more recent iterative atlas construction is implemented by the `mirtk construct-atlas`
+command in [MIRTK](https://mirtk.github.io).
 
-**This workflow has been tested with MIRTK master branch revision c18e1ac.**
+**This workflow has been tested with MIRTK master branch revision c18e1ac, but should work with the latest version.**
 
 
 Initial Setup
@@ -16,7 +20,7 @@ construction of a new brain atlas.
 mkdir BrainAtlas && cd BrainAtlas
 ln -s <path_to_images> images
 ln -s <path_to_labels> labels
-git clone git@gitlab.doc.ic.ac.uk:as12312/brain-growth-atlas-builder.git workflow
+git clone https@github.com/MIRTK/BAtCh.git workflow
 cd workflow
 ```
 
