@@ -141,9 +141,9 @@ cd "$topdir" || error "Failed to change to working directory!"
 
 if [ $verbose -gt 0 ]; then
   if [ -n "$mirtk" ]; then
-    echo "MIRTK AppImage binary     = $mirtk"
+    echo "MIRTK AppImage binary       = $mirtk"
   else
-    echo "MIRTK installation prefix = $MIRTK_DIR"
+    echo "MIRTK installation prefix   = $MIRTK_DIR"
   fi
   echo "No. of subjects/images      = ${#subids[@]}"
   echo "Atlas time points           = ${timepoints[@]}"
