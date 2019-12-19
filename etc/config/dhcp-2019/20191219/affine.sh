@@ -8,6 +8,7 @@ source "$topdir/$pardir/common.sh"
 # registration parameters
 pairwise=false
 refine=0
+finalize=false
 
 # output settings
 subsubdir="affine"

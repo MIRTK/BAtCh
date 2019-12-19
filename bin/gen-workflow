@@ -655,180 +655,184 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     prev_node="def_refinement"
   fi
 
-  # ----------------------------------------------------------------------------
-  # average global scaling (i.e. brain size relative to global reference)
-  begin_dag 'make_dofs' -parent "$prev_node" -splice
-    for t in ${timepoints[@]}; do
+  if [[ "$finalize" == "true" ]]; then
 
-      average_dofs_node "avgdof_$t" \
-          -doflst "$kernel/$krnpre${t}.$krnext" \
-          -dofins "$nrmdofs" \
-          -dofdir "$outdir/dofs" \
-          -dofid  "t$t" -outsuf ".dof" \
-          -invert -norigid -noshearing
+    # --------------------------------------------------------------------------
+    # average global scaling (i.e. brain size relative to global reference)
+    begin_dag 'make_dofs' -parent "$prev_node" -splice
+      for t in ${timepoints[@]}; do
 
+        average_dofs_node "avgdof_$t" \
+            -doflst "$kernel/$krnpre${t}.$krnext" \
+            -dofins "$nrmdofs" \
+            -dofdir "$outdir/dofs" \
+            -dofid  "t$t" -outsuf ".dof" \
+            -invert -norigid -noshearing
+
+      done
+    end_dag
+
+    # --------------------------------------------------------------------------
+    # make template images
+    for mod in 't1w' 't2w'; do
+      if [[ $mod == 't1w' ]]; then
+        srcdir="$t1wdir"
+        srcpre="$t1wpre"
+        srcsuf="$t1wsuf"
+      elif [[ $mod == 't2w' ]]; then
+        srcdir="$t2wdir"
+        srcpre="$t2wpre"
+        srcsuf="$t2wsuf"
+      fi
+      if [[ $mod == 't2w' ]] && [ -z "$srcdir" ]; then
+        srcdir="$imgdir"
+        srcpre="$imgpre"
+        srcsuf="$imgsuf"
+      fi
+      if [ -n "$srcdir" ]; then
+        begin_dag "make_${mod}_templates" -parent "make_dofs" -splice
+          for t in ${timepoints[@]}; do
+
+            if [ -n "$defdofs" ]; then
+              dofin2="$defdofs/t$t"
+              dofin3="$defdofs/t$t"
+            else
+              dofin2=""
+              dofin3=""
+            fi
+
+            average_images_node "average_$t" \
+                -sublst    "$kernel/$krnpre${t}.$krnext" \
+                -imgdir    "$srcdir" \
+                -imgpre    "$srcpre" \
+                -imgsuf    "$srcsuf" \
+                -refid     "$nrmref" \
+                -refdir    "$nrmdir" \
+                -refpre    "$nrmpre" \
+                -refsuf    "$nrmsuf" \
+                -dofin1    "$nrmdofs" \
+                -dofin2    "$dofin2" -dofinv2 "$definvs" \
+                -dofin3    "$dofin3" -dofid3 "$resdof" \
+                -output    "$outdir/average/$mod/t$t.nii.gz" \
+                -padding   "$bgvalue" \
+                -threshold "$threshold" \
+                -normalize "$normalization" \
+                -rescale   "$rescaling" \
+                -sharpen   "$sharpen"
+
+            transform_image_node "transform_$t" -parent "average_$t" \
+                -srcdir "$outdir/average/$mod" \
+                -srcpre "" \
+                -srcid  "t$t" \
+                -srcsuf ".nii.gz" \
+                -tgtid  "$nrmref" \
+                -tgtdir "$nrmdir" \
+                -tgtpre "$nrmpre" \
+                -tgtsuf "$nrmsuf" \
+                -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" -invert \
+                -outdir "$outdir/templates/$mod"
+
+          done
+
+          unset -v dofin2 dofin3
+        end_dag
+      fi
+
+      unset -v srcdir srcpre srcsuf
     done
-  end_dag
 
-  # ----------------------------------------------------------------------------
-  # make template images
-  for mod in 't1w' 't2w'; do
-    if [[ $mod == 't1w' ]]; then
-      srcdir="$t1wdir"
-      srcpre="$t1wpre"
-      srcsuf="$t1wsuf"
-    elif [[ $mod == 't2w' ]]; then
-      srcdir="$t2wdir"
-      srcpre="$t2wpre"
-      srcsuf="$t2wsuf"
-    fi
-    if [[ $mod == 't2w' ]] && [ -z "$srcdir" ]; then
-      srcdir="$imgdir"
-      srcpre="$imgpre"
-      srcsuf="$imgsuf"
-    fi
-    if [ -n "$srcdir" ]; then
-      begin_dag "make_${mod}_templates" -parent "make_dofs" -splice
-        for t in ${timepoints[@]}; do
+    # --------------------------------------------------------------------------
+    # make tissue probability maps
+    if [ -n "$lbldir" ]; then
+      inpdir="$(dirname  "$lbldir/${clspre}id")"
+      prefix="$(basename "$lbldir/${clspre}id")"
+      prefix="${prefix:0:${#prefix}-2}"
+      if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+        begin_dag 'make_tissue_pbmaps' -parent "$prev_node" -splice
 
-          if [ -n "$defdofs" ]; then
-            dofin2="$defdofs/t$t"
-            dofin3="$defdofs/t$t"
-          else
-            dofin2=""
-            dofin3=""
-          fi
+          for t in ${timepoints[@]}; do
 
-          average_images_node "average_$t" \
-              -sublst    "$kernel/$krnpre${t}.$krnext" \
-              -imgdir    "$srcdir" \
-              -imgpre    "$srcpre" \
-              -imgsuf    "$srcsuf" \
-              -refid     "$nrmref" \
-              -refdir    "$nrmdir" \
-              -refpre    "$nrmpre" \
-              -refsuf    "$nrmsuf" \
-              -dofin1    "$nrmdofs" \
-              -dofin2    "$dofin2" -dofinv2 "$definvs" \
-              -dofin3    "$dofin3" -dofid3 "$resdof" \
-              -output    "$outdir/average/$mod/t$t.nii.gz" \
-              -padding   "$bgvalue" \
-              -threshold "$threshold" \
-              -normalize "$normalization" \
-              -rescale   "$rescaling" \
-              -sharpen   "$sharpen"
+            if [ -n "$defdofs" ]; then
+              dofin2="$defdofs/t$t"
+              dofin3="$defdofs/t$t"
+            else
+              dofin2=""
+              dofin3=""
+            fi
 
-          transform_image_node "transform_$t" -parent "average_$t" \
-              -srcdir "$outdir/average/$mod" \
-              -srcpre "" \
-              -srcid  "t$t" \
-              -srcsuf ".nii.gz" \
-              -tgtid  "$nrmref" \
-              -tgtdir "$nrmdir" \
-              -tgtpre "$nrmpre" \
-              -tgtsuf "$nrmsuf" \
-              -dofin1 "$outdir/dofs" -dofid1 "t$t" -dofsuf ".dof" -invert \
-              -outdir "$outdir/templates/$mod"
+            l=1
+            while [ $l -le $tissues ]; do
 
-        done
-
-        unset -v dofin2 dofin3
-      end_dag
-    fi
-
-    unset -v srcdir srcpre srcsuf
-  done
-
-  # ----------------------------------------------------------------------------
-  # make tissue probability maps
-  if [ -n "$lbldir" ]; then
-    inpdir="$(dirname  "$lbldir/${clspre}id")"
-    prefix="$(basename "$lbldir/${clspre}id")"
-    prefix="${prefix:0:${#prefix}-2}"
-    if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
-      begin_dag 'make_tissue_pbmaps' -parent "$prev_node" -splice
-
-        for t in ${timepoints[@]}; do
-
-          if [ -n "$defdofs" ]; then
-            dofin2="$defdofs/t$t"
-            dofin3="$defdofs/t$t"
-          else
-            dofin2=""
-            dofin3=""
-          fi
-
-          l=1
-          while [ $l -le $tissues ]; do
-
-            average_images_node "make_tissue_pbmaps_${l}_${t}" \
-                -sublst "$kernel/$krnpre${t}.$krnext" \
-                -imgdir "$inpdir" \
-                -imgpre "$prefix" \
-                -imgsuf "$clssuf" \
-                -refid  "$nrmref" \
-                -refdir "$nrmdir" \
-                -refpre "$nrmpre" \
-                -refsuf "$nrmsuf" \
-                -dofin1 "$nrmdofs" \
-                -dofin2 "$dofin2" -dofinv2 "$definvs" \
-                -dofin3 "$dofin3" -dofid3 "$resdof" \
-                -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
-                -label "$l" -rescale "0 100" -dtype uchar
-     
-            let l++
+              average_images_node "make_tissue_pbmaps_${l}_${t}" \
+                  -sublst "$kernel/$krnpre${t}.$krnext" \
+                  -imgdir "$inpdir" \
+                  -imgpre "$prefix" \
+                  -imgsuf "$clssuf" \
+                  -refid  "$nrmref" \
+                  -refdir "$nrmdir" \
+                  -refpre "$nrmpre" \
+                  -refsuf "$nrmsuf" \
+                  -dofin1 "$nrmdofs" \
+                  -dofin2 "$dofin2" -dofinv2 "$definvs" \
+                  -dofin3 "$dofin3" -dofid3 "$resdof" \
+                  -output "$outdir/pbmaps/t$t/tissue_$l.nii.gz" \
+                  -label "$l" -rescale "0 100" -dtype uchar
+       
+              let l++
+            done
           done
-        done
 
-        unset -v dofin2 dofin3
-      end_dag
+          unset -v dofin2 dofin3
+        end_dag
+      fi
     fi
-  fi
 
-  # ----------------------------------------------------------------------------
-  # make structural probability maps
-  if [ -n "$lbldir" ]; then
-    inpdir="$(dirname  "$lbldir/${lblpre}id")"
-    prefix="$(basename "$lbldir/${lblpre}id")"
-    prefix="${prefix:0:${#prefix}-2}"
-    if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
-      begin_dag 'make_structural_pbmaps' -parent "$prev_node" -splice
+    # --------------------------------------------------------------------------
+    # make structural probability maps
+    if [ -n "$lbldir" ]; then
+      inpdir="$(dirname  "$lbldir/${lblpre}id")"
+      prefix="$(basename "$lbldir/${lblpre}id")"
+      prefix="${prefix:0:${#prefix}-2}"
+      if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+        begin_dag 'make_structural_pbmaps' -parent "$prev_node" -splice
 
-        for t in ${timepoints[@]}; do
+          for t in ${timepoints[@]}; do
 
-          if [ -n "$defdofs" ]; then
-            dofin2="$defdofs/t$t"
-            dofin3="$defdofs/t$t"
-          else
-            dofin2=""
-            dofin3=""
-          fi
+            if [ -n "$defdofs" ]; then
+              dofin2="$defdofs/t$t"
+              dofin3="$defdofs/t$t"
+            else
+              dofin2=""
+              dofin3=""
+            fi
 
-          l=1
-          while [ $l -le $structures ]; do
+            l=1
+            while [ $l -le $structures ]; do
 
-            average_images_node "make_structural_pbmaps_${l}_${t}" \
-                -sublst "$kernel/$krnpre${t}.$krnext" \
-                -imgdir "$inpdir" \
-                -imgpre "$prefix" \
-                -imgsuf "$lblsuf" \
-                -refid  "$nrmref" \
-                -refdir "$nrmdir" \
-                -refpre "$nrmpre" \
-                -refsuf "$nrmsuf" \
-                -dofin1 "$nrmdofs" \
-                -dofin2 "$dofin2" -dofinv2 "$definvs" \
-                -dofin3 "$dofin3" -dofid3 "$resdof" \
-                -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
-                -label "$l" -rescale "0 100" -dtype uchar
-     
-            let l++
+              average_images_node "make_structural_pbmaps_${l}_${t}" \
+                  -sublst "$kernel/$krnpre${t}.$krnext" \
+                  -imgdir "$inpdir" \
+                  -imgpre "$prefix" \
+                  -imgsuf "$lblsuf" \
+                  -refid  "$nrmref" \
+                  -refdir "$nrmdir" \
+                  -refpre "$nrmpre" \
+                  -refsuf "$nrmsuf" \
+                  -dofin1 "$nrmdofs" \
+                  -dofin2 "$dofin2" -dofinv2 "$definvs" \
+                  -dofin3 "$dofin3" -dofid3 "$resdof" \
+                  -output "$outdir/pbmaps/t$t/structure_$l.nii.gz" \
+                  -label "$l" -rescale "0 100" -dtype uchar
+       
+              let l++
+            done
           done
-        done
 
-        unset -v dofin2 dofin3
-      end_dag
+          unset -v dofin2 dofin3
+        end_dag
+      fi
     fi
-  fi
+
+  fi # finalize?
 
 end_dag

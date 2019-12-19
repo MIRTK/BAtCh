@@ -42,7 +42,7 @@ refdir="etc/reference"
 refpre=""
 refsuf=".nii.gz"
 refid="schuh-t40"
-refini=true
+refini=false
 
 # regression
 means=({29..44})

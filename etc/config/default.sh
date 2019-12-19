@@ -82,6 +82,8 @@ refine=10                             # no. of subject to template deformation r
 inclbg=false                          # whether to include background during deformable registration
 interpolation="Linear"                # image interpolation mode
 [[ $inclbg == true ]] || interpolation="$interpolation with padding"
+finalize=true                         # whether to create output atlas files
+                                      # false: only perform registrations to compute transformations
 
 # temporal kernel regression parameters
 epsilon=0.001                         # kernel weight threshold
