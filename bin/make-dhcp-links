@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+
+"""
+Create symbolic links for input files that do not match prefix + subid + suffix name pattern.
+
+Used to create symbolic links for the input images from the dHCP derived data from 2019.
+"""
+
+import argparse
+import os
+from typing import List
+
+
+t1wdir = "input/images/t1w"
+t2wdir = "input/images/t2w"
+lbldir = "input/labels/structures"
+clsdir = "input/labels/tissues"
+
+t1wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T1w_restore_brain.nii.gz"
+t2wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T2w_restore_brain.nii.gz"
+lblsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_drawem_all_labels.nii.gz"
+clssrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_drawem_tissue_labels.nii.gz"
+
+
+def make_link(src, dst):
+    if not os.path.exists(dst):
+        assert os.path.exists(src)
+        os.symlink(src, dst)
+
+
+def make_links(derivatives_dirs: List[str], participant_id: str, session_id: str):
+    """Create symbolic links for given subject ID."""
+    for src, dst in zip([t1wsrc, t2wsrc, lblsrc, clssrc], [t1wdir, t2wdir, lbldir, clsdir]):
+        missing = True
+        for derivatives_dir in derivatives_dirs:
+            path = src.format(
+                derivatives_dir=derivatives_dir,
+                participant_id=participant_id,
+                session_id=session_id
+            )
+            if os.path.exists(path):
+                make_link(path, dst + "/" + participant_id + "-" + session_id + ".nii.gz")
+                missing = False
+        if missing:
+            print("Missing: participant_id={}, session_id={}, src={}".format(participant_id, session_id, src))
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("derivatives_dir", help="The 'derivatives' directory containing dHCP structural pipeline output", nargs="+")
+parser.add_argument("--subjects", help="Text file with subject IDs", required=True)
+args = parser.parse_args()
+
+for path in (t1wdir, t2wdir, lbldir, clsdir):
+    os.makedirs(path, exist_ok=True)
+
+with open(args.subjects, "tr") as fp:
+    for subid in fp.readlines():
+        subid = subid.strip()
+        if not subid:
+            continue
+        participant_id, session_id = subid.split("-")
+        make_links(args.derivatives_dir, participant_id, session_id)
