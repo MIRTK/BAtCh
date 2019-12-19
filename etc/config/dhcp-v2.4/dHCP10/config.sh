@@ -6,6 +6,9 @@
 
 set_pardir_from_file_path "$BASH_SOURCE"
 
+# registration parameters
+source "$pardir/../params.sh"
+
 # input
 agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
