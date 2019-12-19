@@ -119,7 +119,7 @@ tmpdir="../temp"                      # directory of intermediate average images
 # HTCondor settings
 notify_user=""
 notification="Error"
-requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 14'
+requirements='Arch == "X86_64" && OpSysShortName == "Ubuntu" && OpSysMajorVer >= 16'
 log="progress.log"
 
 # utility function to set pardir in custom configuration
