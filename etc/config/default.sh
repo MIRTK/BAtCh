@@ -1,18 +1,25 @@
 # MIRTK installation
-if [ -z "$MIRTK_DIR" ]; then
-  MIRTK_DIR=`which mirtk`
-  if [ $? -ne 0 ]; then
-    echo "Could not find MIRTK, either set PATH or MIRTK_DIR in $BASH_SOURCE" 1>&2
-    exit 1
+mirtk="$appdir/bin/mirtk"  # MIRTK AppImage downloaded from bintray with executable bit set
+if [ ! -x "$mirtk" ]; then
+  mirtk=
+fi
+if [ -z "$mirtk" ]; then
+  if [ -z "$MIRTK_DIR" ]; then
+    MIRTK_DIR=`which mirtk`
+    if [ $? -ne 0 ]; then
+      echo "Could not find MIRTK, either set PATH or MIRTK_DIR in $BASH_SOURCE" 1>&2
+      exit 1
+    fi
+    MIRTK_DIR="$(cd "$(dirname "$MIRTK_DIR")"/.. && pwd)"
   fi
-  MIRTK_DIR="$(cd "$(dirname "$MIRTK_DIR")"/.. && pwd)"
+  PATH="$MIRTK_DIR/lib/tools:$MIRTK_DIR/lib/mirtk/tools:$PATH"
+  LD_LIBRARY_PATH="$MIRTK_DIR/lib:$MIRTK_DIR/lib/mirtk:$LD_LIBRARY_PATH"
+  PYTHONPATH="$MIRTK_DIR/lib/python:$PYTHONPATH"
 fi
 
-PATH="$appdir/bin:$MIRTK_DIR/lib/tools:$MIRTK_DIR/lib/mirtk/tools:$PATH"
-LD_LIBRARY_PATH="$appdir/lib:$MIRTK_DIR/lib:$MIRTK_DIR/lib/mirtk:$LD_LIBRARY_PATH"
-PYTHONPATH="$MIRTK_DIR/lib/python:$PYTHONPATH"
-
-export PATH LD_LIBRARY_PATH PYTHONPATH
+export PATH="$appdir/bin:$PATH"
+export LD_LIBRARY_PATH="$appdir/lib:$LD_LIBRARY_PATH"
+export PYTHONPATH="$appdir/lib/python:$PYTHONPATH"
 
 
 # input settings

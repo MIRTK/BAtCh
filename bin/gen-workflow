@@ -140,11 +140,16 @@ read_sublst subids "$sublst"
 cd "$topdir" || error "Failed to change to working directory!"
 
 if [ $verbose -gt 0 ]; then
-  echo "No. of subjects/images   = ${#subids[@]}"
-  echo "Atlas time points        = ${timepoints[@]}"
-  echo "Temporal kernel sigma    = $sigma"
-  echo "Temporal kernel weights  = $kernel"
-  echo "Update existing workflow = $update"
+  if [ -n "$mirtk" ]; then
+    echo "MIRTK AppImage binary     = $mirtk"
+  else
+    echo "MIRTK installation prefix = $MIRTK_DIR"
+  fi
+  echo "No. of subjects/images      = ${#subids[@]}"
+  echo "Atlas time points           = ${timepoints[@]}"
+  echo "Temporal kernel sigma       = $sigma"
+  echo "Temporal kernel weights     = $kernel"
+  echo "Update existing workflow    = $update"
 fi
 
 # ==============================================================================

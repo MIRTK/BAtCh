@@ -54,8 +54,14 @@ init_dof_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
-    # create generic dofinit submission script
+    local exe="init-dof"
     local sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+
+    # create generic dofinit submission script
     if [ -n "$dofid" ]; then sub="$sub '$dofdir/$dofid$dofsuf'"
     else                     sub="$sub '$dofdir/\$(id)$dofsuf'"; fi
     if [ -n "$dofid" ]; then sub="$sub -approximate '$dofins/$dofid$dofsuf'"
@@ -69,7 +75,7 @@ init_dof_node()
       sub="$sub\nerror     = $_dagdir/dofini_\$(id).log"
     fi
     sub="$sub\nqueue"
-    make_sub_script "dofini.sub" "$sub" -executable init-dof
+    make_sub_script "dofini.sub" "$sub" -executable "$exe"
 
     # node to create output directories
     local deps=()
@@ -311,6 +317,10 @@ register_node()
         optarg w $1 "$2"
         params="$params\nBending energy weight = $w"
         shift; ;;
+      -le|-elasticity)
+        optarg w $1 "$2"
+        params="$params\nLinear energy weight = $w"
+        shift; ;;
       -vp|-volume)
         optarg w $1 "$2"
         params="$params\nVolume preservation weight = $w"
@@ -441,13 +451,16 @@ register_node()
   # add SUBDAG node
   info "Adding node $node (N=$N)..."
   begin_dag $node -splice || {
+  
+    local exe
+    local sub
 
     # registration parameters
     local cfg="[default]"
     cfg="$cfg\nTransformation model             = $model"
     cfg="$cfg\nMulti-level transformation       = $mffd"
     cfg="$cfg\nImage interpolation mode         = $interp"
-    cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy](T) + 0 VP[Volume preservation](T) + 0 JAC[Jacobian penalty](T)"
+    cfg="$cfg\nEnergy function                  = $fidelity + 0 BE[Bending energy](T) + 0 LE[Linear energy](T) + 0 VP[Volume preservation](T) + 0 JAC[Jacobian penalty](T)"
     cfg="$cfg\nSimilarity measure               = $similarity"
     cfg="$cfg\nNo. of bins                      = $bins"
     cfg="$cfg\nLocal window radius [box]        = $radius vox"
@@ -512,7 +525,15 @@ register_node()
     write "$parin" "$cfg\n"
 
     # create generic register command script
-    local sub="arguments    = \"-model '$model' -threads $threads"
+    exe="$register_tool"
+    sub="arguments    = \""
+    if [[ $register_tool == 'register' ]]; then
+      if [ -n "$mirtk" ]; then
+        sub="$sub$exe"
+        exe="$mirtk"
+      fi
+    fi
+    sub="$sub -model '$model' -threads $threads"
     [ -z "$domain" ] || sub="$sub -mask '$domain'"
     sub="$sub -parin '$parin'"
     if [ -n "$tgtid" -a -n "$srcid" ]; then
@@ -615,16 +636,22 @@ register_node()
       sub="$sub\nerror        = $_dagdir/\$(target)/reg_\$(source).log"
     fi
     sub="$sub\nqueue"
-    make_sub_script "register.sub" "$sub" -executable "$register_tool"
+    make_sub_script "register.sub" "$sub" -executable "$exe"
 
     # create generic dofinvert submission script
     if [[ $ic == true ]] && [ -z "$tgtid$srcid" ] ; then
       # command used to invert inverse-consistent transformation
-      local sub="arguments    = \"'$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
+      exe="invert-dof"
+      sub="arguments    = \""
+      if [ -n "$mirtk" ]; then
+        sub="$sub$exe"
+        exe="$mirtk"
+      fi
+      sub="$sub '$dofdir/\$(target)/\$(source)$dofsuf' '$dofdir/\$(source)/\$(target)$dofsuf'\""
       sub="$sub\noutput       = $_dagdir/\$(target)/inv_\$(source).log"
       sub="$sub\nerror        = $_dagdir/\$(target)/inv_\$(source).log"
       sub="$sub\nqueue"
-      make_sub_script "invert.sub" "$sub" -executable invert-dof
+      make_sub_script "invert.sub" "$sub" -executable "$exe"
     fi
 
     # job to create output directories
@@ -1026,6 +1053,7 @@ transform_image_node()
   begin_dag $node -splice || {
 
     local sub
+    local exe
 
     # source transformations
     local dofins=()
@@ -1044,7 +1072,12 @@ transform_image_node()
     fi
 
     # create generic transformation submission script
+    exe="transform-image"
     sub="arguments    = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$exe"
+    fi
     sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
     sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
     [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
@@ -1071,11 +1104,16 @@ transform_image_node()
     sub="$sub\noutput       = $_dagdir/${subdir}transform_\$(source).log"
     sub="$sub\nerror        = $_dagdir/${subdir}transform_\$(source).log"
     sub="$sub\nqueue"
-    make_sub_script "transform.sub" "$sub" -executable transform-image
+    make_sub_script "transform.sub" "$sub" -executable "$exe"
 
     # create generic resample submission script
     if [[ $resample == true ]] && [ -z "$tgtid" -o -z "$srcid" ]; then
+      exe="transform-image"
       sub="arguments    = \""
+      if [ -n "$mirtk" ]; then
+        sub="$sub$exe"
+        exe="$mirtk"
+      fi
       sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
       sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
       [ -z "$hdrdofs" ] || sub="$sub -source-affdof '$hdrdofs/\$(source)$dofsuf'"
@@ -1089,7 +1127,7 @@ transform_image_node()
       sub="$sub\noutput       = $_dagdir/${subdir}resample_\$(source).log"
       sub="$sub\nerror        = $_dagdir/${subdir}resample_\$(source).log"
       sub="$sub\nqueue"
-      make_sub_script "resample.sub" "$sub" -executable transform-image
+      make_sub_script "resample.sub" "$sub" -executable "$exe"
     fi
 
     # job to create output directories
@@ -1282,8 +1320,16 @@ evaluate_overlap_node()
   info "Adding node $node... (n=$N)"
   begin_dag $node -splice || {
 
+    local exe
+    local sub
+
     # create generic evaluate-overlap submission script
-    local sub="arguments    = \""
+    exe="evaluate-overlap"
+    sub="arguments    = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
     if [ -n "$tgtid" ]; then
       sub="$sub '$tgtdir/$tgtpre$tgtid$tgtsuf'"
       if [ -n "$table" ]; then
@@ -1325,11 +1371,16 @@ evaluate_overlap_node()
       sub="$sub\nerror        = $_dagdir/evaluate_\$(target),\$(source).log"
     fi
     sub="$sub\nqueue"
-    make_sub_script "evaluate.sub" "$sub" -executable evaluate-overlap
+    make_sub_script "evaluate.sub" "$sub" -executable "$exe"
 
     # script to average overlap measures
     if [ -z "$tgtid" -a -n "$table" ]; then
-      local sub="arguments    = \""
+      exe="average-overlap"
+      sub="arguments    = \""
+      if [ -n "$mirtk" ]; then
+        sub="$sub$exe"
+        exe="$mirtk"
+      fi
       if [[ $tgtsub == true ]]; then
         for id1 in "${ids[@]}"; do
         for id2 in "${ids[@]}"; do
@@ -1350,7 +1401,7 @@ evaluate_overlap_node()
       sub="$sub\noutput       = $_dagdir/average.log"
       sub="$sub\nerror        = $_dagdir/average.log"
       sub="$sub\nqueue"
-      make_sub_script "average.sub" "$sub" -executable average-overlap
+      make_sub_script "average.sub" "$sub" -executable "$exe"
     fi
 
     # job to create output directories
@@ -1513,15 +1564,24 @@ invert_dof_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
+    local exe
+    local sub
+
     # read IDs from specified text file
     [ ${#ids[@]} -gt 0 ] || read_sublst ids "$idlst"
 
     # create generic invert-dof submission script
-    local sub="arguments = \"'$dofins/\$(id).dof.gz' '$dofdir/\$(id).dof.gz' -threads $threads\""
+    exe="invert-dof"
+    sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+    sub="$sub '$dofins/\$(id).dof.gz' '$dofdir/\$(id).dof.gz' -threads $threads\""
     sub="$sub\noutput    = $_dagdir/invert_\$(id).log"
     sub="$sub\nerror     = $_dagdir/invert_\$(id).log"
     sub="$sub\nqueue"
-    make_sub_script "invert.sub" "$sub" -executable invert-dof
+    make_sub_script "invert.sub" "$sub" -executable "$exe"
 
     # node to create output directories
     local deps=()
@@ -1622,6 +1682,9 @@ average_dofs_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
+    local exe
+    local sub
+
     # weights of input transformations
     if [ -z "$doflst" ]; then
       [ ${#ids[@]} -gt 0 ] || error "average_dofs_node: missing -subjects or -doflst argument"
@@ -1634,23 +1697,28 @@ average_dofs_node()
     fi
 
     # create generic dofaverage submission script
-    local sub="arguments = \""
+    exe="average-dofs"
+    sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
     if [ -n "$dofid" ]; then
-      sub="$sub'$dofdir/$outpre$dofid$outsuf' $options -threads $threads"
+      sub="$sub '$dofdir/$outpre$dofid$outsuf' $options -threads $threads"
       sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
       sub="$sub\""
       sub="$sub\noutput    = $_dagdir/dofavg_$dofid.log"
       sub="$sub\nerror     = $_dagdir/dofavg_$dofid.log"
     else
       [ -n "$dofpre" ] || dofpre='$(id)/'
-      sub="$sub'$dofdir/$outpre\$(id)$outsuf' $options -threads $threads -add-identity-for-dofname '\$(id)'"
+      sub="$sub '$dofdir/$outpre\$(id)$outsuf' $options -threads $threads -add-identity-for-dofname '\$(id)'"
       sub="$sub -dofdir '$dofins' -dofnames '$doflst' -prefix '$dofpre' -suffix '$dofsuf'"
       sub="$sub\""
       sub="$sub\noutput    = $_dagdir/dofavg_\$(id).log"
       sub="$sub\nerror     = $_dagdir/dofavg_\$(id).log"
     fi
     sub="$sub\nqueue"
-    make_sub_script "dofavg.sub" "$sub" -executable average-dofs
+    make_sub_script "dofavg.sub" "$sub" -executable "$exe"
 
     # node to create output directories
     local deps=()
@@ -1778,14 +1846,23 @@ compose_dofs_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
+    local exe
+    local sub
+
     # create generic dofcombine submission script
-    local sub="arguments = \"'$dofin1/$dofid1$dofsuf' '$dofin2/$dofid2$dofsuf'"
+    exe="compose-dofs"
+    sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+    sub="$sub '$dofin1/$dofid1$dofsuf' '$dofin2/$dofid2$dofsuf'"
     [ -z "$dofin3" ] || sub="$sub '$dofin3/$dofid3$dofsuf'"
     sub="$sub '$dofdir/$dofid$dofsuf' $options -threads $threads\""
     sub="$sub\noutput    = $_dagdir/compose_${dofid//\//,}.log"
     sub="$sub\nerror     = $_dagdir/compose_${dofid//\//,}.log"
     sub="$sub\nqueue"
-    make_sub_script "compose.sub" "$sub" -executable compose-dofs
+    make_sub_script "compose.sub" "$sub" -executable "$exe"
 
     # node to create output directories
     local deps=()
@@ -2031,6 +2108,9 @@ average_images_node()
   info "Adding node $node..."
   begin_dag $node -splice || {
 
+    local exe
+    local sub
+
     # write image list with optional transformations and weights
     local imglst="$_dagdir/images.csv"
     local images="$topdir\n"
@@ -2107,12 +2187,18 @@ average_images_node()
     fi
 
     # add average node to DAG
-    local sub="arguments = \"'$average' -v -images '$imglst' -threshold $threshold -delim , -threads $threads $options\""
+    exe="average-images"
+    sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+    sub="$sub '$average' -v -images '$imglst' -threshold $threshold -delim , -threads $threads $options\""
     [ -z "$stdev" ] || sub="$sub -stdev '$stdev'"
     sub="$sub\noutput    = $_dagdir/average.log"
     sub="$sub\nerror     = $_dagdir/average.log"
     sub="$sub\nqueue"
-    add_node "average" -sub "$sub" -executable average-images
+    add_node "average" -sub "$sub" -executable "$exe"
     for dep in ${deps[@]}; do
       add_edge "average" "$dep"
     done
@@ -2178,7 +2264,13 @@ aggregate_images_node()
   begin_dag $node -splice || {
 
     # create aggregate-images submission script
-    local sub="arguments = \"$mode"
+    local exe="aggregate-images"
+    local sub="arguments = \""
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+    sub="$sub $mode"
     for id in ${ids[@]}; do
       sub="$sub '$imgdir/$imgpre${id}$imgsuf'"
     done
@@ -2191,7 +2283,7 @@ aggregate_images_node()
     sub="$sub\noutput    = $_dagdir/aggregate_images.log"
     sub="$sub\nerror     = $_dagdir/aggregate_images.log"
     sub="$sub\nqueue"
-    make_sub_script "aggregate_images.sub" "$sub" -executable aggregate-images
+    make_sub_script "aggregate_images.sub" "$sub" -executable "$exe"
 
     # node to create output directory
     local deps=()
@@ -2284,8 +2376,13 @@ edit_image_node()
   begin_dag $node -splice || {
 
     # create generic edit-image submission script
+    local exe="edit-image"
     local sub="arguments = \""
-    sub="$sub'$imgdir/$imgpre\$(id)$imgsuf' '$outdir/$outpre\$(id)$outsuf' -threads $threads"
+    if [ -n "$mirtk" ]; then
+      sub="$sub$exe"
+      exe="$mirtk"
+    fi
+    sub="$sub '$imgdir/$imgpre\$(id)$imgsuf' '$outdir/$outpre\$(id)$outsuf' -threads $threads"
     if [ -n "$dofins" ]; then
       local dofopt='-dofin'
       [[ $sform == false ]] || dofopt='-putdof'
@@ -2299,7 +2396,7 @@ edit_image_node()
     sub="$sub\noutput    = $_dagdir/edit_image_\$(id).log"
     sub="$sub\nerror     = $_dagdir/edit_image_\$(id).log"
     sub="$sub\nqueue"
-    make_sub_script "edit_image.sub" "$sub" -executable edit-image
+    make_sub_script "edit_image.sub" "$sub" -executable "$exe"
 
     # node to create output directories
     local deps=()
