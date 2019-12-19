@@ -3,6 +3,7 @@
 /bin/compose-dofs
 /bin/invert-dof
 /bin/register
+/bin/mirtk
 /dag/
 /log/
 /seg/
