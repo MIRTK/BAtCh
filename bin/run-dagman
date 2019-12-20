@@ -5,7 +5,7 @@
 topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
 cd "$topdir" || exit 1
 
-workflow=$1
+workflow="$1"
 shift
 
 if [[ "${workflow:0:4}" == 'dag/' ]]; then
@@ -15,8 +15,17 @@ if [[ "${workflow:${#workflow}-4:4}" == '.dag' ]]; then
   task="$(basename "${workflow:0:-4}")"
   workflow="$(dirname "$workflow")"
 else
-  task="$2"
+  task="$1"
   shift
+fi
+
+if [ -z "$workflow" ]; then
+  echo "<dag> or <workflow> <task> argument required" 1>&2
+  exit 1
+fi
+if [ -z "$task" ]; then
+  echo "<dag> or <workflow> <task> argument required" 1>&2
+  exit 1
 fi
 
 i="$1"

@@ -44,7 +44,11 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$log" ] || log="dagman.log"
 [ -n "$dag" ] || dag='main'
-[ -f "$dag" ] || dag="dag/$dag.dag"
+[ -f "$dag" ] || {
+  if [[ "${dag:${#dag}-4:4}" != '.dag' ]]; then
+    dag="dag/$dag.dag"
+  fi
+}
 [ -f "$dag" ] || error "DAG file does not exist: $dag\nRun setup before to generate the DAG file(s)."
 
 if [ $log = '/' ]; then
