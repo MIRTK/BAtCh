@@ -6,7 +6,7 @@ set_pardir_from_file_path "$BASH_SOURCE"
 agelst="$pardir/ages.csv"
 sublst="$pardir/subjects.lst"
 
-input_dir="/vol/dhcp-derived-data/volumetric-atlases/groupwise-v2/input"
+input_dir="/vol/dhcp-derived-data/volumetric-atlases/workspace/input"
 
 t1wdir="$input_dir/images/t1w"
 t1wpre=""
