@@ -1076,7 +1076,7 @@ transform_image_node()
     sub="arguments    = \""
     if [ -n "$mirtk" ]; then
       sub="$sub$exe"
-      exe="$exe"
+      exe="$mirtk"
     fi
     sub="$sub '$srcdir/$srcpre\$(source)$srcsuf'"
     sub="$sub '$outdir/$subdir$outpre$outid$outsuf'"
