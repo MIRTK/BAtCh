@@ -1,9 +1,12 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 ##
-## Construct affine spatio-temporal atlas; no deformable registrations.
+## Perform unbiased global normalization.
 
 set_pardir_from_file_path "$BASH_SOURCE"
-source "$topdir/$pardir/common.sh"
+source "$topdir/$pardir/global_normalization_biased.sh"
+
+# spatial normalization
+refini=true
 
 # registration parameters
 pairwise=false
@@ -11,12 +14,12 @@ refine=0
 finalize=false
 
 # output settings
-subsubdir="affine"
-dagdir="dag/$subdir/$subsubdir"
-logdir="log/$subdir/$subsubdir"
+subdir="global_normalization_unbiased"
+dagdir="dag/$subdir"
+logdir="log/$subdir"
 log="$logdir/progress.log"
 
-resdir="out/$subdir/$subsubdir"
+resdir="out/$subdir"
 dofdir="$resdir/dofs"
 evldir="$resdir/eval"
 outdir="$resdir/atlas"
