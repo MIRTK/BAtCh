@@ -160,13 +160,13 @@ iterative_template_construction_test()
   local resdof=false
   local n=1
 
-  begin_dag "$name" -parent "$parent" -splice
+  begin_dag "$name" -splice
 
     begin_dag 'calc_dofs' -splice
 
       while [ $n -le $refine ]; do
 
-        nxtdofs="$outdir/$name/dofs/$n"
+        nxtdofs="$outdir/$name/temp/dofs/2.$n"
 
         # update template images
         average_images_node "make_template_$n" -parent "$prev_node" \
@@ -411,7 +411,7 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
 
   # ----------------------------------------------------------------------------
   # iterative template constructions with different regularization weights  
-  begin_dag "grid_search" -splice
+  begin_dag "grid_search" -parent "make_average" -splice
 
     mffd='None'
     model='SVFFD'
@@ -422,33 +422,37 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
     bins=64
 
     for spacing in 2.0; do
-    for jacobian in 1e-5 1e-6 0e-0; do
-    for bending in 1e-2 7e-3 5e-3 3e-3 1e-3 7e-4 5e-4 3e-4 1e-4; do
-    for elasticity in 5e-1 1e-1 5e-2 1e-2 5e-3 1e-3 1e-4 5e-5 1e-5 0e-0; do
-
-      elasticity_mu=1
-      for elasticity_lambda in 0.0 1.5; do
-
-        let i++
-        name="params_$(printf %03d $i)"
-        echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-        iterative_template_construction_test "$name" "make_average" \
-            -model "$model" \
-            -mffd "$mffd" \
-            -similarity "$sim" \
-            -bins "$bins" \
-            -spacing "$spacing" \
-            -bending "$bending" \
-            -elasticity "$elasticity" \
-            -elasticity-lambda "$elasticity_lambda" \
-            -elasticity-mu "$elasticity_mu" \
-            -jacobian "$jacobian" \
-            -symmetric "$symmetric" \
-            -interp "$interp" \
-            -inclbg "$inclbg"
-
+      for jacobian in 1e-5 1e-6 0e-0; do
+        for bending in 1e-2 7e-3 5e-3 3e-3 1e-3 7e-4 5e-4 3e-4 1e-4; do
+          for elasticity in 5e-1 1e-1 5e-2 1e-2 5e-3 1e-3 1e-4 5e-5 1e-5 0e-0; do
+            elasticity_mu=1
+            for elasticity_lambda in 0.0 1.5; do
+              let i++
+              name="params_$(printf %03d $i)"
+              echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+              iterative_template_construction_test "$name" "make_average" \
+                  -model "$model" \
+                  -mffd "$mffd" \
+                  -similarity "$sim" \
+                  -bins "$bins" \
+                  -spacing "$spacing" \
+                  -bending "$bending" \
+                  -elasticity "$elasticity" \
+                  -elasticity-lambda "$elasticity_lambda" \
+                  -elasticity-mu "$elasticity_mu" \
+                  -jacobian "$jacobian" \
+                  -symmetric "$symmetric" \
+                  -interp "$interp" \
+                  -inclbg "$inclbg"
+            done
+            break
+          done
+          break
+        done
+        break
       done
-    done; done; done; done
+      break
+    done
 
   end_dag
 
