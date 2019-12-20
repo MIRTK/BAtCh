@@ -4,26 +4,7 @@ import os
 import vtk
 import argparse
 
-from mirtk.rendering.screenshots import slice_view, take_screenshot, auto_level_window
-
-
-def rgb(r, g, b):
-    return (r, g, b)
-
-
-color_map_points = [
-    (15., 0.),
-    (30., .4),
-    (45., .7),
-    (65., .9),
-    (100., 1.)
-]
-
-color_map_points = [
-    (15., 0.),
-    (40., .6),
-    (100., 1.)
-]
+from mirtk.rendering.screenshots import slice_axes, slice_view, take_screenshot, auto_level_window
 
 
 def read_image(fname):
@@ -143,10 +124,17 @@ def color_map(control_points, colors_lut=None):
     return lut
 
 
-def save_slice_view(path, image, index, zdir=2, size=512, **kwargs):
+def save_slice_view(path, image, index, zdir=2, size=0, **kwargs):
     """Save screenshot of images slice."""
     if isinstance(size, int):
         size = (size, size)
+    if size[0] <= 0 or size[1] <= 0:
+        size = list(size)
+        xdir, ydir = slice_axes(zdir)
+        if size[0] <= 0:
+            size[0] = image.GetDimensions()[xdir]
+        if size[1] <= 0:
+            size[1] = image.GetDimensions()[ydir]
     renderer = slice_view(image, index, width=0, height=0, zdir=zdir, **kwargs)
     window = vtk.vtkRenderWindow()
     window.SetSize(size)
@@ -175,7 +163,7 @@ if __name__ == '__main__':
     parser.add_argument('postfix', nargs='?', default='')
     parser.add_argument('-i', '--index', type=int, action='append')
     parser.add_argument('-u', '--up', dest='zdir', type=int, action='append', choices=(0, 1, 2))
-    parser.add_argument('-s', '--size', default=512, type=int)
+    parser.add_argument('-s', '--size', default=0, type=int)
     parser.add_argument('-l', '--level', type=float)
     parser.add_argument('-w', '--window', type=float)
     parser.add_argument('--interp', default="nearest")

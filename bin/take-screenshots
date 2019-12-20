@@ -38,7 +38,7 @@ coronal=(100 118 130 138 190)
 sagittal=(80 140)
 force=false
 
-opts=(-s 1024)
+opts=()
 for k in ${axial[@]}; do
   opts=(${opts[@]} -u 2 -i $k)
 done
@@ -49,7 +49,7 @@ for i in ${sagittal[@]}; do
   opts=(${opts[@]} -u 0 -i $i)
 done
 
-t2w_image_lut=(--map 0 0 --map 15 0 --map 40 .5 --map 100 1)
+image_lut=(--map 0 0 --map 15 0 --map 40 .5 --map 100 1)
 t2w_entropy_lut=(--map 0 0 --map .25 0 --map 1.5 .2 --map 3 .8 --map 4 1)
 tissues_le_lut=(--map 0 0 --map 1 1)
 structures_le_lut=(--map 0 0 --map 1 1)
@@ -60,44 +60,78 @@ echo "opts=(${opts[@]})"
 echo
 for step in ${steps[@]}; do
   echo -n "Taking screenshots of atlas $name step $step..."
-  subdir=$(printf 'i%02d' $step)
-  niidir="$outdir/cache/$subdir"
-  for t in ${ages[@]}; do
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "template-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/t2w/template/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/template-" "t${t}.png" ${t2w_image_lut[@]} ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "cgm-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/tissues/prob_2/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/cgm-" "t${t}.png" -l .5 -w 1. ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "wm-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/tissues/prob_3/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/wm-"  "t${t}.png" -l .5 -w 1. ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "mean-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/t2w/mean/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/mean-" "t${t}.png" ${t2w_image_lut[@]} ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "entropy-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/t2w/entropy/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/entropy-" "t${t}.png" ${t2w_entropy_lut[@]} ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "tissues_le-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/tissues/entropy/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/tissues_le-" "t${t}.png" ${tissues_le_lut[@]} --colors 'jet+white' ${opts[@]} \
-      || exit 1
-    fi
-    if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "structures_le-*t${t}.png" | wc -l) -eq 0 ]; then
-      "$interpreter" "$script" "$niidir/structures/entropy/t${t}.nii.gz" \
-          "$pngdir/$name/$subdir/structures_le-" "t${t}.png" ${structures_le_lut[@]} --colors 'jet+white' ${opts[@]} \
-      || exit 1
-    fi
-  done
+  if [ $step -eq 0 ]; then
+    niidir="$outdir/atlas"
+    for t in ${ages[@]}; do
+      for channel in 't1w' 't2w'; do
+        if [[ $force == true ]] || [ ! -d "$pngdir/$name/atlas" ] || [ $(find "$pngdir/$name/atlas" -name "${channel}_template-*t${t}.png" | wc -l) -eq 0 ]; then
+          "$interpreter" "$script" "$niidir/templates/$channel/t${t}.nii.gz" \
+              "$pngdir/$name/atlas/${channel}_template-" "t${t}.png" ${image_lut[@]} ${opts[@]} \
+          || exit 1
+        fi
+        if [[ $force == true ]] || [ ! -d "$pngdir/$name/atlas" ] || [ $(find "$pngdir/$name/atlas" -name "${channel}_atlas-*t${t}.png" | wc -l) -eq 0 ]; then
+          "$interpreter" "$script" "$niidir/scaled/$channel/t${t}.nii.gz" \
+              "$pngdir/$name/atlas/${channel}_atlas-" "t${t}.png" ${image_lut[@]} ${opts[@]} \
+          || exit 1
+        fi
+      done
+    done
+  else
+    subdir=$(printf 'i%02d' $step)
+    niidir="$outdir/cache/$subdir"
+    for t in ${ages[@]}; do
+      if [ -d "$niidir/t2w/scaled" ]; then
+        if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "atlas-*t${t}.png" | wc -l) -eq 0 ]; then
+          "$interpreter" "$script" "$niidir/t2w/scaled/t${t}.nii.gz" \
+              "$pngdir/$name/$subdir/atlas-" "t${t}.png" ${image_lut[@]} ${opts[@]} \
+          || exit 1
+        fi
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "template-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/t2w/template/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/template-" "t${t}.png" ${image_lut[@]} ${opts[@]} \
+        || exit 1
+      fi
+      if [ -d "$niidir/tissues/scaled" ]; then
+        for l in {1..9}; do
+          if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "tissue_${l}-*t${t}.png" | wc -l) -eq 0 ]; then
+            "$interpreter" "$script" "$niidir/tissues/scaled/prob_${l}/t${t}.nii.gz" \
+                "$pngdir/$name/$subdir/tissue_${l}-" "t${t}.png" -l .5 -w 1. ${opts[@]} \
+            || exit 1
+          fi
+        done
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "cgm-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/tissues/prob_2/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/cgm-" "t${t}.png" -l .5 -w 1. ${opts[@]} \
+        || exit 1
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "wm-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/tissues/prob_3/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/wm-"  "t${t}.png" -l .5 -w 1. ${opts[@]} \
+        || exit 1
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "mean-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/t2w/mean/t${t}-rescaled.nii.gz" \
+            "$pngdir/$name/$subdir/mean-" "t${t}.png" ${image_lut[@]} ${opts[@]} \
+        || exit 1
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "entropy-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/t2w/entropy/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/entropy-" "t${t}.png" ${t2w_entropy_lut[@]} --colors 'jet+white' ${opts[@]} \
+        || exit 1
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "tissues_le-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/tissues/entropy/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/tissues_le-" "t${t}.png" ${tissues_le_lut[@]} --colors 'jet+white' ${opts[@]} \
+        || exit 1
+      fi
+      if [[ $force == true ]] || [ ! -d "$pngdir/$name/$subdir" ] || [ $(find "$pngdir/$name/$subdir" -name "structures_le-*t${t}.png" | wc -l) -eq 0 ]; then
+        "$interpreter" "$script" "$niidir/structures/entropy/t${t}.nii.gz" \
+            "$pngdir/$name/$subdir/structures_le-" "t${t}.png" ${structures_le_lut[@]} --colors 'jet+white' ${opts[@]} \
+        || exit 1
+      fi
+    done
+  fi
   echo " done"
 done
