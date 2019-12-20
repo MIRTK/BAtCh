@@ -1,9 +1,13 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 ##
-## Perform unbiased global normalization.
+## Perform unbiased global normalization as described in Schuh (2017)
+## chapter 6.1 using pairwise affine registrations with subsequent rigid
+## alignment with reference image. This requires substantially more affine
+## registrations than the "biased" global normalization which directly
+## registers all images to the reference image.
 
 set_pardir_from_file_path "$BASH_SOURCE"
-source "$topdir/$pardir/global_normalization_biased.sh"
+source "$topdir/$pardir/global_normalization.sh"
 
 # spatial normalization
 refini=true

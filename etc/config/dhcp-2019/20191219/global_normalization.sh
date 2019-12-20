@@ -1,7 +1,8 @@
 ## See etc/config/default.sh for documentation and full list of parameters
 ##
 ## Perform global normalization by registering all T2w images to the 40 week
-## template that was created previously from 275 term-born neonatal dHCP scans.
+## template that was created previously from 275 term-born neonatal dHCP scans
+## using the unbiased global normalization approach detailed in Schuh (2017).
 
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
@@ -19,7 +20,7 @@ refine=0
 finalize=false
 
 # output settings
-subdir="global_normalization_biased"
+subdir="global_normalization"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 log="$logdir/progress.log"
