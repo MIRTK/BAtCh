@@ -1,0 +1,459 @@
+#! /bin/bash
+
+appid="$(basename "$0")"
+appdir="$(cd "$(dirname "$BASH_SOURCE")" && pwd)"
+appdir="$(cd "$appdir/.." && pwd)"
+
+source "$appdir/lib/daggen/mirtk.sh" || {
+  echo "Failed to import daggen/mirtk module!" 1>&2
+  exit 1
+}
+source "$appdir/etc/config/default.sh" || {
+  error "Failed to load default configuration"
+}
+
+# ==============================================================================
+# help
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+print_help()
+{
+  cat <<HELP
+
+usage: $appid <sublst> <refimg> <dagdir> <outdir> [options]
+
+This script generates the DAGMan worflow description used to test different
+registration parameter settings for use in the atlas construction. The DAGMan
+workflow can be directly submitted to the batch queuing system HTCondor for
+distributed parallel execution. Alternatively, the workflow can be executed
+sequentially on the local machine or submitted to another supported batch
+queuing system (e.g., SLURM) using the run-workflow script.
+
+Unlike the original gen-parameter-search workflow, this parameter search
+is based only the iterative refinement of the image to atlas deformations
+after an initial global normalization to the reference image. This template
+constructions scales linearly in the number of test input images. Similar
+parameters to those found with this search should also be suitable for
+direct registration of input image pairs, if a pairwise atlas construction
+is desired. Otherwise, these parameters may be the basis for those used
+with "mirtk construct-atlas" instead of "gen-workflow".
+
+Arguments:
+  sublst   Text file with image IDs.
+  refimg   Reference image used for global normalization.
+  dagdir   Top-level directory for DAGMan workflow files.
+  outdir   Top-level directory for workflow output files.
+
+Options:
+  -c, -config <config.sh>
+      Custom configuration file. (default: none)
+  -h, -help
+      Print help and exit.
+  -v, -verbose
+      Enable verbose output messages.
+HELP
+}
+
+# ==============================================================================
+# configuration
+# ==============================================================================
+
+[ $# -ge 4 ] || {
+  print_help
+  exit 1
+}
+
+o=0
+while [ $o -lt $# ]; do
+  case "${!o}" in
+    -c|-config)
+      let a=o+1; optarg config ${!o} "${!a}";
+      source "$config" || {
+        error "Failed to load configuration from file: $config"
+      }
+      ;;
+  esac
+  let o++
+done
+
+_lbldir="$lbldir"
+_lblpre="$lblpre"
+
+lbldir="$(dirname  "$_lbldir/${_lblpre}id")"
+lblpre="$(basename "$_lbldir/${_lblpre}id")"
+lblpre="${lblpre:0:${#lblpre}-2}"
+
+_clsdir="$lbldir"
+_clspre="$clspre"
+
+clsdir="$(dirname  "$_clsdir/${_clspre}id")"
+clspre="$(basename "$_clsdir/${_clspre}id")"
+clspre="${clspre:0:${#clspre}-2}"
+
+verbose=0
+sublst="$1"; shift
+refimg="$1"; shift
+dagdir="$1"; shift
+outdir="$1"; shift
+update=false
+
+[ -n "$sublst" ] || error "Missing sublst argument!"
+[ -n "$refimg" ] || error "Missing refimg argument!"
+[ -n "$dagdir" ] || error "Missing dagdir argument!"
+[ -n "$outdir" ] || error "Missing outdir argument!"
+read_sublst subids "$sublst"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c|-config) shift; ;; # already loaded
+    -u|-update) update=true; ;;
+    -h|-help|--help) print_help; exit 0; ;;
+    -v|-verbose) let verbose++; ;;
+    *) error "Unknown argument: $1"; ;;
+  esac
+  shift
+done
+
+refdir="$(dirname "$refimg")"
+refid="$(basename "$refimg")"
+refpre=""
+regex="(.*)((.nii|.hdr|.img)(.gz)?)$"
+if [[ $refid =~ $regex ]]; then
+  refid="${BASH_REMATCH[1]}"
+  refsuf="${BASH_REMATCH[2]}"
+else
+  error "This workflow only supports NIfTI images!"
+fi
+
+log="$dagdir/progress.log"
+
+# ==============================================================================
+# auxiliary functions
+# ==============================================================================
+
+pbmap_name_to_tissue_labels()
+{
+  local labels=()
+  case "$2" in
+    csf) labels=(1); ;;
+    wm) labels=(3); ;;
+    cgm) labels=(2); ;;
+    dgm) labels=(7 9); ;;
+    vents) labels=(5); ;;
+    bs_cb|bs+cb) labels=(6 8); ;;
+  esac
+  local "$1" && upvar $1 "${labels[@]}"
+}
+
+iterative_template_construction_test()
+{
+  local name="$1"; shift
+  local parent="$1"; shift
+  local params=("$@")
+  local refine=8
+
+  local prev_node=''
+  local defdofs=''
+  local nxtdofs=''
+  local definvs=true
+  local resdof=false
+  local n=1
+
+  begin_dag "$name" -parent "$parent" -splice
+
+    begin_dag 'calc_dofs' -splice
+
+      while [ $n -le $refine ]; do
+
+        nxtdofs="$outdir/$name/dofs/$n"
+
+        # update template images
+        average_images_node "make_template_$n" -parent "$prev_node" \
+            -subjects  "${subids[@]}" \
+            -imgdir    "$imgdir" \
+            -imgpre    "$imgpre" \
+            -imgsuf    "$imgsuf" \
+            -refid     "$nrmref" \
+            -refdir    "$nrmdir" \
+            -refpre    "$nrmpre" \
+            -refsuf    "$nrmsuf" \
+            -dofin1    "$nrmdofs" \
+            -dofin2    "$defdofs" -dofinv2 "$definvs" \
+            -dofin3    "$defdofs" -dofid3 "$resdof" \
+            -output    "$outdir/$name/temp/template_$n.nii.gz" \
+            -padding   "$bgvalue" \
+            -threshold "$threshold" \
+            -normalize "$normalization" \
+            -rescale   "$rescaling" \
+            -sharpen   "$sharpen"
+
+        # register average images to each subject (after global normalization)
+        begin_dag "reg_template_$n" -parent "make_template_$n" -splice
+
+          register_node "reg_images" \
+              -subjects          "${subids[@]}" \
+              -imgdir            "$imgdir" \
+              -imgpre            "$imgpre" \
+              -imgsuf            "$imgsuf" \
+              -tgtdir            "$outdir/$name/temp" \
+              -tgtid             "template_$n" \
+              -tgtsuf            ".nii.gz" \
+              -model             "$model" \
+              -mffd              "$mffd" \
+              -symmetric         "$symmetric" \
+              -spacing           "$spacing" \
+              -bending           "$bending" \
+              -elasticity        "$elasticity" \
+              -elasticity-lambda "$elasticity_lambda" \
+              -elasticity-mu     "$elasticity_mu" \
+              -jacobian          "$jacobian" \
+              -interp            "$interpolation" \
+              -sim               "$similarity" \
+              -bins              "$bins" \
+              -radius            "$radius" \
+              -bgvalue           "$bgvalue" \
+              -inclbg            "$inclbg" \
+              -hdrdofs           "$nrmdofs" \
+              -dofins            "identity" \
+              -dofdir            "$nxtdofs" \
+              -domain            "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+              -maxres            "$resolution" \
+              -levels            "$levels" \
+              "${params[@]}"
+
+          resdof="average"
+          average_dofs_node "average_dofs" -parent "reg_images" \
+              -subjects "${subids[@]}" \
+              -dofins   "$nxtdofs" \
+              -dofdir   "$nxtdofs" \
+              -dofid    "$resdof" \
+              -dofs
+
+        end_dag
+
+        prev_node="reg_template_$n"
+        defdofs="$nxtdofs"
+
+        let n++
+      done
+
+    end_dag
+
+    transform_image_node "transform_images_to_atlas" -parent "calc_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$defdofs" -dofinv2 \
+        -dofin3   "$defdofs" -dofid3 "$resdof" \
+        -outdir   "$outdir/$name/images" \
+        -padding  "$bgvalue" \
+        -invert
+
+    transform_image_node "transform_tissue_labels_to_atlas" -parent "calc_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$clsdir" \
+        -imgpre   "$clspre" \
+        -imgsuf   "$clssuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$defdofs" -dofinv2 \
+        -dofin3   "$defdofs" -dofid3 "$resdof" \
+        -outdir   "$outdir/$name/labels" \
+        -invert
+
+    transform_image_node "transform_all_labels_to_atlas" -parent "calc_dofs" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$lbldir" \
+        -imgpre   "$lblpre" \
+        -imgsuf   "$lblsuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofin1   "$nrmdofs" \
+        -dofin2   "$defdofs" -dofinv2 \
+        -dofin3   "$defdofs" -dofid3 "$resdof" \
+        -outdir   "$outdir/$name/labels" \
+        -invert
+
+    for mode in mean sdev entropy gini; do
+
+      aggregate_images_node "compute_$mode" -parent "transform_images_to_atlas" \
+          -subjects  "${subids[@]}" \
+          -mode      "$mode" \
+          -imgdir    "$outdir/$name/images" \
+          -imgpre    "$imgpre" \
+          -imgsuf    "$imgsuf" \
+          -output    "$outdir/$name/stats/$mode.nii.gz" \
+          -normalize "z-score" \
+          -padding   "$bgvalue"
+
+    done
+
+    aggregate_images_node "compute_tissue_consistency" -parent "transform_tissue_labels_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "label-consistency" \
+        -imgdir    "$outdir/$name/labels" \
+        -imgpre    "$clspre" \
+        -imgsuf    "$clssuf" \
+        -output    "$outdir/$name/stats/tissue_consistency.nii.gz"
+
+    aggregate_images_node "compute_structure_consistency" -parent "transform_all_labels_to_atlas" \
+        -subjects  "${subids[@]}" \
+        -mode      "label-consistency" \
+        -imgdir    "$outdir/$name/labels" \
+        -imgpre    "$lblpre" \
+        -imgsuf    "$lblsuf" \
+        -output    "$outdir/$name/stats/structure_consistency.nii.gz"
+
+  end_dag
+}
+
+# ==============================================================================
+# workflow
+# ==============================================================================
+
+begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
+
+  dofdir="$outdir/global/dofs"
+
+  # ----------------------------------------------------------------------------
+  # global normalization (translation, rotation, and scale)
+  begin_dag "normalization" -splice
+
+      register_node "rigid" \
+          -subjects "${subids[@]}" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofdir   "$dofdir/1.1_ini" \
+          -model    "Similarity" \
+          -interp   "$interpolation" \
+          -sim      "NMI" \
+          -bins     "64" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   true \
+          -maxres   "$resolution" \
+          -segdir   "$segdir" \
+          -segmsk   "bs+cb" .33 \
+          -levels   4 2
+
+      register_node "affine" -parent "rigid" \
+          -subjects "${subids[@]}" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofins   "$dofdir/1.1_ini" \
+          -dofdir   "$dofdir/1.2_ref" \
+          -model    "Affine" \
+          -par      "Allow shearing" No \
+          -interp   "$interpolation" \
+          -sim      "NMI" \
+          -bins     "64" \
+          -bgvalue  "$bgvalue" \
+          -maxres   "$resolution" \
+          -levels   3 1
+
+      invert_dof_node "invert" -parent "affine" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.2_ref" \
+          -dofdir   "$dofdir/1.3_inv"
+
+      nrmdofs="$dofdir/1.3_inv"
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # generate population specific reference image/mask
+  nrmdir="$outdir/global/average"
+  nrmref="linear"
+  nrmpre=""
+  nrmsuf=".nii.gz"
+
+  average_images_node "make_average" -parent "normalization" \
+      -subjects  "${subids[@]}" \
+      -refdir    "$refdir" \
+      -refpre    "$refpre" \
+      -refid     "$refid" \
+      -refsuf    "$refsuf" \
+      -imgdir    "$imgdir" \
+      -imgpre    "$imgpre" \
+      -imgsuf    "$imgsuf" \
+      -dofdir    "$nrmdofs" \
+      -output    "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+      -spacing   "$resolution" \
+      -padding   "$bgvalue" \
+      -normalize "zscore" \
+      -rescale   "0 100" \
+      -sharpen   "yes" \
+      -margin    5
+
+  # last test id / counter
+  i=0
+
+  # ----------------------------------------------------------------------------
+  # iterative template constructions with different regularization weights  
+  begin_dag "grid_search" -splice
+
+    mffd='None'
+    model='SVFFD'
+    symmetric=true
+    inclbg=false
+    interp='Linear with padding'
+    sim='nmi'
+    bins=64
+
+    for spacing in 2.0; do
+    for jacobian in 1e-5 1e-6 0e-0; do
+    for bending in 1e-2 7e-3 5e-3 3e-3 1e-3 7e-4 5e-4 3e-4 1e-4; do
+    for elasticity in 5e-1 1e-1 5e-2 1e-2 5e-3 1e-3 1e-4 5e-5 1e-5 0e-0; do
+
+      elasticity_mu=1
+      for elasticity_lambda in 0.0 1.5; do
+
+        let i++
+        name="params_$(printf %03d $i)"
+        echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+        iterative_template_construction_test "$name" "make_average" \
+            -model "$model" \
+            -mffd "$mffd" \
+            -similarity "$sim" \
+            -bins "$bins" \
+            -radius "$radius" \
+            -spacing "$spacing" \
+            -bending "$bending" \
+            -elasticity "$elasticity" \
+            -elasticity-lambda "$elasticity_lambda" \
+            -elasticity-mu "$elasticity_mu" \
+            -jacobian "$jacobian" \
+            -symmetric "$symmetric" \
+            -interp "$interp" \
+            -inclbg "$inclbg"
+
+      done
+    done; done; done; done
+
+  end_dag
+
+  # ----------------------------------------------------------------------------
+  # TODO: refine grid search for ranges selected based on initial tests
+
+end_dag
