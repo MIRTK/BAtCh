@@ -2,6 +2,9 @@
 
 [ $# -gt 0 ] || { echo "usage: $(basename "$0") [<workflow> <task>|<dag>] [i]" 1>&2; exit 1; }
 
+topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
+cd "$topdir" || exit 1
+
 workflow=$1
 shift
 
@@ -27,9 +30,6 @@ if [ -z "$i" ]; then
   done
 fi
 shift
-
-topdir="$(cd "$(dirname "$BASH_SOURCE")/.." && pwd)"
-cd "$topdir" || exit 1
 
 mkdir -p "log/$workflow" || exit 1
 lib/tools/submit-dag-to-condor -d dag/$workflow/${task}.dag -l log/$workflow/${task}_${i}.log || exit 1
