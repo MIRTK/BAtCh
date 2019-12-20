@@ -1,0 +1,32 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<step> [<age>...]]" 1>&2
+  exit 1
+}
+
+outdir="$1"; shift
+step="$1"; shift
+[ -n "$step" ] || step=8
+ages=($@)
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36.00 37.00 38.00 39.00 40.00 41.00 42.00 43.00 44.00)
+fi
+
+bindir="$(dirname "$BASH_SOURCE")"
+topdir="$(cd "$bindir/.." & pwd)"
+dofdir="$topdir/global/dof"
+
+subdir=$(printf i%02d $step)
+inpdir="$outdir/cache/$subdir/tissues"
+pbmdir="$outdir/cache/$subdir/tissues/scaled"
+for t in ${ages[@]}; do
+  for l in {1..9}; do
+    pbmimg="$pbmdir/prob_$l/t${t}.nii.gz"
+    if [ ! -f "$pbmimg" ]; then
+      mkdir -p "$pbmdir/prob_$l" || exit 1
+      mirtk transform-image "$inpdir/prob_${l}/t${t}.nii.gz" "${pbmimg}" \
+          -dofin "$dofdir/t$t.dof" -invert -linear || exit 1
+    fi
+  done
+done

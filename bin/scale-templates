@@ -1,0 +1,49 @@
+#!/bin/bash
+
+[ $# -ge 1 ] || {
+  echo "usage: $(basename $0) <outdir> [<step> [<age>...]]" 1>&2
+  exit 1
+}
+
+outdir="$1"; shift
+step="$1"; shift
+[ -n "$step" ] || step=0
+ages=($@)
+if [ ${#ages[@]} -eq 0 ]; then
+  ages=(36.00 37.00 38.00 39.00 40.00 41.00 42.00 43.00 44.00)
+fi
+
+bindir="$(dirname "$BASH_SOURCE")"
+topdir="$(cd "$bindir/.." & pwd)"
+dofdir="$topdir/global/dof"
+
+for channel in 't1w' 't2w'; do
+  if [ $step -gt 0 ]; then
+    subdir=$(printf i%02d $step)
+    inpdir="$outdir/cache/$subdir/$channel/template"
+    pbmdir="$outdir/cache/$subdir/$channel/scaled"
+    if [ -d "$inpdir" ]; then
+      for t in ${ages[@]}; do
+        pbmimg="$pbmdir/t${t}.nii.gz"
+        if [ ! -f "$pbmimg" ]; then
+          mkdir -p "$pbmdir" || exit 1
+          mirtk transform-image "$inpdir/t${t}.nii.gz" "${pbmimg}" \
+              -dofin "$dofdir/t$t.dof" -invert -linear || exit 1
+        fi
+      done
+    fi
+  else
+    inpdir="$outdir/atlas/templates/$channel"
+    pbmdir="$outdir/atlas/scaled/$channel"
+    if [ -d "$inpdir" ]; then
+      for t in ${ages[@]}; do
+        pbmimg="$pbmdir/t${t}.nii.gz"
+        if [ ! -f "$pbmimg" ]; then
+          mkdir -p "$pbmdir" || exit 1
+          mirtk transform-image "$inpdir/t${t}.nii.gz" "${pbmimg}" \
+              -dofin "$dofdir/t$t.dof" -invert -linear || exit 1
+        fi
+      done
+    fi
+  fi
+done
