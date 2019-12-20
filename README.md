@@ -24,4 +24,4 @@ can be computed using the "pairwise" approach that is implemented by the HTCondo
 "pairwise" method described in [Schuh et al. (2014)](http://andreasschuh.com/wp-content/uploads/2015/09/miccai2014-stia.pdf)
 and [Schuh (2017)](https://doi.org/10.25560/58880).
 
-The Bash scripts can be found in Git tag [dhcp-v2.0](https://github.com/MIRTK/BAtCh/releases/tag/dhcp-v2.0)).
+The Bash scripts can be found in Git tag [dhcp-v2.0](https://github.com/MIRTK/BAtCh/releases/tag/dhcp-v2.0).
