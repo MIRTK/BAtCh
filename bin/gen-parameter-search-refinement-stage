@@ -434,7 +434,7 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
       let i++
       name="params_$(printf %03d $i)"
       echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
-      echo -e "$name\t$mffd\t$model\t$symmetric\t$sim\t$bins\t$spacing\t$bending\t$elasticity\t$elasticity_lambda\t$elasticity_mu\t$jacobian\t$inclbg\t$interp" > "$params"
+      echo -e "$name\t$mffd\t$model\t$symmetric\t$sim\t$bins\t$spacing\t$bending\t$elasticity\t$elasticity_lambda\t$elasticity_mu\t$jacobian\t$inclbg\t$interp" >> "$params"
       iterative_template_construction_test "$name" "make_average" \
           -model "$model" \
           -mffd "$mffd" \
