@@ -319,7 +319,15 @@ register_node()
         shift; ;;
       -le|-elasticity)
         optarg w $1 "$2"
-        params="$params\nLinear energy weight = $w"
+        params="$params\nLinear elasticity weight = $w"
+        shift; ;;
+      -le-lambda|-elasticity-lambda)
+        optarg w $1 "$2"
+        params="$params\nLinear elasticity lambda = $w"
+        shift; ;;
+      -le-mu|-elasticity-mu)
+        optarg w $1 "$2"
+        params="$params\nLinear elasticity mu = $w"
         shift; ;;
       -vp|-volume)
         optarg w $1 "$2"

@@ -488,31 +488,33 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
       # deformable registration of all pairs of images after global normalization
       register_node 'regpairs' \
-          -subjects   "${subids[@]}" \
-          -pairs      "$kernel/pairs.csv" \
-          -imgdir     "$imgdir" \
-          -imgpre     "$imgpre" \
-          -imgsuf     "$imgsuf" \
-          -model      "$model" \
-          -mffd       "$mffd" \
-          -symmetric  "$symmetric" \
-          -spacing    "$spacing" \
-          -bending    "$bending" \
-          -elasticity "$elasticity" \
-          -jacobian   "$jacobian" \
-          -interp     "$interpolation" \
-          -sim        "$similarity" \
-          -bins       "$bins" \
-          -radius     "$radius" \
-          -bgvalue    "$bgvalue" \
-          -inclbg     "$inclbg" \
-          -hdrdofs    "$nrmdofs" \
-          -dofins     "identity" \
-          -dofdir     "$dofdir/2.1_def" \
-          -domain     "$nrmdir/$nrmpre$nrmref$nrmsuf" \
-          -maxres     "$resolution" \
-          -levels     "$levels" \
-          -group-inv  100
+          -subjects          "${subids[@]}" \
+          -pairs             "$kernel/pairs.csv" \
+          -imgdir            "$imgdir" \
+          -imgpre            "$imgpre" \
+          -imgsuf            "$imgsuf" \
+          -model             "$model" \
+          -mffd              "$mffd" \
+          -symmetric         "$symmetric" \
+          -spacing           "$spacing" \
+          -bending           "$bending" \
+          -elasticity        "$elasticity" \
+          -elasticity-lambda "$elasticity_lambda" \
+          -elasticity-mu     "$elasticity_mu" \
+          -jacobian          "$jacobian" \
+          -interp            "$interpolation" \
+          -sim               "$similarity" \
+          -bins              "$bins" \
+          -radius            "$radius" \
+          -bgvalue           "$bgvalue" \
+          -inclbg            "$inclbg" \
+          -hdrdofs           "$nrmdofs" \
+          -dofins            "identity" \
+          -dofdir            "$dofdir/2.1_def" \
+          -domain            "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+          -maxres            "$resolution" \
+          -levels            "$levels" \
+          -group-inv         100
 
       # for each atlas time point...
       for t in ${timepoints[@]}; do
@@ -611,32 +613,34 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           for t in ${timepoints[@]}; do
 
             register_node "register_$t" \
-                -sublst     "$kernel/$krnpre${t}.$krnext" \
-                -imgdir     "$imgdir" \
-                -imgpre     "$imgpre" \
-                -imgsuf     "$imgsuf" \
-                -tgtdir     "$tmpdir" \
-                -tgtid      "t2w_t${t}_${i}" \
-                -tgtsuf     ".nii.gz" \
-                -model      "$model" \
-                -mffd       "$mffd" \
-                -symmetric  "$symmetric" \
-                -spacing    "$spacing" \
-                -bending    "$bending" \
-                -elasticity "$elasticity" \
-                -jacobian   "$jacobian" \
-                -interp     "$interpolation" \
-                -sim        "$similarity" \
-                -bins       "$bins" \
-                -radius     "$radius" \
-                -bgvalue    "$bgvalue" \
-                -inclbg     "$inclbg" \
-                -hdrdofs    "$nrmdofs" \
-                -dofins     "identity" \
-                -dofdir     "$nxtdofs/t$t" \
-                -domain     "$nrmdir/$nrmpre$nrmref$nrmsuf" \
-                -maxres     "$resolution" \
-                -levels     "$levels"
+                -sublst            "$kernel/$krnpre${t}.$krnext" \
+                -imgdir            "$imgdir" \
+                -imgpre            "$imgpre" \
+                -imgsuf            "$imgsuf" \
+                -tgtdir            "$tmpdir" \
+                -tgtid             "t2w_t${t}_${i}" \
+                -tgtsuf            ".nii.gz" \
+                -model             "$model" \
+                -mffd              "$mffd" \
+                -symmetric         "$symmetric" \
+                -spacing           "$spacing" \
+                -bending           "$bending" \
+                -elasticity        "$elasticity" \
+                -elasticity-lambda "$elasticity_lambda" \
+                -elasticity-mu     "$elasticity_mu" \
+                -jacobian          "$jacobian" \
+                -interp            "$interpolation" \
+                -sim               "$similarity" \
+                -bins              "$bins" \
+                -radius            "$radius" \
+                -bgvalue           "$bgvalue" \
+                -inclbg            "$inclbg" \
+                -hdrdofs           "$nrmdofs" \
+                -dofins            "identity" \
+                -dofdir            "$nxtdofs/t$t" \
+                -domain            "$nrmdir/$nrmpre$nrmref$nrmsuf" \
+                -maxres            "$resolution" \
+                -levels            "$levels"
 
             resdof="average"
             average_dofs_node "average_$t" -parent "register_$t" \
