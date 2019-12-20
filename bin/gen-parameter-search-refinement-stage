@@ -431,13 +431,12 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
 
         let i++
         name="params_$(printf %03d $i)"
-        echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, radius=$radius, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
+        echo "$name: mffd=$mffd, model=$model, sym=$symmetric, sim=$sim, bins=$bins, ds=$spacing, be=$bending, le=$elasticity, lambda=$elasticity_lambda, mu=$elasticity_mu, jl=$jacobian, inclbg=$inclbg, interp=$interp"
         iterative_template_construction_test "$name" "make_average" \
             -model "$model" \
             -mffd "$mffd" \
             -similarity "$sim" \
             -bins "$bins" \
-            -radius "$radius" \
             -spacing "$spacing" \
             -bending "$bending" \
             -elasticity "$elasticity" \
