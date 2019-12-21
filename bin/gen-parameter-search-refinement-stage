@@ -362,22 +362,44 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -dofins   "$dofdir/1.1_ini" \
-          -dofdir   "$dofdir/1.2_ref" \
+          -dofdir   "$dofdir/1.2_aff" \
           -model    "Affine" \
           -par      "Allow shearing" No \
           -interp   "$interpolation" \
           -sim      "NMI" \
           -bins     "64" \
           -bgvalue  "$bgvalue" \
+          -inclbg   true \
           -maxres   "$resolution" \
           -levels   3 1
 
-      invert_dof_node "invert" -parent "affine" \
+      register_node "affine_with_padding" -parent "affine" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_ref" \
-          -dofdir   "$dofdir/1.3_inv"
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofins   "$dofdir/1.2_aff" \
+          -dofdir   "$dofdir/1.3_ref" \
+          -model    "Affine" \
+          -par      "Allow shearing" No \
+          -interp   "$interpolation" \
+          -sim      "NMI" \
+          -bins     "64" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   false \
+          -maxres   "$resolution" \
+          -levels   2 1
 
-      nrmdofs="$dofdir/1.3_inv"
+      invert_dof_node "invert" -parent "affine_with_padding" \
+          -subjects "${subids[@]}" \
+          -dofins   "$dofdir/1.3_ref" \
+          -dofdir   "$dofdir/1.4_inv"
+
+      nrmdofs="$dofdir/1.4_inv"
 
   end_dag
 
@@ -405,6 +427,10 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
       -rescale   "0 100" \
       -sharpen   "yes" \
       -margin    5
+
+end_dag
+exit 0
+
 
   # last test id / counter
   i=0
