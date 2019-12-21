@@ -428,10 +428,6 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
       -sharpen   "yes" \
       -margin    5
 
-end_dag
-exit 0
-
-
   # last test id / counter
   i=0
 
@@ -453,9 +449,9 @@ exit 0
     elasticity_mu=1
 
     for spacing in 2.0; do
-    for jacobian in 1e-5 1e-6 0e-0; do
-    for bending in 1e-2 7e-3 5e-3 3e-3 1e-3 7e-4 5e-4 3e-4 1e-4; do
-    for elasticity in 1e-2 5e-3 1e-3 1e-4 5e-5 1e-5 0e-0; do
+    for jacobian in 1e-4 1e-5 1e-6 0e-0; do
+    for bending in 1e-2 5e-3 1e-3 5e-4 1e-4; do
+    for elasticity in 1e-2 1e-3 1e-4 1e-5 0e-0; do
     for elasticity_lambda in 0.0 1.5; do
       let i++
       name="params_$(printf %03d $i)"
