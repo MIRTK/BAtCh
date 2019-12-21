@@ -166,7 +166,7 @@ iterative_template_construction_test()
 
       while [ $n -le $refine ]; do
 
-        nxtdofs="$outdir/$name/temp/dofs/2.$n"
+        nxtdofs="$outdir/$name/dofs/2.$n"
 
         # update template images
         average_images_node "make_template_$n" -parent "$prev_node" \
@@ -181,7 +181,7 @@ iterative_template_construction_test()
             -dofin1    "$nrmdofs" \
             -dofin2    "$defdofs" -dofinv2 "$definvs" \
             -dofin3    "$defdofs" -dofid3 "$resdof" \
-            -output    "$outdir/$name/temp/template_$n.nii.gz" \
+            -output    "$outdir/$name/atlas/template_$n.nii.gz" \
             -padding   "$bgvalue" \
             -threshold "$threshold" \
             -normalize "$normalization" \
@@ -196,7 +196,7 @@ iterative_template_construction_test()
               -imgdir            "$imgdir" \
               -imgpre            "$imgpre" \
               -imgsuf            "$imgsuf" \
-              -tgtdir            "$outdir/$name/temp" \
+              -tgtdir            "$outdir/$name/atlas" \
               -tgtid             "template_$n" \
               -tgtsuf            ".nii.gz" \
               -model             "$model" \
@@ -268,7 +268,7 @@ iterative_template_construction_test()
         -dofin1   "$nrmdofs" \
         -dofin2   "$defdofs" -dofinv2 \
         -dofin3   "$defdofs" -dofid3 "$resdof" \
-        -outdir   "$outdir/$name/labels" \
+        -outdir   "$outdir/$name/labels/tissues" \
         -invert
 
     transform_image_node "transform_all_labels_to_atlas" -parent "calc_dofs" \
@@ -283,7 +283,7 @@ iterative_template_construction_test()
         -dofin1   "$nrmdofs" \
         -dofin2   "$defdofs" -dofinv2 \
         -dofin3   "$defdofs" -dofid3 "$resdof" \
-        -outdir   "$outdir/$name/labels" \
+        -outdir   "$outdir/$name/labels/structures" \
         -invert
 
     for mode in mean sdev entropy gini; do
@@ -303,7 +303,7 @@ iterative_template_construction_test()
     aggregate_images_node "compute_tissue_consistency" -parent "transform_tissue_labels_to_atlas" \
         -subjects  "${subids[@]}" \
         -mode      "label-consistency" \
-        -imgdir    "$outdir/$name/labels" \
+        -imgdir    "$outdir/$name/labels/tissues" \
         -imgpre    "$clspre" \
         -imgsuf    "$clssuf" \
         -output    "$outdir/$name/stats/tissue_consistency.nii.gz"
@@ -311,7 +311,7 @@ iterative_template_construction_test()
     aggregate_images_node "compute_structure_consistency" -parent "transform_all_labels_to_atlas" \
         -subjects  "${subids[@]}" \
         -mode      "label-consistency" \
-        -imgdir    "$outdir/$name/labels" \
+        -imgdir    "$outdir/$name/labels/structures" \
         -imgpre    "$lblpre" \
         -imgsuf    "$lblsuf" \
         -output    "$outdir/$name/stats/structure_consistency.nii.gz"
