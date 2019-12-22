@@ -186,9 +186,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -segdir   "$segdir" \
           -segmsk   "bs+cb" .33 \
           -maxstep  1 \
-          -levels   4 2
+          -levels   4 2 \
+          -group    20
 
-      # affine registration
+      # affine registration without padding
       register_node 'regref' -parent 'align' \
           -subjects "${subids[@]}" \
           -tgtid    "$refid" \
@@ -199,7 +200,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -imgpre   "$imgpre" \
           -imgsuf   "$imgsuf" \
           -dofins   "$dofdir/1.1_ini" \
-          -dofdir   "$dofdir/1.2_ref" \
+          -dofdir   "$dofdir/1.2_aff" \
           -model    "Affine" \
           -par      "Allow shearing" No \
           -interp   "$interpolation" \
@@ -207,18 +208,45 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -bins     "$bins" \
           -radius   "$radius" \
           -bgvalue  "$bgvalue" \
+          -inclbg   true \
           -maxres   "$resolution" \
           -maxstep  1 \
           -levels   3 1 \
+          -group    20
+
+      # affine registration with padding
+      register_node 'regref' -parent 'align' \
+          -subjects "${subids[@]}" \
+          -tgtid    "$refid" \
+          -tgtdir   "$refdir" \
+          -tgtpre   "$refpre" \
+          -tgtsuf   "$refsuf" \
+          -imgdir   "$imgdir" \
+          -imgpre   "$imgpre" \
+          -imgsuf   "$imgsuf" \
+          -dofins   "$dofdir/1.2_aff" \
+          -dofdir   "$dofdir/1.3_ref" \
+          -model    "Affine" \
+          -par      "Allow shearing" No \
+          -interp   "$interpolation" \
+          -sim      "$similarity" \
+          -bins     "$bins" \
+          -radius   "$radius" \
+          -bgvalue  "$bgvalue" \
+          -inclbg   false \
+          -maxres   "$resolution" \
+          -maxstep  1 \
+          -levels   2 1 \
+          -group    20
 
       # invert reference to subject transformations
       invert_dof_node "invert" -parent "regref" \
           -subjects "${subids[@]}" \
-          -dofins   "$dofdir/1.2_ref" \
-          -dofdir   "$dofdir/1.3_inv"
+          -dofins   "$dofdir/1.3_ref" \
+          -dofdir   "$dofdir/1.4_inv"
 
       # global normalization output
-      nrmdofs="$dofdir/1.3_inv"
+      nrmdofs="$dofdir/1.4_inv"
 
     else
 

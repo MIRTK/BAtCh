@@ -48,6 +48,8 @@ Arguments:
 Options:
   -c, -config <config.sh>
       Custom configuration file. (default: none)
+  -g, -global-normalization
+      Only execute global normalization steps. (default: false)
   -h, -help
       Print help and exit.
   -v, -verbose
@@ -97,6 +99,7 @@ refimg="$1"; shift
 dagdir="$1"; shift
 outdir="$1"; shift
 update=false
+global_normalization_only=false
 
 [ -n "$sublst" ] || error "Missing sublst argument!"
 [ -n "$refimg" ] || error "Missing refimg argument!"
@@ -108,6 +111,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -c|-config) shift; ;; # already loaded
     -u|-update) update=true; ;;
+    -g|-global-normalization) global_normalization_only=true; ;;
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose) let verbose++; ;;
     *) error "Unknown argument: $1"; ;;
@@ -162,6 +166,9 @@ iterative_template_construction_test()
 
   begin_dag "$name" -splice
 
+    # iteratively perform the following two steps:
+    # 1. update current template image
+    # 2. register al images to this template
     begin_dag 'calc_dofs' -splice
 
       while [ $n -le $refine ]; do
@@ -188,7 +195,7 @@ iterative_template_construction_test()
             -rescale   "$rescaling" \
             -sharpen   "$sharpen"
 
-        # register average images to each subject (after global normalization)
+        # register images to current average image
         begin_dag "reg_template_$n" -parent "make_template_$n" -splice
 
           register_node "reg_images" \
@@ -240,6 +247,7 @@ iterative_template_construction_test()
 
     end_dag
 
+    # apply computed transformations to map all images to reference space
     transform_image_node "transform_images_to_atlas" -parent "calc_dofs" \
         -subjects "${subids[@]}" \
         -imgdir   "$imgdir" \
@@ -253,6 +261,8 @@ iterative_template_construction_test()
         -dofin2   "$defdofs" -dofinv2 \
         -dofin3   "$defdofs" -dofid3 "$resdof" \
         -outdir   "$outdir/$name/images" \
+        -outpre   "" \
+        -outsuf   ".nii.gz" \
         -padding  "$bgvalue" \
         -invert
 
@@ -269,6 +279,8 @@ iterative_template_construction_test()
         -dofin2   "$defdofs" -dofinv2 \
         -dofin3   "$defdofs" -dofid3 "$resdof" \
         -outdir   "$outdir/$name/labels/tissues" \
+        -outpre   "" \
+        -outsuf   ".nii.gz" \
         -invert
 
     transform_image_node "transform_all_labels_to_atlas" -parent "calc_dofs" \
@@ -284,8 +296,21 @@ iterative_template_construction_test()
         -dofin2   "$defdofs" -dofinv2 \
         -dofin3   "$defdofs" -dofid3 "$resdof" \
         -outdir   "$outdir/$name/labels/structures" \
+        -outpre   "" \
+        -outsuf   ".nii.gz" \
         -invert
 
+    # evaluate pairwise label overlap
+    evaluate_overlap_node "evaluate_structure_overlap" -parent "transform_all_labels_to_atlas" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$outdir/$name/labels/structures" \
+        -imgpre   "" \
+        -imgsuf   ".nii.gz" \
+        -subdir   false \
+        -metric   TP FN FP TN TPR TNR DSC JSC \
+        -outdir   "$outdir/$name/overlap"
+
+    # evaluate voxel-wise quality measure
     for mode in mean sdev entropy gini; do
 
       aggregate_images_node "compute_$mode" -parent "transform_images_to_atlas" \
@@ -350,6 +375,7 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
           -maxres   "$resolution" \
           -segdir   "$segdir" \
           -segmsk   "bs+cb" .33 \
+          -maxstep  1 \
           -levels   4 2
 
       register_node "affine" -parent "rigid" \
@@ -371,6 +397,7 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -inclbg   true \
           -maxres   "$resolution" \
+          -maxstep  1 \
           -levels   3 1
 
       register_node "affine_with_padding" -parent "affine" \
@@ -392,6 +419,7 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
           -bgvalue  "$bgvalue" \
           -inclbg   false \
           -maxres   "$resolution" \
+          -maxstep  1 \
           -levels   2 1
 
       invert_dof_node "invert" -parent "affine_with_padding" \
@@ -427,6 +455,28 @@ begin_dag "parameter-search" -dagfile "$dagdir/all_tests.dag" -dagdir "$dagdir"
       -rescale   "0 100" \
       -sharpen   "yes" \
       -margin    5
+
+  if [ $global_normalization_only = true ]; then
+
+    transform_image_node "transform_images" -parent "normalization" \
+        -subjects "${subids[@]}" \
+        -imgdir   "$imgdir" \
+        -imgpre   "$imgpre" \
+        -imgsuf   "$imgsuf" \
+        -tgtid    "$nrmref" \
+        -tgtdir   "$nrmdir" \
+        -tgtpre   "$nrmpre" \
+        -tgtsuf   "$nrmsuf" \
+        -dofins   "$nrmdofs" \
+        -outdir   "$outdir/global/images" \
+        -outpre   "" \
+        -outsuf   ".nii.gz" \
+        -padding  "$bgvalue" \
+        -invert
+
+    end_dag
+    exit 0
+  fi
 
   # last test id / counter
   i=0

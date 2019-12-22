@@ -1257,7 +1257,6 @@ evaluate_overlap_node()
   local tgtpre='$imgpre'
   local tgtsuf='$imgsuf'
   local padding=0
-  local labels=()
   local metric=("dice")
   local outdir=
   local outpre=
@@ -1354,13 +1353,13 @@ evaluate_overlap_node()
     elif [ ${#metric[@]} -eq 1 ]; then
       sub="$sub '$imgdir/$imgpre\$(target)$imgsuf'"
       sub="$sub -images '$_dagdir/images.csv'"
-      sub="$sub -table '$outdir/\$(target)$outsuf'"
+      sub="$sub -table '$outdir/$outpre\$(target)$outsuf'"
     else
       sub="$sub '$imgdir/$imgpre\$(target)$imgsuf'"
       sub="$sub '$imgdir/$imgpre\$(source)$imgsuf'"
       sub="$sub -table '$outdir/$outpre\$(target),\$(source)$outsuf'"
     fi
-    sub="$sub -labels ${labels[@]} -metric ${metric[@]}"
+    sub="$sub -labels -metric ${metric[@]}"
     sub="$sub -precision $digits -delim '$delim'"
     sub="$sub -threads $threads\""
     if [ -n "$tgtid" ]; then
