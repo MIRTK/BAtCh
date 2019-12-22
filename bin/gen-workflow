@@ -190,7 +190,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -group    20
 
       # affine registration without padding
-      register_node 'regref' -parent 'align' \
+      register_node 'regaff' -parent 'align' \
           -subjects "${subids[@]}" \
           -tgtid    "$refid" \
           -tgtdir   "$refdir" \
@@ -215,7 +215,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
           -group    20
 
       # affine registration with padding
-      register_node 'regref' -parent 'align' \
+      register_node 'regref' -parent 'regaff' \
           -subjects "${subids[@]}" \
           -tgtid    "$refid" \
           -tgtdir   "$refdir" \
