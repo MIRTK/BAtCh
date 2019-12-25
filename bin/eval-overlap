@@ -48,6 +48,12 @@ Options:
   -m -metric <metric>
       Overlap metric: Sensitivity, Specificity, Dice, Jaccard.
       (default: Dice)
+  -r -reference
+      Boolean flag indicating that transformations are with respect to a
+      reference image. The -input directory contains one transformed label
+      map per subject ID in -sublst. If this flag is not given, the input
+      directory must contain one subdirectory for each subject ID for those
+      label maps that were aligned with this respective target subject.
   -h -help
       Print help and exit.
   -v -verbose
@@ -97,6 +103,7 @@ metric='Dice'
 evldir="$(cd "$topdir/.." && pwd)/eval"
 inpdir="$evldir/warped-tissues"
 resdir="$evldir/overlap"
+reftgt='false'
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -107,6 +114,7 @@ while [ $# -gt 0 ]; do
     -c|-config)      shift; ;; # already loaded
     -l|-label)       label=(); optargs label "$@"; shift ${#label[@]}; ;;
     -m|-metric)      optarg $1 "$2"; shift; ;;
+    -r|-reference)   reftgt='true'; ;;
     -h|-help|--help) print_help; exit 0; ;;
     -v|-verbose)     let verbose++; ;;
     *)               options=("${options[@]}" "$1"); ;;
@@ -114,10 +122,10 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if [ -z "$agelst" ] || [ ! -f "$agelst" ]; then
-  error "Missing CSV file with subject IDs and corresponding ages!"
-fi
 [ -n "$sublst" ] || sublst="$agelst"
+if [ -z "$sublst" ] || [ ! -f "$sublst" ]; then
+  error "Missing text file with subject IDs!"
+fi
 read_sublst subids "$sublst"
 
 csv_header=''
@@ -141,10 +149,18 @@ for lbl in ${label[@]}; do
     [ $verbose -le 1 ] || {
       echo "Evaluating pairwise overlap for $structure... $(printf %3d/%d $t ${#subids[@]}) (target=$id1)"
     }
-    tgt="$inpdir/$id1/$id1.nii.gz"
+    if [ $reftgt = 'true' ]; then
+      tgt="$inpdir/$id1.nii.gz"
+    else
+      tgt="$inpdir/$id1/$id1.nii.gz"
+    fi
     src=()
     for id2 in ${subids[@]}; do
-      src=("${src[@]}" "$inpdir/$id1/$id2.nii.gz")
+      if [ $reftgt = 'true' ]; then
+        src=("${src[@]}" "$inpdir/$id2.nii.gz")
+      else
+        src=("${src[@]}" "$inpdir/$id1/$id2.nii.gz")
+      fi
     done
     mirtk evaluate-overlap "$tgt" "${src[@]}" -v 0 -metric $metric -label $lbl -delim ',' >> "${csv_name}"
     echo >> "${csv_name}"

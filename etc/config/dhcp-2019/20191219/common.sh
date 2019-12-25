@@ -48,7 +48,7 @@ refid="schuh-t40"
 refini=false
 
 # regression
-means=({29..44})
+means=({28..44})
 sigma=1.0
 sigma=$(printf '%.2f' $sigma)
 epsilon=0.001

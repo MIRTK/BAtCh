@@ -13,20 +13,56 @@ shift
 tests=($@)
 [ ${#tests[@]} -gt 0 ] || tests=(0)
 
-for i in ${tests[@]}; do
-  if [ $i -eq 0 ]; then
-    name=
-    csvdir="$outdir"
-  else
-    name=$(printf 'test_%03d' $i)
-    csvdir="$outdir/$name/overlap"
+
+get_name()
+{
+  local i="$1"
+  local name=''
+  if [ $i -gt 0 ]; then
+    for pre in 'test' 'params'; do
+      name="${pre}_$(printf '%03d' "$i")"
+      [ ! -d "$outdir/$name" ] || break
+    done
+    if [ -z "$name" ]; then
+      echo "$name: could not find test output directory" 1>&2
+      exit 1
+    fi
   fi
-  avgcsv="$csvdir/average.csv"
+  echo "$name"
+}
+
+
+get_csvdir()
+{
+  local name="$1"
+  local csvdir="$outdir"
+  if [ $i -gt 0 ]; then
+    for subdir in "labels/structures/overlap" "overlap"; do
+      csvdir="$outdir/$name/$subdir"
+      [ ! -d "$csvdir" ] || break
+    done
+  fi
+  echo "$csvdir"
+}
+
+
+get_avgcsv()
+{
+  local name="$1"
+  echo "$outdir/$name/tables/dsc.csv"
+}
+
+
+for i in ${tests[@]}; do
+  name="$(get_name "$i")"
+  csvdir="$(get_csvdir "$name")"
+  avgcsv="$(get_avgcsv "$name")"
   if [ ! -f "$avgcsv" ]; then
     [ -z "$name" ] || echo "$name: compute average of individual pairwise overlaps"
     csvlst=($(find "$csvdir" -name '*.csv' -type f))
     if [ ${#csvlst[@]} -gt 0 ]; then
       mirtk average-overlap "${csvlst[@]}" \
+          --noid \
           --measure DSC \
           --segment BG 84 \
           --segment CSF 83 \
@@ -63,12 +99,13 @@ if [[ $append == false ]] || [[ $append == no ]] || [[ $append == 0 ]]; then
   echo >> "$table"
 fi
 for i in ${tests[@]}; do
+  name="$(get_name "$i")"
+  csvdir="$(get_csvdir "$name")"
+  avgcsv="$(get_avgcsv "$name")"
   if [ $i -eq 0 ]; then
-    avgcsv="$outdir/average.csv"
     c=0
   else
     echo -n "$i" >> "$table"
-    avgcsv="$(printf "$outdir/test_%03d/overlap/average.csv" $i)"
     c=1
   fi
   for segment in "${segments[@]}"; do

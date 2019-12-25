@@ -86,7 +86,7 @@ lbldir="$(dirname  "$_lbldir/${_lblpre}id")"
 lblpre="$(basename "$_lbldir/${_lblpre}id")"
 lblpre="${lblpre:0:${#lblpre}-2}"
 
-_clsdir="$lbldir"
+_clsdir="$clsdir"
 _clspre="$clspre"
 
 clsdir="$(dirname  "$_clsdir/${_clspre}id")"
@@ -301,14 +301,15 @@ iterative_template_construction_test()
         -invert
 
     # evaluate pairwise label overlap
-    evaluate_overlap_node "evaluate_structure_overlap" -parent "transform_all_labels_to_atlas" \
-        -subjects "${subids[@]}" \
-        -imgdir   "$outdir/$name/labels/structures" \
-        -imgpre   "" \
-        -imgsuf   ".nii.gz" \
-        -subdir   false \
-        -metric   TP FN FP TN TPR TNR DSC JSC \
-        -outdir   "$outdir/$name/overlap"
+    # TODO: Use mirtk evaluate-label-overlap instead
+    #evaluate_overlap_node "evaluate_structure_overlap" -parent "transform_all_labels_to_atlas" \
+    #    -subjects "${subids[@]}" \
+    #    -imgdir   "$outdir/$name/labels/structures" \
+    #    -imgpre   "" \
+    #    -imgsuf   ".nii.gz" \
+    #    -subdir   false \
+    #    -metric   tp fn fp tn fpr sensitivity specificity precision dsc jsc \
+    #    -outdir   "$outdir/$name/overlap"
 
     # evaluate voxel-wise quality measure
     for mode in mean sdev entropy gini; do
