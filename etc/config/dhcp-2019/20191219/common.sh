@@ -3,7 +3,7 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 
 # registration parameters
-source "$pardir/params.sh"
+source "$topdir/$pardir/params.sh"
 
 # input
 agelst="$pardir/ages.csv"
