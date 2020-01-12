@@ -3,11 +3,11 @@
 set_pardir_from_file_path "$BASH_SOURCE"
 source "$topdir/$pardir/common.sh"
 
-# registration parameters
-pairwise=false
+# regression
+kernel="$pardir/constant_sigma_$sigma"
 
 # output settings
-subdir="adaptive-sigma-noavgdof"
+subdir="constant_sigma_${sigma}"
 dagdir="dag/$subdir"
 logdir="log/$subdir"
 log="$logdir/progress.log"

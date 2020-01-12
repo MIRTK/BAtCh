@@ -11,15 +11,19 @@ import os
 from typing import List
 
 
-t1wdir = "input/images/t1w"
-t2wdir = "input/images/t2w"
+t1wdir = "input/restore/t1w"
+t2wdir = "input/restore/t2w"
 lbldir = "input/labels/structures"
 clsdir = "input/labels/tissues"
+betdir = "input/masks/brain"
+mskdir = "input/masks/drawem"
 
-t1wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T1w_restore_brain.nii.gz"
-t2wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T2w_restore_brain.nii.gz"
+t1wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T1w_restore.nii.gz"
+t2wsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_T2w_restore.nii.gz"
 lblsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_drawem_all_labels.nii.gz"
 clssrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_drawem_tissue_labels.nii.gz"
+betsrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_brainmask_bet.nii.gz"
+msksrc = "{derivatives_dir}/sub-{participant_id}/ses-{session_id}/anat/sub-{participant_id}_ses-{session_id}_brainmask_drawem.nii.gz"
 
 
 def make_link(src, dst):
@@ -30,7 +34,7 @@ def make_link(src, dst):
 
 def make_links(derivatives_dirs: List[str], participant_id: str, session_id: str):
     """Create symbolic links for given subject ID."""
-    for src, dst in zip([t1wsrc, t2wsrc, lblsrc, clssrc], [t1wdir, t2wdir, lbldir, clsdir]):
+    for src, dst in zip([t1wsrc, t2wsrc, lblsrc, clssrc, betsrc, msksrc], [t1wdir, t2wdir, lbldir, clsdir, betdir, mskdir]):
         missing = True
         for derivatives_dir in derivatives_dirs:
             path = src.format(

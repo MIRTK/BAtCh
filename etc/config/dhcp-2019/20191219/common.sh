@@ -11,11 +11,11 @@ sublst="$pardir/subjects.lst"
 
 input_dir="/vol/dhcp-derived-data/volumetric-atlases/workspace/input"
 
-t1wdir="$input_dir/preproc/t1w"
+t1wdir="$input_dir/images/t1w"
 t1wpre=""
 t1wsuf=".nii.gz"
 
-t2wdir="$input_dir/preproc/t2w"
+t2wdir="$input_dir/images/t2w"
 t2wpre=""
 t2wsuf=".nii.gz"
 
@@ -49,7 +49,7 @@ refini=false
 
 # regression
 means=({28..44})
-sigma=1.0
+[ -n "$sigma" ] || sigma=1.0
 sigma=$(printf '%.2f' $sigma)
 epsilon=0.001
 kernel="$pardir/weights"
