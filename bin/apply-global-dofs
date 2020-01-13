@@ -2,7 +2,12 @@
 set -e
 
 [ $# -eq 4 ] || {
-  echo "usage: $(basename $BASH_SOURCE) <input_images_dir> <global_normalization_dofs_dir> <reference> <output_dir>"
+  cat -- <<EOF_HELP
+usage: $(basename $BASH_SOURCE) <input_images_dir> <global_normalization_dofs_dir> <reference> <output_dir>
+
+Used to deform input images to common affine reference space using the transformations computed by the
+global normalization subworkflow, in order to visually inspect the quality of the alignment of each image.
+EOF_HELP
   exit 1
 }
 
