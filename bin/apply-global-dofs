@@ -1,0 +1,23 @@
+#!/bin/bash
+set -e
+
+[ $# -eq 4 ] || {
+  echo "usage: $(basename $BASH_SOURCE) <input_images_dir> <global_normalization_dofs_dir> <reference> <output_dir>"
+  exit 1
+}
+
+input="$1"
+dofs="$2"
+reference="$3"
+output="$4"
+
+mkdir -p "$output"
+for dof in "$dofs"/*.dof.gz; do
+  subid=$(basename $dof)
+  subid=${subid//.dof.gz}
+  mirtk transform-image \
+    "$input/$subid.nii.gz" \
+    "$output/$subid.nii.gz" \
+    -target "$reference" \
+    -dofin "$dof" -invert
+done
