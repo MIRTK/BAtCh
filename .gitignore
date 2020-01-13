@@ -1,7 +1,9 @@
-images/
-labels/
-masks/
-output/
-results/
-screenshots/
-tests*/
+/input
+/images
+/labels
+/masks
+/output
+/results
+/screenshots
+/tests*
+bin/mirtk

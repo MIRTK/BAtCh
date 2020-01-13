@@ -10,7 +10,7 @@
         "default": "t2w",
         "ref": "global/dhcp-2017/roi/domain.nii.gz",
         "t1w": {
-            "prefix": "images/t1w/",
+            "prefix": "input/preproc/t1w/",
             "suffix": ".nii.gz",
             "interp": "linear",
             "datatype": "float",
@@ -21,7 +21,7 @@
             "bins": 0
         },
         "t2w": {
-            "prefix": "images/t2w/",
+            "prefix": "input/preproc/t2w/",
             "suffix": ".nii.gz",
             "interp": "linear",
             "datatype": "float",
@@ -32,13 +32,13 @@
             "bins": 0
         },
         "tissues": {
-            "prefix": "labels/tissues/",
+            "prefix": "input/labels/tissues/",
             "suffix": ".nii.gz",
             "labels": "1..9",
             "interp": "nn"
         },
         "structures": {
-            "prefix": "labels/structures/",
+            "prefix": "input/labels/structures/",
             "suffix": ".nii.gz",
             "labels": "1..87",
             "interp": "nn"
@@ -47,7 +47,7 @@
     "iterations": 9,
     "registration": {
         "affine": {
-            "prefix": "global/dhcp-2019/dof/",
+            "prefix": "global/dhcp-2019-preproc/dof/",
             "suffix": ".dof.gz"
         },
         "config": [
