@@ -89,14 +89,27 @@ read_sublst subids "$sublst"
 cd "$topdir" || error "Failed to change to working directory!"
 
 mkdir -p "$segdir/bs+cb" || error "Failed to create output directory!"
+mkdir -p "$segdir/gm+wm" || error "Failed to create output directory!"
 for subid in ${subids[@]}; do
-  [[ $update != true ]] || rm -f "$segdir/bs+cb/$segpre$subid$segsuf"
+  [[ $update != true ]] || {
+    rm -f "$segdir/bs+cb/$segpre$subid$segsuf"
+    rm -f "$segdir/gm+wm/$segpre$subid$segsuf"
+  }
   [ -f "$segdir/bs+cb/$segpre$subid$segsuf" ] || {
     [ $verbose -le 0 ] || echo -n "Generating BS+CB mask for $subid..."
-    mirtk calculate-element-wise "$lbldir/$clspre$subid$clssuf" -label 6 8 -set 1 -pad 0 -out "$segdir/bs+cb/$segpre$subid$segsuf" binary
+    mirtk calculate-element-wise "$clsdir/$clspre$subid$clssuf" -label 6 8 -set 1 -pad 0 -out "$segdir/bs+cb/$segpre$subid$segsuf" binary
     [ $? -eq 0 ] || {
       [ $verbose -le 0 ] || echo " failed"
       error "Failed to create BS+CB mask for $subid!"
+    }
+    [ $verbose -le 0 ] || echo " done"
+  }
+  [ -f "$segdir/gm+wm/$segpre$subid$segsuf" ] || {
+    [ $verbose -le 0 ] || echo -n "Generating GM+WM mask for $subid..."
+    mirtk calculate-element-wise "$clsdir/$clspre$subid$clssuf" -label 2 3 7 -set 1 -pad 0 -out "$segdir/gm+wm/$segpre$subid$segsuf" binary
+    [ $? -eq 0 ] || {
+      [ $verbose -le 0 ] || echo " failed"
+      error "Failed to create GM+WM mask for $subid!"
     }
     [ $verbose -le 0 ] || echo " done"
   }
