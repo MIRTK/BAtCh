@@ -3,8 +3,8 @@
         "topdir": "../..",
         "agecsv": "config/dhcp-2019/ages.csv",
         "imgcsv": "config/dhcp-2019/subjects_n340.lst",
-        "tmpdir": "output/dhcp_n342_t28-44_adaptive_sigma_09/cache",
-        "outdir": "output/dhcp_n342_t28-44_adaptive_sigma_09/atlas"
+        "tmpdir": "output/dhcp_n340_t28-44_c09/cache",
+        "outdir": "output/dhcp_n340_t28-44_c09/atlas"
     },
     "images": {
         "default": "t2w",
