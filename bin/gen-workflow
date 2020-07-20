@@ -782,7 +782,7 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
 
     # --------------------------------------------------------------------------
     # make tissue probability maps
-    if [ -n "$lbldir" ]; then
+    if [ -n "$clsdir" ]; then
       inpdir="$(dirname  "$lbldir/${clspre}id")"
       prefix="$(basename "$lbldir/${clspre}id")"
       prefix="${prefix:0:${#prefix}-2}"
