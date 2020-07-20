@@ -783,10 +783,10 @@ begin_dag 'brainatlas' -dagfile "$dagdir/main.dag" -dagdir "$dagdir"
     # --------------------------------------------------------------------------
     # make tissue probability maps
     if [ -n "$clsdir" ]; then
-      inpdir="$(dirname  "$lbldir/${clspre}id")"
-      prefix="$(basename "$lbldir/${clspre}id")"
+      inpdir="$(dirname  "$clsdir/${clspre}id")"
+      prefix="$(basename "$clsdir/${clspre}id")"
       prefix="${prefix:0:${#prefix}-2}"
-      if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$lblsuf" | wc -l) -gt 0 ]; then
+      if [ -d "$inpdir" ] && [ $(find -L "$inpdir" -name "$prefix*$clssuf" | wc -l) -gt 0 ]; then
         begin_dag 'make_tissue_pbmaps' -parent "$prev_node" -splice
 
           for t in ${timepoints[@]}; do
